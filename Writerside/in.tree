@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE instance-profile
+        SYSTEM "https://resources.jetbrains.com/writerside/1.0/product-profile.dtd">
+
+<instance-profile id="in"
+                  name="Demo"
+                  start-page="view-model-under-the-hood.md">
+
+    <toc-element toc-title="Android">
+        <toc-element topic="view-model-under-the-hood.md"/>
+    </toc-element>
+
+    <toc-element toc-title="Kotlin">
+    </toc-element>
+
+    <toc-element toc-title="Java" >
+    </toc-element>
+    <toc-element topic="patterns-principle.md"/>
+</instance-profile>
