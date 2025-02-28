@@ -1,0 +1,42 @@
+name: Deploy Writerside Docs
+
+on:
+  push:
+    branches:
+      - master
+
+permissions:
+  contents: write
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Unzip Writerside Documentation
+        run: |
+          mkdir -p docs
+          if [[ -f "webHelpIN2-all.zip" ]]; then
+            echo "✅ Найден webHelpIN2-all.zip, распаковываю..."
+            unzip -q webHelpIN2-all.zip -d temp_docs
+            mv temp_docs/* docs/
+            rm -rf temp_docs
+          else
+            echo "❌ Ошибка: webHelpIN2-all.zip не найден!"
+            exit 1
+          fi
+      - name: Debug Docs Directory
+        run: |
+          echo "📂 Проверка содержимого docs после и перемещения:"
+          ls -lah docs
+
+      - name: Deploy to GitHub Pages
+        if: success()
+        uses: JamesIves/github-pages-deploy-action@v4
+        with:
+          branch: gh-pages
+          folder: docs
+          clean: true

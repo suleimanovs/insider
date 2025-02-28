@@ -2,13 +2,17 @@
 <!DOCTYPE buildprofiles SYSTEM "https://resources.jetbrains.com/writerside/1.0/build-profiles.dtd">
 <buildprofiles xsi:noNamespaceSchemaLocation="https://resources.jetbrains.com/writerside/1.0/build-profiles.xsd"
                xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+    <sitemap priority="0.90" change-frequency="monthly"/>
 
     <variables>
-        <header-logo>https://i.postimg.cc/SsJxJXMN/image-5.png</header-logo>
+        <header-logo>https://i.ibb.co.com/h11BxQhY/output-onlinepngtools-2.png</header-logo>
         <algolia-show-logo>true</algolia-show-logo>
         <content-max-width>1600</content-max-width>
+        <resizable-sidebar>true</resizable-sidebar>
+        <custom-favicons>https://i.ibb.co.com/h11BxQhY/output-onlinepngtools-2.png</custom-favicons>
+        <primary-color>emerald</primary-color>
+        <link-color>forest</link-color>
     </variables>
-
     <footer>
         <copyright>2025 suleimanov.me</copyright>
         <social type="linkedin" href="https://www.linkedin.com/in/suleimanovs/"/>
@@ -17,7 +21,7 @@
 
     <build-profile instance="in">
         <variables>
-            <noindex-content>true</noindex-content>
+            <noindex-content>false</noindex-content>
         </variables>
     </build-profile>
 
