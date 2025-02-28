@@ -29,9 +29,9 @@ jobs:
             exit 1
           fi
 
-      - name: Check Unzipped Files
+      - name: Debug Docs Directory
         run: |
-          echo "📂 Проверка содержимого docs/:"
+          echo "📂 Проверка содержимого docs после перемещения:"
           ls -lah docs
 
       - name: Deploy to GitHub Pages
