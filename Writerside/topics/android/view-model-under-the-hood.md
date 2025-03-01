@@ -45,22 +45,6 @@ class MainActivity : ComponentActivity() {
 
 Без делегатов создание объекта ViewModel используя явно ViewModelProvider:
 
-[//]: # (<tabs>)
-
-[//]: # (<tab title="2.7.0 и ниже">)
-
-[//]: # ()
-
-[//]: # ()
-
-[//]: # (</tab>)
-
-[//]: # (<tab title="2.8.0 и выше">)
-
-[//]: # (</tab>)
-
-[//]: # (</tabs>)
-
 ```kotlin
 class MainActivity : ComponentActivity() {
 
@@ -101,8 +85,6 @@ class MainActivity : ComponentActivity() {
 но реализация и внутренняя логика такая же что и до поддержки kmp
 </tip>
 
-
-
 Как мы видим выше, мы в ручную не создаем объект ViewModel, а только передаем тип его класса в ViewModelProvider,
 и его созданием лично занимается сам ViewModelProvider. Обратите внимание, что мы так же передаем в метод
 `ViewModelProvider.create` поле `owner = this`, если провалиться в исходники метода create, то можно заметить
@@ -142,7 +124,7 @@ ViewModelProvider.create(owner = this)
 [ViewModelStoreOwner](https://github.com/androidx/androidx/blob/androidx-main/lifecycle/lifecycle-viewmodel/src/commonMain/kotlin/androidx/lifecycle/ViewModelStoreOwner.kt):
 
 ```kotlin
-public interface ViewModelStoreOwner {
+public interface [[[ViewModelStoreOwner |https://github.com/androidx/androidx/blob/androidx-main/lifecycle/lifecycle-viewmodel/src/commonMain/kotlin/androidx/lifecycle/ViewModelProvider.kt]]] {
 
     /**
      * The owned [ViewModelStore]

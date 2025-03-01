@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE labels SYSTEM "https://resources.jetbrains.com/writerside/1.0/labels-list.dtd">
+<labels xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="https://resources.jetbrains.com/writerside/1.0/labels.xsd">
+    <primary-label id="label" short-name="L" name="Label">
+        This is an example label
+    </primary-label>
+
+    <primary-label id="jetbrains" short-name="JB" name="JetBrains" href="https://www.jetbrains.com" color="red">
+        Go to www.jetbrains.com
+    </primary-label>
+
+
+    <secondary-label id="wip" name="WIP" color="purple">Work in progress</secondary-label>
+    <secondary-label id="beta" name="β" color="tangerine">Beta</secondary-label>
+
+    <secondary-label id="experimental" name="Experimental" color="purple">This is an experimental feature</secondary-label>
+    <secondary-label id="2023.3" name="2023.3" color="blue">New in version 2023.3</secondary-label>
+
+
+
+    <primary-label id="android" short-name="A" name="Android" color="blue">
+        Все, что связано с Android-разработкой.
+    </primary-label>
+
+    <primary-label id="kotlin" short-name="K" name="Kotlin" color="purple">
+        Документация, относящаяся к языку программирования Kotlin.
+    </primary-label>
+
+    <secondary-label id="new-in-version" name="Новое в версии" color="blue">
+        Новая функция, добавленная в этой версии.
+    </secondary-label>
+
+    <secondary-label id="changed-in-version" name="Изменено в версии" color="purple">
+        Обновление или изменение существующего функционала.
+    </secondary-label>
+
+    <secondary-label id="removed-in-version" name="Удалено в версии" color="red">
+        Этот функционал был удалён.
+    </secondary-label>
+
+    <!-- Метки для статуса разработки -->
+    <secondary-label id="wip" name="В разработке" color="purple">
+        Этот раздел документации/функция ещё в процессе работы.
+    </secondary-label>
+
+    <secondary-label id="beta" name="Бета" color="tangerine">
+        Функция находится в бета-версии и может измениться.
+    </secondary-label>
+
+    <secondary-label id="experimental" name="Экспериментальная" color="red">
+        Это экспериментальная функция и может измениться в будущем.
+    </secondary-label>
+
+    <!-- Метки для стабильности и поддержки -->
+    <secondary-label id="stable" name="Стабильная" color="blue">
+        Функция стабильна и готова к использованию.
+    </secondary-label>
+
+    <secondary-label id="deprecated" name="Устаревшая" color="strawberry">
+        Этот функционал устарел и будет удалён в будущих версиях.
+    </secondary-label>
+
+    <secondary-label id="unsupported" name="Не поддерживается" color="red">
+        Этот функционал больше не поддерживается.
+    </secondary-label>
+
+</labels>

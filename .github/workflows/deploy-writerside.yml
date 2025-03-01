@@ -3,10 +3,10 @@ name: Deploy Writerside Docs
 on:
   push:
     branches:
-      - master  # Запускать при изменениях в master
+      - master
 
 permissions:
-  contents: write  # ✅ Даем право на запись
+  contents: write
 
 jobs:
   deploy:
