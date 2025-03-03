@@ -9,7 +9,7 @@
         <algolia-show-logo>true</algolia-show-logo>
         <content-max-width>1600</content-max-width>
         <resizable-sidebar>true</resizable-sidebar>
-        <sidebar-width>240</sidebar-width>
+<!--        <sidebar-width>240</sidebar-width>-->
         <custom-favicons>https://i.postimg.cc/JnRdxBdC/output-onlinepngtools.png</custom-favicons>
 
         <primary-color>emerald</primary-color>
