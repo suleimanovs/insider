@@ -1,10 +1,10 @@
 <!DOCTYPE html SYSTEM "about:legacy-compat">
-<html lang="en-US" data-preset="contrast" data-primary-color="#1B9F8E" data-content-max-width="1600" data-resizable-sidebar="true"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8"><meta charset="UTF-8"><meta name="built-on" content="2025-03-03T13:23:09.499335"><title>ViewModel Under The Hood: Saved State Handle | Insider</title><script type="application/json" id="virtual-toc-data">[]</script><script type="application/json" id="topic-shortcuts"></script><link href="https://resources.jetbrains.com/writerside/apidoc/6.10.0-b575/app.css" rel="stylesheet"><link rel="icon" type="image/png" sizes="16x16" href="https://i.postimg.cc/JnRdxBdC/output-onlinepngtools.png"><meta name="image" content=""><!-- Open Graph --><meta property="og:title" content="ViewModel Under The Hood: Saved State Handle | Insider"><meta property="og:description" content=""><meta property="og:image" content=""><meta property="og:site_name" content="Insider Help"><meta property="og:type" content="website"><meta property="og:locale" content="en_US"><meta property="og:url" content="writerside-documentation//1.0/view-model-under-the-hood-state-handle.html"><!-- End Open Graph --><!-- Twitter Card --><meta name="twitter:card" content="summary_large_image"><meta name="twitter:site" content=""><meta name="twitter:title" content="ViewModel Under The Hood: Saved State Handle | Insider"><meta name="twitter:description" content=""><meta name="twitter:creator" content=""><meta name="twitter:image:src" content=""><!-- End Twitter Card --><!-- Schema.org WebPage --><script type="application/ld+json">{
+<html lang="en-US" data-preset="contrast" data-primary-color="#1B9F8E" data-content-max-width="1600" data-resizable-sidebar="true"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8"><meta charset="UTF-8"><meta name="built-on" content="2025-05-06T22:31:05.551943"><title>ViewModel Under The Hood: Compose | Insider</title><script type="application/json" id="virtual-toc-data">[{"id":"view-based-viewmodel-scoping","level":0,"title":"View-based ViewModel scoping — первый взгляд","anchor":"#view-based-viewmodel-scoping"},{"id":"compose-viewmodel","level":0,"title":"Где Compose хранит ViewModel-и?","anchor":"#compose-viewmodel"},{"id":"viewmodelstoreowner-composeview-localview","level":0,"title":"Общая картина взаимодействия ViewModelStoreOwner, ComposeView и LocalView","anchor":"#viewmodelstoreowner-composeview-localview"},{"id":"viewmodel-compose-di-delegates","level":0,"title":"ViewModel Compose DI Delegates:","anchor":"#viewmodel-compose-di-delegates"}]</script><script type="application/json" id="topic-shortcuts"></script><link href="https://resources.jetbrains.com/writerside/apidoc/6.22.0-b725/app.css" rel="stylesheet"><link rel="icon" type="image/png" sizes="16x16" href="https://i.postimg.cc/JnRdxBdC/output-onlinepngtools.png"><meta name="image" content=""><!-- Open Graph --><meta property="og:title" content="ViewModel Under The Hood: Compose | Insider"><meta property="og:description" content=""><meta property="og:image" content=""><meta property="og:site_name" content="Insider Help"><meta property="og:type" content="website"><meta property="og:locale" content="en_US"><meta property="og:url" content="writerside-documentation//1.0/view-model-under-the-hood-state-handle.html"><!-- End Open Graph --><!-- Twitter Card --><meta name="twitter:card" content="summary_large_image"><meta name="twitter:site" content=""><meta name="twitter:title" content="ViewModel Under The Hood: Compose | Insider"><meta name="twitter:description" content=""><meta name="twitter:creator" content=""><meta name="twitter:image:src" content=""><!-- End Twitter Card --><!-- Schema.org WebPage --><script type="application/ld+json">{
     "@context": "http://schema.org",
     "@type": "WebPage",
     "@id": "writerside-documentation//1.0/view-model-under-the-hood-state-handle.html#webpage",
     "url": "writerside-documentation//1.0/view-model-under-the-hood-state-handle.html",
-    "name": "ViewModel Under The Hood: Saved State Handle | Insider",
+    "name": "ViewModel Under The Hood: Compose | Insider",
     "description": "",
     "image": "",
     "inLanguage":"en-US"
@@ -13,4 +13,501 @@
     "@id": "writerside-documentation/#website",
     "url": "writerside-documentation/",
     "name": "Insider Help"
-}</script><!-- End Schema.org --></head><body data-id="view-model-under-the-hood-state-handle" data-main-title="ViewModel Under The Hood: Saved State Handle" data-article-props="{&quot;seeAlsoStyle&quot;:&quot;links&quot;}" data-template="article" data-breadcrumbs="Android"><div class="wrapper"><main class="panel _main"><header class="panel__header"><div class="container"><h3>Insider 1.0 Help</h3><div class="panel-trigger"></div></div></header><section class="panel__content"><div class="container"><article class="article" data-shortcut-switcher="inactive"><h1 data-toc="view-model-under-the-hood-state-handle" id="view-model-under-the-hood-state-handle.md">ViewModel Under The Hood: Saved State Handle</h1><div class="last-modified">Last modified: 03 марта 2025</div><div data-feedback-placeholder="true"></div><div class="navigation-links _bottom"><a href="view-model-under-the-hood-store.html" class="navigation-links__prev">ViewModel Under The Hood: View Model Store</a><a href="patterns-principle.html" class="navigation-links__next">Topic title</a></div></article><div id="disqus_thread"></div></div></section></main></div><script src="https://resources.jetbrains.com/writerside/apidoc/6.10.0-b575/app.js"></script></body></html>
+}</script><!-- End Schema.org --></head><body data-id="view-model-under-the-hood-state-handle" data-main-title="ViewModel Under The Hood: Compose" data-article-props="{&quot;seeAlsoStyle&quot;:&quot;links&quot;}" data-template="article" data-breadcrumbs="Android"><div class="wrapper"><main class="panel _main"><header class="panel__header"><div class="container"><h3>Insider 1.0 Help</h3><div class="panel-trigger"></div></div></header><section class="panel__content"><div class="container"><article class="article" data-shortcut-switcher="inactive"><h1 data-toc="view-model-under-the-hood-state-handle" id="view-model-under-the-hood-state-handle.md">ViewModel Under The Hood: Compose</h1><p id="-k8ktmq_3">Это продолжение двух предыдущих статей. Если в первой мы разобрали, где в конечном итоге хранится <code class="code" id="-k8ktmq_10">ViewModelStore</code> в случае с <code class="code" id="-k8ktmq_11">Activity</code>, а во второй &mdash; как это устроено во <code class="code" id="-k8ktmq_12">Fragment</code>, то сегодня разберёмся, где хранятся <code class="code" id="-k8ktmq_13">ViewModel</code>-и, когда мы используем <span class="control" id="-k8ktmq_14">Compose</span> (или даже просто <code class="code" id="-k8ktmq_15">View</code>). <br> Особенно когда мы объявляем <code class="code" id="-k8ktmq_17">ViewModel</code> прямо внутри <code class="code" id="-k8ktmq_18">Composable</code> функций. Но, как всегда, начнём с базиса.</p><p id="-k8ktmq_4">Есть такой подход &mdash; <span class="control" id="-k8ktmq_19">View-based ViewModel scoping</span>. Что он значит? <br> Мы все знаем стандартную практику, когда у каждого фрагмента или активити есть своя <code class="code" id="-k8ktmq_21">ViewModel</code>. <br> Но также существует и менее популярная история &mdash; когда у каждой <code class="code" id="-k8ktmq_23">View</code> может быть своя собственная <code class="code" id="-k8ktmq_24">ViewModel</code>. <br> Насколько это полезно &mdash; решать вам. Вы спросите: а при чём тут Compose? <br> А я отвечу: дело в том, что Compose работает <span class="control" id="-k8ktmq_27">примерно по той же схеме</span>. Давайте начнём с простого примера:</p><section class="chapter"><h2 id="view-based-viewmodel-scoping" data-toc="view-based-viewmodel-scoping">View-based ViewModel scoping &mdash; первый взгляд</h2><p id="-k8ktmq_28">Создадим кастомную <code class="code" id="-k8ktmq_69">View</code>. Пусть это будет <code class="code" id="-k8ktmq_70">TranslatableTextView</code>. <br> Для нашего примера не так важно, <span class="control" id="-k8ktmq_72">что именно делает</span> эта вьюха &mdash; главное, что мы хотим рассмотреть подход View-based ViewModel scoping. Вот как это может выглядеть:</p><div class="code-block" data-lang="kotlin">
+class TranslatableTextView(context: Context) : AppCompatTextView(context) {
+
+    private val viewModel: TranslatableTextViewViewModel by lazy {
+        val owner = findViewTreeViewModelStoreOwner() ?: error(&quot;ViewModelStoreOwner not found for TranslatableTextView&quot;)
+        ViewModelProvider.create(owner = owner).get(TranslatableTextViewViewModel::class.java)
+    }
+
+    fun translateTo(locale: Locale) {
+        text = viewModel.getTranslatedText(text.toString(), locale)
+    }
+}
+</div><p id="-k8ktmq_30">Представим, что <code class="code" id="-k8ktmq_73">TranslatableTextView</code> умеет переводить текст, как, например, в Telegram. <br> Если бы мы использовали обычную <code class="code" id="-k8ktmq_75">ViewModel</code>, пришлось бы дублировать логику на всех экранах, где используется эта <code class="code" id="-k8ktmq_76">View</code>. Но благодаря подходу <span class="control" id="-k8ktmq_77">View-based ViewModel scoping</span>, у <code class="code" id="-k8ktmq_78">TranslatableTextView</code> есть <span class="control" id="-k8ktmq_79">своя собственная</span> <code class="code" id="-k8ktmq_80">ViewModel</code>.</p><p id="-k8ktmq_31">Что мы здесь видим? <br> &ndash; Инициализацию <code class="code" id="-k8ktmq_82">viewModel</code> напрямую через ViewModelProvider без делегатов, с передачей ViewModelStoreOwner. <br> &ndash; Простой метод <code class="code" id="-k8ktmq_84">translateTo</code>, который принимает <code class="code" id="-k8ktmq_85">Locale</code> и обновляет текст вьюхи (<code class="code" id="-k8ktmq_86">AppCompatTextView</code>) на переведённый.</p><p id="-k8ktmq_32">Давайте взглянем и на саму <code class="code" id="-k8ktmq_87">ViewModel</code>, чтобы пример был полноценным и наглядным:</p><div class="code-block" data-lang="kotlin">
+class TranslatableTextViewViewModel : ViewModel() {
+    fun getTranslatedText(currentText: String, locale: Locale): String {
+        // Здесь может быть настоящая локализация
+        return &quot;Translated('$currentText') to ${locale.displayLanguage}&quot;
+    }
+}
+</div><p id="-k8ktmq_34">Теперь снова вернёмся к <code class="code" id="-k8ktmq_88">TranslatableTextView</code>, чтобы детальнее рассмотреть инициализацию <code class="code" id="-k8ktmq_89">ViewModel</code>. Она выглядит немного необычно:</p><div class="code-block" data-lang="kotlin">
+class TranslatableTextView(context: Context) : AppCompatTextView(context) {
+
+    private val viewModel: TranslatableTextViewViewModel by lazy {
+        val owner = findViewTreeViewModelStoreOwner() ?: error(&quot;ViewModelStoreOwner not found for TranslatableTextView&quot;)
+        ViewModelProvider.create(owner = owner).get(TranslatableTextViewViewModel::class.java)
+    }
+    ...
+}
+</div><p id="-k8ktmq_36">Первое, что бросается в глаза &mdash; это вызов метода <code class="code" id="-k8ktmq_90">findViewTreeViewModelStoreOwner()</code>. <br> Он возвращает нам <code class="code" id="-k8ktmq_92">ViewModelStoreOwner</code>, а как мы помним, им могут быть только <code class="code" id="-k8ktmq_93">ComponentActivity</code>, <code class="code" id="-k8ktmq_94">Fragment</code> или <code class="code" id="-k8ktmq_95">NavBackStackEntry</code>.</p><p id="-k8ktmq_37">Затем этот <code class="code" id="-k8ktmq_96">owner</code> мы передаём в <code class="code" id="-k8ktmq_97">ViewModelProvider</code>, чтобы тот создал (или вернул) нужную <code class="code" id="-k8ktmq_98">ViewModel</code> и поместил её в <code class="code" id="-k8ktmq_99">ViewModelStore</code>. <br> Напомню: <code class="code" id="-k8ktmq_101">ViewModelStore</code> &mdash; это то место, где живёт и хранится наша <code class="code" id="-k8ktmq_102">ViewModel</code>, и доступен он у каждого <code class="code" id="-k8ktmq_103">ViewModelStoreOwner</code>.</p><p id="-k8ktmq_38">Давайте заглянем, как устроен сам метод <code class="code" id="-k8ktmq_104">findViewTreeViewModelStoreOwner()</code> и каким образом он умеет доставать <code class="code" id="-k8ktmq_105">ViewModelStoreOwner</code>:</p><p id="-k8ktmq_39"><span class="control" id="-k8ktmq_106">ViewTreeViewModelStoreOwner.android.kt</span>:</p><div class="code-block" data-lang="kotlin">
+/**
+ * Retrieve the [ViewModelStoreOwner] associated with the given [View]. This may be used to retain
+ * state associated with this view across configuration changes.
+ *
+ * @return The [ViewModelStoreOwner] associated with this view and/or some subset of its ancestors
+ */
+@JvmName(&quot;get&quot;)
+public fun View.findViewTreeViewModelStoreOwner(): ViewModelStoreOwner? {
+    var currentView: View? = this
+    while (currentView != null) {
+        val storeOwner =
+            currentView.getTag(R.id.view_tree_view_model_store_owner) as? ViewModelStoreOwner
+        if (storeOwner != null) {
+            return storeOwner
+        }
+        currentView = currentView.getParentOrViewTreeDisjointParent() as? View
+    }
+    return null
+}
+</div><p id="-k8ktmq_41">Если коротко, то в этом методе происходит следующее: у текущей <code class="code" id="-k8ktmq_107">View</code>, на которой вызвали <code class="code" id="-k8ktmq_108">findViewTreeViewModelStoreOwner</code>, <br> мы ищем тег с id <code class="code" id="-k8ktmq_110">R.id.view_tree_view_model_store_owner</code>. Полученное значение приводим к <code class="code" id="-k8ktmq_111">ViewModelStoreOwner</code>, <br> и если он не <code class="code" id="-k8ktmq_113">null</code> &mdash; возвращаем его. А если <code class="code" id="-k8ktmq_114">null</code>, то начинаем подниматься вверх по иерархии <code class="code" id="-k8ktmq_115">View</code>. <br> Эту работу выполняет метод <code class="code" id="-k8ktmq_117">getParentOrViewTreeDisjointParent</code>. В исходники его лезть не будем &mdash; он просто возвращает родителя текущей <code class="code" id="-k8ktmq_118">View</code> (прямого родителя или не прямого родителя). <br> Поскольку это происходит внутри цикла, мы поднимаемся по иерархии, пока не найдём одного из родителей, имеющий тег <code class="code" id="-k8ktmq_120">R.id.view_tree_view_model_store_owner</code> и в котором уже есть <code class="code" id="-k8ktmq_121">ViewModelStoreOwner</code>.</p><p id="-k8ktmq_42">На этом, в стиле Кристофера Нолана, временно забываем про этот метод &mdash; и посмотрим, как мы будем использовать <code class="code" id="-k8ktmq_122">TranslatableTextView</code>:</p><div class="code-block" data-lang="kotlin">
+class MainActivity : AppCompatActivity() {
+
+    private val frameRootLayout by lazy { findViewById&lt;FrameLayout&gt;(R.id.frameRootLayout) }
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        setContentView(R.layout.activity_main)
+
+        // Привязываем ViewModelStoreOwner к дереву ViewView(frameRootLayout)
+        frameRootLayout.setViewTreeViewModelStoreOwner(this)
+
+        val translatableView = TranslatableTextView(this)
+        translatableView.text = &quot;Hello, world!&quot;
+        frameRootLayout.addView(translatableView)
+
+        // Пример использования перевода
+        translatableView.translateTo(Locale.ENGLISH)
+    }
+}
+</div><p id="-k8ktmq_44">Всё довольно просто, да? <br> У нас есть некий layout, у которого root &mdash; это <code class="code" id="-k8ktmq_124">FrameLayout</code> с id <code class="code" id="-k8ktmq_125">R.id.frameRootLayout</code>. <br> Мы находим этот <code class="code" id="-k8ktmq_127">FrameLayout</code> и добавляем в него наш кастомный <code class="code" id="-k8ktmq_128">View</code>: <code class="code" id="-k8ktmq_129">TranslatableTextView</code>. Здесь всё понятно.</p><p id="-k8ktmq_45">Но самое интересное &mdash; это вот эта строка:</p><div class="code-block" data-lang="kotlin">
+// Привязываем ViewModelStoreOwner к дереву View(frameRootLayout)
+frameRootLayout.setViewTreeViewModelStoreOwner(this)
+</div><p id="-k8ktmq_48">Мы вызываем <code class="code" id="-k8ktmq_130">setViewTreeViewModelStoreOwner</code> и передаём в него <code class="code" id="-k8ktmq_131">this</code> &mdash; то есть саму <code class="code" id="-k8ktmq_132">Activity</code>. <br> Как мы знаем, <code class="code" id="-k8ktmq_134">Activity</code> реализует интерфейс <code class="code" id="-k8ktmq_135">ViewModelStoreOwner</code>, <br> поэтому мы спокойно можем передать её туда, где требуется <code class="code" id="-k8ktmq_137">ViewModelStoreOwner</code>.</p><p id="-k8ktmq_49">Вот как выглядит цепочка наследования начиная с интерфейса ViewModelStoreOwner:</p><div class="code-block" data-lang="none">
+[interface] ViewModelStoreOwner → ComponentActivity → FragmentActivity → AppCompatActivity
+</div><p id="-k8ktmq_51">То есть, когда мы передаём <code class="code" id="-k8ktmq_138">this</code> из <code class="code" id="-k8ktmq_139">Activity</code> в <code class="code" id="-k8ktmq_140">setViewTreeViewModelStoreOwner</code>, то передаём полностью валидный <code class="code" id="-k8ktmq_141">ViewModelStoreOwner</code>, и всё работает как надо. <br> Но как именно это связывание происходит внутри? За счёт чего потом <code class="code" id="-k8ktmq_143">findViewTreeViewModelStoreOwner()</code> находит этого владельца(<code class="code" id="-k8ktmq_144">ViewModelStoreOwner</code>)?</p><p id="-k8ktmq_52">Чтобы в этом разобраться, давайте заглянем в исходники метода <code class="code" id="-k8ktmq_145">setViewTreeViewModelStoreOwner</code>, который мы ранее уже встретили. <span class="control" id="-k8ktmq_146">ViewTreeViewModelStoreOwner.android.kt</span>:</p><div class="code-block" data-lang="kotlin">
+
+/**
+ * Set the [ViewModelStoreOwner] associated with the given [View]. Calls to [get] from this view or
+ * descendants will return `viewModelStoreOwner`.
+ *
+ * This should only be called by constructs such as activities or fragments that manage a view tree
+ * and retain state through a [ViewModelStoreOwner]. Callers should only set a [ViewModelStoreOwner]
+ * that will be *stable.* The associated [ViewModelStore] should be cleared if the view tree is
+ * removed and is not guaranteed to later become reattached to a window.
+ *
+ * @param viewModelStoreOwner ViewModelStoreOwner associated with the given view
+ */
+@JvmName(&quot;set&quot;)
+public fun View.setViewTreeViewModelStoreOwner(viewModelStoreOwner: ViewModelStoreOwner?) {
+    setTag(R.id.view_tree_view_model_store_owner, viewModelStoreOwner)
+}
+</div><p id="-k8ktmq_54">Рядом также находится метод <code class="code" id="-k8ktmq_147">findViewTreeViewModelStoreOwner</code>, с которым мы уже знакомы. <br> Сейчас нас интересует <code class="code" id="-k8ktmq_149">setViewTreeViewModelStoreOwner</code>. Как видим, он просто кладёт <code class="code" id="-k8ktmq_150">viewModelStoreOwner</code><br> в виде тега в указанную <code class="code" id="-k8ktmq_152">View</code> по ключу <code class="code" id="-k8ktmq_153">R.id.view_tree_view_model_store_owner</code>:</p><div class="code-block" data-lang="kotlin">
+setTag(R.id.view_tree_view_model_store_owner, viewModelStoreOwner)
+</div><p id="-k8ktmq_56">Все, кто работал с <code class="code" id="-k8ktmq_154">View</code>, знают метод <code class="code" id="-k8ktmq_155">setTag(Object?)</code>, но помимо этого есть и перегруженный метод:</p><div class="code-block" data-lang="java">
+public void setTag(int key, final Object tag) {
+    ...
+}
+</div><p id="-k8ktmq_58">Этот метод позволяет хранить разные теги по ключам, используя под капотом <code class="code" id="-k8ktmq_156">SparseArray</code>. Это важный момент, потому что именно через этот механизм мы и будем передавать <code class="code" id="-k8ktmq_157">ViewModelStoreOwner</code>.</p><p id="-k8ktmq_59">Теперь давайте разберёмся, что происходит на практике.</p><p id="-k8ktmq_60">В методе <code class="code" id="-k8ktmq_158">onCreate</code> в <code class="code" id="-k8ktmq_159">Activity</code> мы вызываем метод <code class="code" id="-k8ktmq_160">setViewTreeViewModelStoreOwner</code> для рутовой<code class="code" id="-k8ktmq_161">View</code> (<span class="control" id="-k8ktmq_162">R.id.frameRootLayout</span>), передавая в качестве параметра <code class="code" id="-k8ktmq_163">this</code>, то есть само <code class="code" id="-k8ktmq_164">Activity</code>. Это потому, что <code class="code" id="-k8ktmq_165">Activity</code>реализует интерфейс <code class="code" id="-k8ktmq_166">ViewModelStoreOwner</code>. Мы связываем эту активность с деревом представлений(View), чтобы иметь доступ к <code class="code" id="-k8ktmq_167">ViewModelStore</code> (так как Activity является ViewModelStoreOwner).</p><p id="-k8ktmq_61">Далее мы добавляем нашу кастомную <code class="code" id="-k8ktmq_168">View</code> (он же TranslatableTextView) в этот <code class="code" id="-k8ktmq_169">frameRootLayout</code>. Пример:</p><div class="code-block" data-lang="kotlin">
+class MainActivity : AppCompatActivity() {
+
+    private val frameRootLayout by lazy { findViewById&lt;FrameLayout&gt;(R.id.frameRootLayout) }
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        setContentView(R.layout.activity_main)
+
+        // Привязываем ViewModelStoreOwner к дереву View
+        frameRootLayout.setViewTreeViewModelStoreOwner(this)
+
+        val translatableView = TranslatableTextView(this)
+        translatableView.text = &quot;Hello, world!&quot;
+        frameRootLayout.addView(translatableView)
+
+        // Пример использования перевода
+        translatableView.translateTo(Locale.ENGLISH)
+    }
+}
+</div><p id="-k8ktmq_63">Теперь, что происходит дальше?</p><p id="-k8ktmq_64">Когда мы находимся в нашем кастомном <code class="code" id="-k8ktmq_170">View</code>, мы вызываем метод <code class="code" id="-k8ktmq_171">findViewTreeViewModelStoreOwner</code>. Этот метод начинает искать тег с ID <code class="code" id="-k8ktmq_172">R.id.view_tree_view_model_store_owner</code> в самой вьюшке. Если он не находит нужный тег, он поднимется по иерархии представлений, пока не найдёт родительский элемент, в котором этот тег присутствует:</p><div class="code-block" data-lang="kotlin">
+class TranslatableTextView(context: Context) : AppCompatTextView(context) {
+
+    private val viewModel: TranslatableTextViewViewModel by lazy {
+        val owner = findViewTreeViewModelStoreOwner() ?: error(&quot;ViewTreeViewModelStoreOwner not found for TranslatableTextView&quot;)
+        ViewModelProvider.create(owner = owner).get(TranslatableTextViewViewModel::class.java)
+    }
+    ...
+}
+</div><p id="-k8ktmq_66">Итак, этот механизм позволяет найти нужный <code class="code" id="-k8ktmq_173">ViewModelStoreOwner</code> в дереве представлений, начиная с текущей вьюшки и двигаясь вверх по иерархии до родительского компонента, в котором хранятся <code class="code" id="-k8ktmq_174">ViewModelStore</code>.</p><p id="-k8ktmq_67">В нашем случае <code class="code" id="-k8ktmq_175">findViewTreeViewModelStoreOwner</code> находит <code class="code" id="-k8ktmq_176">ViewModelStoreOwner</code> у родительского view: <code class="code" id="-k8ktmq_177">FrameLayout(R.id.frameRootLayout)</code>, и мы получаем <code class="code" id="-k8ktmq_178">ViewModelStoreOwner</code> и по умолчанию создаём <code class="code" id="-k8ktmq_179">ViewModel</code> вызовом <code class="code" id="-k8ktmq_180">ViewModelProvider</code>. В конечном итоге таким образом наша ViewModel, которую создали внутри TranslatableTextView, будет храниться в ViewModelStore, принадлежащей Activity.</p><p id="-k8ktmq_68">Теперь вопрос, а почему мы это рассмотрели? И при чём тут Compose? Ответ в следующей главе статьи.</p></section><section class="chapter"><h2 id="compose-viewmodel" data-toc="compose-viewmodel">Где Compose хранит <code class="code" id="-k8ktmq_216">ViewModel</code>-и?</h2><p id="-k8ktmq_182">Давайте возьмём очень простую <code class="code" id="-k8ktmq_217">ViewModel</code> и очень простой composable screen. Начнём с <code class="code" id="-k8ktmq_218">ViewModel</code>:</p><div class="code-block" data-lang="kotlin">
+class MyViewModel : ViewModel() {
+    fun getName(): String = &quot;Compose&quot;
+}
+</div><p id="-k8ktmq_184">Наша <code class="code" id="-k8ktmq_219">ViewModel</code> очень простая, и она нам нужна только в качестве примера, чтобы добраться до сути. Далее, наш Composable Screen:</p><div class="code-block" data-lang="kotlin">
+@Composable
+fun Greeting(modifier: Modifier = Modifier) {
+    val viewModel = androidx.lifecycle.viewmodel.compose.viewModel&lt;MyViewModel&gt;()
+    Text(
+        text = &quot;Hello ${viewModel.getName()}&quot;,
+        modifier = modifier
+    )
+}
+</div><p id="-k8ktmq_186">Теперь продолжим:</p><p id="-k8ktmq_188"><code class="code" id="-k8ktmq_220">viewModel()</code> &mdash; это функция из библиотеки: <span class="control" id="-k8ktmq_221">androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7</span>. Я специально указал полный путь к функции в примере, чтобы вас не смущало, где она хранится и откуда взялась. С использованием Koin, например, мы могли бы использовать <code class="code" id="-k8ktmq_222">koinViewModel()</code> из библиотеки <code class="code" id="-k8ktmq_223">io.insert-koin:koin-androidx-compose</code>, или даже <code class="code" id="-k8ktmq_224">hiltViewModel()</code> из <code class="code" id="-k8ktmq_225">androidx.hilt:hilt-navigation-compose</code>.</p><p id="-k8ktmq_189">Независимо от того, какой метод мы бы использовали для получения <code class="code" id="-k8ktmq_226">ViewModel</code> в Compose, все они работают под капотом одинаково, особенно в контексте получения <code class="code" id="-k8ktmq_227">ViewModelStore</code>, так как его из воздуха не взять. Поэтому давайте начнём изучение с <code class="code" id="-k8ktmq_228">androidx.lifecycle.viewmodel.compose.viewModel()</code>, потому что он был первым, а библиотеки вроде Hilt и Koin для создания <code class="code" id="-k8ktmq_229">ViewModel</code> в Compose используют похожий механизм.</p><p id="-k8ktmq_190">Далее, исходники метода <code class="code" id="-k8ktmq_230">androidx.lifecycle.viewmodel.compose.viewModel</code> в файле:</p><p id="-k8ktmq_191"><span class="control" id="-k8ktmq_231"><code class="code" id="-k8ktmq_232">androidx.lifecycle.viewmodel.compose.ViewModel.kt:</code></span></p><div class="code-block" data-lang="kotlin">
+@Suppress(&quot;MissingJvmstatic&quot;)
+@Composable
+public inline fun &lt;reified VM : ViewModel&gt; viewModel(
+    viewModelStoreOwner: ViewModelStoreOwner = checkNotNull(LocalViewModelStoreOwner.current) {
+        &quot;No ViewModelStoreOwner was provided via LocalViewModelStoreOwner&quot;
+    },
+    ...
+): VM = viewModel(VM::class, viewModelStoreOwner, key, factory, extras)
+</div><p id="-k8ktmq_193">Остальные входные параметры нас не интересуют в этой статье, кроме параметра <span class="control" id="-k8ktmq_233"><code class="code" id="-k8ktmq_234">viewModelStoreOwner</code></span>:</p><div class="code-block" data-lang="kotlin">
+viewModelStoreOwner: ViewModelStoreOwner = checkNotNull(LocalViewModelStoreOwner.current) {
+    &quot;No ViewModelStoreOwner was provided via LocalViewModelStoreOwner&quot;
+},
+</div><p id="-k8ktmq_195">Далее нас будет интересовать LocalViewModelStoreOwner.current - так как он нам предоставляет ViewModelStore, судя по всему. LocalViewModelStoreOwner.current из названия и синтаксиса сразу понятно, что это CompositionLocal:</p><aside class="prompt" data-type="tip" data-title="" id="-k8ktmq_196"><p id="-k8ktmq_235"><code class="code" id="-k8ktmq_236">CompositionLocal</code> &mdash; это механизм в <code class="code" id="-k8ktmq_237">Jetpack Compose</code>, позволяющий передавать значения по дереву UI без явной передачи через параметры, с доступом к ним через .current в любой точке композиции. Для использования необходимо предварительно предоставить значение через <code class="code" id="-k8ktmq_238">CompositionLocalProvider</code> или задать его по умолчанию при создании.</p></aside><p id="-k8ktmq_197">Давайте глянем на исходники LocalViewModelStoreOwner:</p><div class="code-block" data-lang="kotlin">
+/**
+ * The CompositionLocal containing the current [ViewModelStoreOwner].
+ */
+public object LocalViewModelStoreOwner {
+    private val LocalViewModelStoreOwner =
+        compositionLocalOf&lt;ViewModelStoreOwner?&gt; { null }
+
+    /**
+     * Returns current composition local value for the owner or `null` if one has not
+     * been provided nor is one available via [findViewTreeViewModelStoreOwner] on the
+     * current [androidx.compose.ui.platform.LocalView].
+     */
+    public val current: ViewModelStoreOwner?
+        @Composable
+        get() = LocalViewModelStoreOwner.current ?: findViewTreeViewModelStoreOwner()
+
+    /**
+     * Associates a [LocalViewModelStoreOwner] key to a value in a call to
+     * [CompositionLocalProvider].
+     */
+    public infix fun provides(viewModelStoreOwner: ViewModelStoreOwner):
+            ProvidedValue&lt;ViewModelStoreOwner?&gt; {
+        return LocalViewModelStoreOwner.provides(viewModelStoreOwner)
+    }
+}
+</div><p id="-k8ktmq_199">Видим, что <code class="code" id="-k8ktmq_239">LocalViewModelStoreOwner</code> &mdash; это просто обёртка над настоящим <code class="code" id="-k8ktmq_240">CompositionLocal</code>. Мы обращаемся именно к его полю current, чтобы прочесть текущее значение. Мы либо попытаемся достать значение из поля current у <code class="code" id="-k8ktmq_241">CompositionLocal</code> &mdash; это означает, что кто-то где-то должен был его <code class="code" id="-k8ktmq_242">provide</code>-ить. Если же там пусто, то в таком случае вызывается метод <code class="code" id="-k8ktmq_243">findViewTreeViewModelStoreOwner</code>. При обычном сценарии использования из коробки мы попадаем именно под второй кейс, когда вызывается метод <code class="code" id="-k8ktmq_244">findViewTreeViewModelStoreOwner</code>. Поэтому далее рассмотрим его исходники:</p><p id="-k8ktmq_200"><span class="control" id="-k8ktmq_245">LocalViewModelStoreOwner.android.kt</span></p><div class="code-block" data-lang="kotlin">
+@Composable
+internal actual fun findViewTreeViewModelStoreOwner(): ViewModelStoreOwner? =
+    LocalView.current.findViewTreeViewModelStoreOwner()
+</div><p id="-k8ktmq_202">И мы видим, что у другого <code class="code" id="-k8ktmq_246">CompositionLocal</code> &mdash; <code class="code" id="-k8ktmq_247">LocalView</code> вызывается метод View.findViewTreeViewModelStoreOwner() &mdash; это тот самый метод, который мы уже смотрели в первой части статьи. LocalView.current возвращает нам текущий View. Текущий View? Разве мы не работаем сейчас в compose? Откуда взялся текущий View? Об этом чуть позже узнаем, что это за View и откуда он взялся. Сейчас просто знайте, что под капотом LocalView.current нам возвращает текущий View, у которого мы можем вызвать extension-функцию <code class="code" id="-k8ktmq_248">findViewTreeViewModelStoreOwner</code>, которую мы уже видели в первой части статьи, и положит ViewModel в ViewModelStore:</p><p id="-k8ktmq_203"><span class="control" id="-k8ktmq_249">ViewTreeLifecycleOwner.android.kt</span></p><div class="code-block" data-lang="kotlin">
+/**
+ * Retrieve the [ViewModelStoreOwner] associated with the given [View]. This may be used to retain
+ * state associated with this view across configuration changes.
+ *
+ * @return The [ViewModelStoreOwner] associated with this view and/or some subset of its ancestors
+ */
+@JvmName(&quot;get&quot;)
+public fun View.findViewTreeViewModelStoreOwner(): ViewModelStoreOwner? {
+    var currentView: View? = this
+    while (currentView != null) {
+        val storeOwner =
+            currentView.getTag(R.id.view_tree_view_model_store_owner) as? ViewModelStoreOwner
+        if (storeOwner != null) {
+            return storeOwner
+        }
+        currentView = currentView.getParentOrViewTreeDisjointParent() as? View
+    }
+    return null
+}
+</div><p id="-k8ktmq_205">Пройдёмся ещё раз по флоу:</p><p id="-k8ktmq_206">Когда мы внутри нашего Composable-функций вызываем любую из extension-функций по созданию viewmodel: то ли viewModel из библиотеки <span class="control" id="-k8ktmq_250">androidx.lifecycle:lifecycle-viewmodel-composе</span>, или хоть даже <code class="code" id="-k8ktmq_251">koinViewModel()</code> из библиотеки <code class="code" id="-k8ktmq_252">io.insert-koin:koin-androidx-compose</code>, или даже <code class="code" id="-k8ktmq_253">hiltViewModel()</code> из <code class="code" id="-k8ktmq_254">androidx.hilt:hilt-navigation-compose</code>, то в конечном итоге мы обращаемся именно к CompositionLocal с названием <code class="code" id="-k8ktmq_255">LocalViewModelStoreOwner</code> к его полю current. А тот, в свою очередь, либо достаёт значение, которое внутри него хранится, либо обращается к Composable-методу <code class="code" id="-k8ktmq_256">findViewTreeViewModelStoreOwner</code>. А тот, в свою очередь, обращается к <code class="code" id="-k8ktmq_257">LocalView</code> &mdash; это ещё один <code class="code" id="-k8ktmq_258">CompositionLocal</code>, у которого есть текущее <code class="code" id="-k8ktmq_259">View</code>, и для него запускается extension-метод <code class="code" id="-k8ktmq_260">View.findViewTreeViewModelStoreOwner</code>, и происходит поиск по дереву <code class="code" id="-k8ktmq_261">View</code> в поисках <code class="code" id="-k8ktmq_262">ViewModelStoreOwner</code>. В итоге он его находит, но как? В голове возникают два вопроса:</p><ol class="list _decimal" id="-k8ktmq_207" type="1"><li class="list__item" id="-k8ktmq_263"><p id="-k8ktmq_265">При чём тут View-шки? Почему Compose обращается к LocalView, и LocalView откуда сам взялся?</p></li><li class="list__item" id="-k8ktmq_264"><p id="-k8ktmq_266">Из предыдущей главы в статье мы увидели, что прежде чем вызывать метод View.findViewTreeViewModelStoreOwner(), до него мы клали ViewModelStoreOwner во внутренний тег внутри FrameLayout, который являлся рутовым View в нашем макете, с помощью метода setViewTreeViewModelStoreOwner. Но в примере с Compose мы ничего никуда не клали &mdash; как всё это работает само по себе?</p></li></ol><p id="-k8ktmq_208">Всё довольно просто, разработчики Google позаботились об этом за нас. Обычно в Composable есть два подхода:</p><ol class="list _decimal" id="-k8ktmq_209" type="1"><li class="list__item" id="-k8ktmq_267"><p id="-k8ktmq_269">Когда весь проект на Compose полностью, или как минимум в каждой активити UI-дерево начинается с <code class="code" id="-k8ktmq_271">setContent{}</code>, а не с <code class="code" id="-k8ktmq_272">setContentView</code>:</p><div class="code-block" data-lang="kotlin">
+class MainActivity : ComponentActivity() {
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        setContent {
+            Greeting(modifier = Modifier.fillMaxWidth())
+        }
+    }
+}
+</div></li><li class="list__item" id="-k8ktmq_268"><p id="-k8ktmq_273">Гибридный UI, где часть на compose, а часть на View. Тогда прибегают к использованию ComposeView:</p></li></ol><div class="code-block" data-lang="markup">
+&lt;?xml version=&quot;1.0&quot; encoding=&quot;utf-8&quot;?&gt;
+&lt;LinearLayout xmlns:android=&quot;http://schemas.android.com/apk/res/android&quot;
+              android:id=&quot;@+id/linearLayout&quot;
+              android:layout_width=&quot;match_parent&quot;
+              android:layout_height=&quot;match_parent&quot;
+              android:orientation=&quot;vertical&quot;&gt;
+
+    &lt;androidx.compose.ui.platform.ComposeView
+            android:id=&quot;@+id/composeView&quot;
+            android:layout_width=&quot;match_parent&quot;
+            android:layout_height=&quot;200dp&quot;/&gt;
+&lt;/LinearLayout&gt;
+</div><div class="code-block" data-lang="kotlin">
+class MainActivity : ComponentActivity(R.layout.activity_main) {
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        val composeView = findViewById&lt;ComposeView&gt;(R.id.composeView)
+
+        composeView.setContent { Greeting() }
+    }
+}
+</div><p id="-k8ktmq_212">В обоих случаях, если запустить в таком виде, как сейчас, всё заработает: наша <code class="code" id="-k8ktmq_274">ViewModel</code> внутри функции <span class="control" id="-k8ktmq_275"><code class="code" id="-k8ktmq_277">Greeting</code></span> без проблем создастся и положится в <code class="code" id="-k8ktmq_276">ViewModelStore</code>, который принадлежит Activity. Почему так происходит?</p><p id="-k8ktmq_213">В обоих случаях мы вызываем метод setContent{}, в первом кейсе это <code class="code" id="-k8ktmq_278">ComponentActivity.setContent{}</code>, а во втором <code class="code" id="-k8ktmq_279">ComposeView.setContent {}</code>, которые открывают Composable-область.</p><p id="-k8ktmq_214">Рассмотрим сначала первый кейс, начнём с setContent для активити (ComponentActivity).</p><section class="chapter"><h3 id="componentactivity-setcontent" data-toc="componentactivity-setcontent">Использование ComponentActivity.setContent:</h3><div class="code-block" data-lang="kotlin">
+public fun ComponentActivity.setContent(
+    parent: CompositionContext? = null,
+    content: @Composable () -&gt; Unit
+) {
+    val existingComposeView =
+        window.decorView.findViewById&lt;ViewGroup&gt;(android.R.id.content).getChildAt(0) as? ComposeView
+
+    if (existingComposeView != null)
+        with(existingComposeView) {
+            setParentCompositionContext(parent)
+            setContent(content)
+        }
+    else
+        ComposeView(this).apply {
+            // Set content and parent **before** setContentView
+            // to have ComposeView create the composition on attach
+            setParentCompositionContext(parent)
+            setContent(content)
+            // Set the view tree owners before setting the content view so that the inflation
+            // process and attach listeners will see them already present
+            setOwners()
+            setContentView(this, DefaultActivityContentLayoutParams)
+        }
+}
+</div><aside class="prompt" data-type="tip" data-title="" id="-k8ktmq_281"><p id="-k8ktmq_285">Обратите внимание, что это функция расширения setContent является расширением для ComponentActivity и имеет дополнительную логику по инициализации Owner-ов и прочих компонентов. Внутри себя она использует ComposeView и его метод setContent.</p></aside><p id="-k8ktmq_282">Что здесь происходит? У window есть DecorView, внутри этого DecorView лежит ещё один ViewGroup(FrameLayout). У этого ViewGroup извлекается ComposeView под индексом 0, если он есть. Если его нет, то создается новый и вызывается метод setContentView (который есть у всех активити и унаследован от самого Activity). Но то, что нам нужно, происходит до вызова метода setContentView &mdash; речь идёт о <code class="code" id="-k8ktmq_286">setOwners</code>. Давайте глянем на его исходники тоже:</p><div class="code-block" data-lang="kotlin">
+private fun ComponentActivity.setOwners() {
+    val decorView = window.decorView
+    ...
+    if (decorView.findViewTreeViewModelStoreOwner() == null) {
+        decorView.setViewTreeViewModelStoreOwner(this)
+    }
+    ...
+}
+</div><p id="-k8ktmq_284">И именно здесь ViewModelStoreOwner кладётся в DecorView посредством вызова метода setViewTreeViewModelStoreOwner, куда передается this &mdash; то есть само активити. DecorView является самым(почти) корневым View во всей иерархии View, выше его стоит только сам Window.</p></section></section><section class="chapter"><h2 id="viewmodelstoreowner-composeview-localview" data-toc="viewmodelstoreowner-composeview-localview">Общая картина взаимодействия ViewModelStoreOwner, ComposeView и LocalView</h2><p id="-k8ktmq_287">Теперь давайте обобщим весь процесс и сделаем итоги: когда мы используем ComponentActivity (или его наследников FragmentActivity и AppCompatActivity) в Compose и создаём ViewModel, используя делегаты compose/hilt/koin, то внутри идёт обращение к LocalViewModelStoreOwner. Тот отдаёт ViewModelStoreOwner, если он есть. Если нет, то обращается к Composable-методу <code class="code" id="-k8ktmq_323">findViewTreeViewModelStoreOwner</code>. Тот, в свою очередь, внутри себя обращается к composition local &mdash; LocalView.current, получает View и у этого View вызывает другой extension-метод View.findViewTreeViewModelStoreOwner. Этот метод рекурсивно, начиная с LocalView, ищет сохранённый ViewModelStoreOwner в тегах View и так добирается вверх по иерархии View, пока не найдёт. Если найдёт, то вернёт его; если не найдёт, то вернёт null, и выбросится ошибка: <span class="control" id="-k8ktmq_324"><span class="emphasis" id="-k8ktmq_325">No ViewModelStoreOwner was provided via LocalViewModelStoreOwner</span></span></p><p id="-k8ktmq_288">Как мы видели выше, при вызове <code class="code" id="-k8ktmq_326">ComponentActivity.setContent{}</code> под капотом внутри вызывается метод <code class="code" id="-k8ktmq_327">ComponentActivity.setOwners()</code>, в котором помещается ViewModelStoreOwner в тег DecorView. Получается, что при вызове метода View.findViewTreeViewModelStoreOwner(), пробираясь по иерархии View, в конечном итоге найдётся ViewModelStoreOwner внутри самой верхней View (DecorView), но в Compose нет прямого доступа к DecorView, вместо этого идёт обращение к LocalView.current:</p><p id="-k8ktmq_289"><span class="control" id="-k8ktmq_328">LocalViewModelStoreOwner.android.kt</span></p><div class="code-block" data-lang="kotlin">
+@Composable
+internal actual fun findViewTreeViewModelStoreOwner(): ViewModelStoreOwner? =
+    LocalView.current.findViewTreeViewModelStoreOwner()
+</div><p id="-k8ktmq_291">В этой цепочке мы не рассмотрели только один момент &mdash; откуда берётся <code class="code" id="-k8ktmq_329">LocalView</code>. Точнее, понятно, что это <code class="code" id="-k8ktmq_330">CompositionLocal</code>, но <span class="control" id="-k8ktmq_331">откуда в нём ссылка на текущее <code class="code" id="-k8ktmq_333">View</code>?</span> или <span class="control" id="-k8ktmq_332">кем является текущее <code class="code" id="-k8ktmq_334">View</code>?</span></p><p id="-k8ktmq_292">Если кратко и абстрактно: <code class="code" id="-k8ktmq_335">ComposeView</code> внутри себя сам вызывает <code class="code" id="-k8ktmq_336">LocalView</code> и провайдит ему <span class="control" id="-k8ktmq_337">самого себя</span>. Поэтому <code class="code" id="-k8ktmq_338">LocalView</code> по умолчанию ссылается на тот <code class="code" id="-k8ktmq_339">ComposeView</code>, в котором было запущено дерево Composable-функций. А дерево Compose в Android всегда начинается именно с ComposеView.</p><p id="-k8ktmq_293">Ниже &mdash; полный путь до момента, где <code class="code" id="-k8ktmq_340">LocalView</code> получает значение. Без подробных комментариев, просто цепочка:</p><div class="code-block" data-lang="kotlin">
+class ComposeView @JvmOverloads constructor(...) : AbstractComposeView(context, attrs, defStyleAttr)
+</div><p id="-k8ktmq_295"><code class="code" id="-k8ktmq_341">ComposeView</code> наследуется от <code class="code" id="-k8ktmq_342">AbstractComposeView</code>. Смотрим, что происходит внутри <code class="code" id="-k8ktmq_343">AbstractComposeView</code>:</p><div class="code-block" data-lang="kotlin">
+abstract class AbstractComposeView(...) : ViewGroup(...) {
+    private fun ensureCompositionCreated() {
+        if (composition == null) {
+            composition = setContent(resolveParentCompositionContext()) {
+                Content()
+            }
+        }
+    }
+}
+</div><p id="-k8ktmq_297">В методе <code class="code" id="-k8ktmq_344">ensureCompositionCreated</code>, который вызывается, например, при <code class="code" id="-k8ktmq_345">onMeasure</code> или <code class="code" id="-k8ktmq_346">onAttachedToWindow</code>, или когда вызываем ComposeView.setContent, нас интересует вызов функции <code class="code" id="-k8ktmq_347">setContent</code>:</p><div class="code-block" data-lang="kotlin">
+internal fun AbstractComposeView.setContent(...): Composition {
+    val composeView = ... ?: AndroidComposeView(...).also {
+        addView(it.view, DefaultLayoutParams)
+    }
+    return doSetContent(composeView, parent, content)
+}
+</div><p id="-k8ktmq_299">Тут происходит следующее: создаётся объект класса <code class="code" id="-k8ktmq_348">AndroidComposeView</code>, этот же объект помещается внутрь <code class="code" id="-k8ktmq_349">ComposeView</code> вызовом <code class="code" id="-k8ktmq_350">addView</code>. Напоминаю, что <code class="code" id="-k8ktmq_351">AbstractComposeView</code> это абстрактный класс, и один из его наследников &mdash; это <code class="code" id="-k8ktmq_352">ComposeView</code>. Хоть здесь работа идёт на уровне абстракций, фактически когда вызывается <code class="code" id="-k8ktmq_353">addView</code>, то он вызывается для <code class="code" id="-k8ktmq_354">ComposeView</code>.</p><p id="-k8ktmq_300">Если стало слишком много новых названий, которые вызывают путаницу, то вот краткое объяснение:</p><ul class="list _bullet" id="-k8ktmq_301"><li class="list__item" id="-k8ktmq_355"><p id="-k8ktmq_358"><code class="code" id="-k8ktmq_359">AbstractComposeView</code> - абстрактный класс, который является ViewGroup и имеет уже много реализаций внутри</p></li><li class="list__item" id="-k8ktmq_356"><p id="-k8ktmq_360"><code class="code" id="-k8ktmq_361">ComposeView</code> - один из наследников <code class="code" id="-k8ktmq_362">AbstractComposeView</code>, который позволяет нам запускать Composable функции внутри себя. В Android всё упирается в работу с ним в конечном итоге, так как в Android нет способа запускать Composable напрямую на уровне Window. Между Window и нашими Composable экранами стоят куча View и ViewGroup, в том числе и сам <code class="code" id="-k8ktmq_363">ComposeView</code></p></li><li class="list__item" id="-k8ktmq_357"><p id="-k8ktmq_364"><code class="code" id="-k8ktmq_365">AndroidComposeView</code> - низкоуровневый класс, внутри которого в конечном итоге и рисуются наши Composable экраны</p></li></ul><p id="-k8ktmq_302">Далее &mdash; <code class="code" id="-k8ktmq_366">doSetContent</code>:</p><div class="code-block" data-lang="kotlin">
+private fun doSetContent(
+    owner: AndroidComposeView,
+    parent: CompositionContext,
+    content: @Composable () -&gt; Unit
+): Composition {
+    ...
+    val wrapped = owner.view.getTag(R.id.wrapped_composition_tag)
+            as? WrappedComposition
+        ?: WrappedComposition(owner, original).also {
+            owner.view.setTag(R.id.wrapped_composition_tag, it)
+        }
+    wrapped.setContent(content)
+}
+</div><p id="-k8ktmq_304">Переходим в <code class="code" id="-k8ktmq_367">WrappedComposition.setContent</code>:</p><div class="code-block" data-lang="kotlin">
+private class WrappedComposition(
+    val owner: AndroidComposeView,
+    val original: Composition
+) : Composition, LifecycleEventObserver, CompositionServices {
+    override fun setContent(content: @Composable () -&gt; Unit) {
+        ...
+        ProvideAndroidCompositionLocals(owner, content)
+        ...
+    }
+}
+</div><p id="-k8ktmq_306">И вот &mdash; ключевой момент:</p><div class="code-block" data-lang="kotlin">
+@Composable
+internal fun ProvideAndroidCompositionLocals(
+    owner: AndroidComposeView,
+    content: @Composable () -&gt; Unit
+) {
+    CompositionLocalProvider(
+        ...
+    LocalView provides owner.view,
+    ...
+    ) {
+        content()
+    }
+}
+</div><p id="-k8ktmq_308">Здесь <code class="code" id="-k8ktmq_368">LocalView</code> получает значение <code class="code" id="-k8ktmq_369">owner.view</code>, где <code class="code" id="-k8ktmq_370">owner</code> &mdash; это <code class="code" id="-k8ktmq_371">AndroidComposeView</code>, созданный внутри <code class="code" id="-k8ktmq_372">ComposeView</code>.</p><p id="-k8ktmq_310"><span class="control" id="-k8ktmq_373">Вывод:</span> <code class="code" id="-k8ktmq_374">LocalView</code> получает ссылку на <code class="code" id="-k8ktmq_375">View</code>, внутри которого выполняется композиция, за счёт того, что <code class="code" id="-k8ktmq_376">ComposeView</code> сам инициализирует <code class="code" id="-k8ktmq_377">AndroidComposeView</code>, который далее передаётся в <code class="code" id="-k8ktmq_378">ProvideAndroidCompositionLocals</code>. <code class="code" id="-k8ktmq_379">AndroidComposeView</code> создаётся и хранится <span class="control" id="-k8ktmq_380">внутри</span> <code class="code" id="-k8ktmq_381">ComposeView</code>, и <code class="code" id="-k8ktmq_382">LocalView</code> ссылается именно на этот <code class="code" id="-k8ktmq_383">AndroidComposeView</code>, а не на сам <code class="code" id="-k8ktmq_384">ComposeView</code>.</p><p id="-k8ktmq_311"><code class="code" id="-k8ktmq_385">ComposeView</code> наследуется от <code class="code" id="-k8ktmq_386">AbstractComposeView</code>, который в свою очередь &mdash; <code class="code" id="-k8ktmq_387">ViewGroup</code>. То есть <code class="code" id="-k8ktmq_388">ComposeView</code> &mdash; это не сам <code class="code" id="-k8ktmq_389">AndroidComposeView</code>, а просто контейнер, который при вызове <code class="code" id="-k8ktmq_390">setContent</code> создаёт <code class="code" id="-k8ktmq_391">AndroidComposeView</code> и вставляет его внутрь.</p><p id="-k8ktmq_312">Поэтому, когда в <code class="code" id="-k8ktmq_392">ProvideAndroidCompositionLocals</code> происходит вот это:</p><div class="code-block" data-lang="kotlin">
+LocalView provides owner.view
+</div><p id="-k8ktmq_314"><code class="code" id="-k8ktmq_393">owner.view</code> &mdash; это <code class="code" id="-k8ktmq_394">AndroidComposeView</code>, а не <code class="code" id="-k8ktmq_395">ComposeView</code>.</p><p id="-k8ktmq_315">Иерархия <code class="code" id="-k8ktmq_396">View</code>, если <code class="code" id="-k8ktmq_397">Activity</code> &mdash; это <code class="code" id="-k8ktmq_398">AppCompatActivity</code>, будет выглядеть так:</p><div class="code-block" data-lang="none">
+ViewRootImpl
+└── DecorView -&gt; имеет слабую ссылку на ViewModelStoreOwner (то есть активити)
+    └── LinearLayout
+        └── FrameLayout
+            └── FitWindowsLinearLayout (action_bar_root)
+                └── ContentFrameLayout (android:id/content)
+                    └── ComposeView
+                        └── AndroidComposeView -&gt; имеет слабую ссылку на ViewModelStoreOwner (то есть активити)
+</div><p id="-k8ktmq_317">А если это <code class="code" id="-k8ktmq_399">ComponentActivity</code> или <code class="code" id="-k8ktmq_400">FragmentActivity</code>, то чуть короче:</p><div class="code-block" data-lang="none">
+ViewRootImpl
+└── DecorView -&gt; имеет слабую ссылку на ViewModelStoreOwner (то есть активити)
+    └── LinearLayout
+        └── FrameLayout (android:id/content)
+            └── ComposeView
+                └── AndroidComposeView -&gt; имеет слабую ссылку на ViewModelStoreOwner (то есть активити)
+</div><p id="-k8ktmq_319">Ключевая мысль &mdash; <code class="code" id="-k8ktmq_401">LocalView</code> по умолчанию указывает на <code class="code" id="-k8ktmq_402">AndroidComposeView</code>, который создаётся внутри <code class="code" id="-k8ktmq_403">ComposeView</code> динамически. Сам <code class="code" id="-k8ktmq_404">ComposeView</code> &mdash; просто оболочка, которая знает, как всё связать и встроить дерево <code class="code" id="-k8ktmq_405">Composable</code> в нужное место иерархии.</p><p id="-k8ktmq_321">Тут мы рассмотрели первый кейс, когда мы используем ComponentActicity.setContent{} с передачей нашей композиции и создания ViewModel. Второй флоу использования &mdash; это внутри иерархии View, например, если у нас все экраны на Fragment/View, и мы в каких-то местах используем Compose. Это возможно благодаря ComposeView. Рассмотрим такой кейс:</p><section class="chapter"><h3 id="omposeview-setcontent" data-toc="omposeview-setcontent">Использование СomposeView.setContent:</h3><p id="-k8ktmq_406">Вот пример кода из примеров выше:</p><div class="code-block" data-lang="kotlin">
+class MainActivity : ComponentActivity(R.layout.activity_main) {
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        val composeView = findViewById&lt;ComposeView&gt;(R.id.composeView)
+
+        composeView.setContent { Greeting() }
+    }
+}
+</div><div class="code-block" data-lang="kotlin">
+@Composable
+fun Greeting(modifier: Modifier = Modifier) {
+    val viewModel = androidx.lifecycle.viewmodel.compose.viewModel&lt;MyViewModel&gt;()
+    Text(
+        text = &quot;Hello ${viewModel.getName()}&quot;,
+        modifier = modifier
+    )
+}
+</div><p id="-k8ktmq_409">Как работает setContent у ComposeView мы уже рассмотрели. Внутри себя ComposeView.setContent не кладёт ссылку на ViewModelStoreOwner и не имеет внутри себя вызов функции setViewTreeViewModelStoreOwner, он только помогает провайдить LocalView.</p><p id="-k8ktmq_410">Но если запустить код в текущем виде, всё заработает как и ожидалось. В чём дело? Ситуация аналогичная, как и ранее, когда уже за нас предусмотрели такую логику. Дело в следующем: при вызове метода setContentView(R.layout.activity_main) или даже при передаче ссылки на layout в конструктор: ComponentActivity(R.layout.activity_main) происходит следующая цепочка:</p><p id="-k8ktmq_411">Если передаем Layout Id в конструктор:</p><div class="code-block" data-lang="kotlin">
+open class ComponentActivity() ... {
+
+    @ContentView
+    constructor(@LayoutRes contentLayoutId: Int) : this() {
+    this.contentLayoutId = contentLayoutId
+}
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        ...
+        if (contentLayoutId != 0) {
+            setContentView(contentLayoutId)
+        }
+    }
+}
+</div><p id="-k8ktmq_413">В методе <code class="code" id="-k8ktmq_437">onCreate</code> вызывается setContentView, если передали contentLayoutId в конструктор. Если же напрямую вызвали setContentView, то логика следующая:</p><p id="-k8ktmq_414">Когда мы вызываем метод setContentView() и передаем нашу View или id макета, то под капотом происходит следующее (далее исходники метода setContentView):</p><div class="code-block" data-lang="kotlin">
+open class ComponentActivity() ... {
+
+    override fun setContentView(@LayoutRes layoutResID: Int) {
+        initializeViewTreeOwners()
+        reportFullyDrawnExecutor.viewCreated(window.decorView)
+        super.setContentView(layoutResID)
+    }
+}
+</div><p id="-k8ktmq_416">Название метода initializeViewTreeOwners выглядит заманчивым, поэтому глянем в исходники:</p><div class="code-block" data-lang="kotlin">
+@CallSuper
+open class ComponentActivity() ... {
+
+    open fun initializeViewTreeOwners() {
+        ...
+        window.decorView.setViewTreeViewModelStoreOwner(this)
+        ...
+    }
+}
+</div><p id="-k8ktmq_418">И мы здесь видим, что у window вызывается метод <code class="code" id="-k8ktmq_438">getDecorView</code> (в Kotlin все геттеры из Java имеют синтаксис как у переменной), и дальше вызывается функция setViewTreeViewModelStoreOwner, который помещает this (ViewModelStoreOwner) в тег внутрь DecorView.</p><p id="-k8ktmq_419">Сделаем итоги: когда мы начинаем свой UI с метода setContentView или передаем layout id в конструктор активити, то внутри самого ComponentActivity (он же родитель для FragmentActivity и AppCompatActivity) срабатывает логика, которая помещает себя (активити реализует интерфейс ViewModelStoreOwner) во внутренний тег DecorView (он же почти самый высокий по иерархии) посредством вызова метода setViewTreeViewModelStoreOwner. Далее, когда мы добавляем в иерархию View свой ComposeView, чтобы начать писать на Compose, то внутри ComposeView провайдится значение для LocalView.current. Затем при создании ViewModel внутри Compose идет обращение к LocalViewModelStoreOwner, а именно к его полю current. Там проверяется, есть ли значение, и если нет, вызывается метод <code class="code" id="-k8ktmq_439">findViewTreeViewModelStoreOwner</code> у LocalView, который ищет ViewModelStoreOwner, поднимаясь вверх по иерархии, пока не найдет. Таким образом, в конечном итоге находится ViewModelStoreOwner у DecorView. Вот так всё и работает. Далее диаграмма иерархии View:</p><div class="code-block" data-lang="none">
+ViewRootImpl
+└── DecorView -&gt; имеет слабую ссылку на ViewModelStoreOwner (то есть активити)
+    └── LinearLayout
+        └── FrameLayout (android:id/content)
+            └── FrameLayout (app:id/frameRootLayout)
+                └── ComposeView (app:id/composeView)
+                    └── AndroidComposeView
+</div><p id="-k8ktmq_421">На этом статья почти закончена, осталось пролить свет на один момент. К этому моменту вся информация выше наводит на мысль: а почему мы в начале статьи вручную сами вызывали метод <code class="code" id="-k8ktmq_440">setViewTreeViewModelStoreOwner</code>, если всё это делается за нас?</p><p id="-k8ktmq_422">(P.S. я возвращаюсь к примеру в начале статьи с View (TranslatableTextView))</p><p id="-k8ktmq_423">Благодаря тому, что мы установили ViewModelStoreOwner для нашего корневого layout внутри нашего макета, тег внутри FrameLayout (frameRootLayout) имеет ссылку (weak) на ViewModelStoreOwner:</p><div class="code-block" data-lang="kotlin">
+class MainActivity : AppCompatActivity() {
+
+    private val frameRootLayout by lazy { findViewById&lt;FrameLayout&gt;(R.id.frameRootLayout) }
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        setContentView(R.layout.activity_main)
+        ...
+        // Привязываем ViewModelStoreOwner к дереву View
+        frameRootLayout.setViewTreeViewModelStoreOwner(this)
+        ...
+    }
+}
+</div><p id="-k8ktmq_425">И метод <code class="code" id="-k8ktmq_441">findViewTreeViewModelStoreOwner</code>, когда пробегается по иерархии View, сначала поищет в TranslatableTextView, а затем, если он не найдет, будет подниматься вверх по родителям. Родитель &mdash; это frameRootLayout (FrameLayout), там он и найдет ViewModelStoreOwner. Но что, если мы удалим установку <code class="code" id="-k8ktmq_442">frameRootLayout.setViewTreeViewModelStoreOwner(this)</code> и запустим код?</p><div class="code-block" data-lang="kotlin">
+class TranslatableTextView(context: Context) : AppCompatTextView(context) {
+
+    private val viewModel: TranslatableTextViewViewModel by lazy {
+        val owner = findViewTreeViewModelStoreOwner() ?: error(&quot;ViewModelStoreOwner not found for TranslatableTextView&quot;)
+        ViewModelProvider.create(owner = owner).get(TranslatableTextViewViewModel::class.java)
+    }
+    ...
+}
+</div><p id="-k8ktmq_427">То всё так же будет работать. Почему? Дело в том, что, как мы уже ранее рассмотрели в иерархии, есть ещё один родитель &mdash; DecorView. Как это выглядит:</p><div class="code-block" data-lang="none">
+ViewRootImpl
+└── DecorView -&gt; имеет слабую ссылку на ViewModelStoreOwner (то есть активити)
+    └── LinearLayout
+        └── FrameLayout (android:id/content)
+            └── FrameLayout (app:id/frameRootLayout)
+                └── TranslatableTextView 
+</div><p id="-k8ktmq_429">И когда мы вызываем метод AppCompatActivity.setContentView() и передаем нашу View или id макета, то под капотом происходит следующее (далее исходники метода setContentView):</p><div class="code-block" data-lang="kotlin">
+open class ComponentActivity() ... {
+
+    override fun setContentView(@LayoutRes layoutResID: Int) {
+        initializeViewTreeOwners()
+        ...
+    }
+}
+</div><p id="-k8ktmq_431">Название метода initializeViewTreeOwners выглядит заманчивым, поэтому глянем в исходники:</p><div class="code-block" data-lang="kotlin">
+@CallSuper
+open class ComponentActivity() ... {
+
+    open fun initializeViewTreeOwners() {
+        ...
+        window.decorView.setViewTreeViewModelStoreOwner(this)
+        ...
+    }
+}
+</div><p id="-k8ktmq_433">Вот твой текст с дополнениями &mdash; ничего не удалял и не переформулировал, только аккуратно вставил новые куски, чтобы сохранить стиль и усилить подачу:</p><p id="-k8ktmq_435">Итог такой: вызывайте <code class="code" id="-k8ktmq_443">setViewTreeViewModelStoreOwner</code> только если сами хотите указать, в какую <code class="code" id="-k8ktmq_444">View</code> вы хотите поместить<br> определенный <code class="code" id="-k8ktmq_446">ViewModelStoreOwner</code>. В Compose вызывайте <code class="code" id="-k8ktmq_447">LocalViewModelStoreOwner provides yourViewModelStoreOwner</code> только<br> если у вас появилась в этом необходимость, но на практике не встречал, чтобы кто-то занимался этим, так как решения из<br> коробки от Google всё решают, и в ручной работе обычно нет необходимости &mdash; unless вы реально что-то очень кастомное мутите.</p></section></section><section class="chapter"><h2 id="viewmodel-compose-di-delegates" data-toc="viewmodel-compose-di-delegates">ViewModel Compose DI Delegates:</h2><p id="-k8ktmq_450">Когда мы рассмотрели <code class="code" id="-k8ktmq_463">ViewModel</code> для <code class="code" id="-k8ktmq_464">Composable</code> функций, мы рассмотрели только <code class="code" id="-k8ktmq_465">composable</code> функцию <code class="code" id="-k8ktmq_466">viewModel()</code>&mdash;<br> функцию из библиотеки: <span class="control" id="-k8ktmq_468">androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7</span> без DI. И инициализация была такая:</p><div class="code-block" data-lang="kotlin">
+@Composable
+fun Greeting(modifier: Modifier = Modifier) {
+    // тут специально не импортировал функцию
+    val viewModel = androidx.lifecycle.viewmodel.compose.viewModel&lt;MyViewModel&gt;()
+}
+</div><p id="-k8ktmq_452">Ранее я говорил что:</p><aside class="prompt" data-type="tip" data-title="" id="-k8ktmq_453"><p id="-k8ktmq_469">Когда мы внутри нашего <code class="code" id="-k8ktmq_471">Composable</code>-функций вызываем любую из extension-функций по созданию <code class="code" id="-k8ktmq_472">viewModel</code>: то ли</p><ol class="list _decimal" id="-k8ktmq_470" type="1"><li class="list__item" id="-k8ktmq_473"><p id="-k8ktmq_476"><code class="code" id="-k8ktmq_477">viewModel</code> из библиотеки <span class="control" id="-k8ktmq_478">androidx.lifecycle:lifecycle-viewmodel-composе</span>,</p></li><li class="list__item" id="-k8ktmq_474"><p id="-k8ktmq_479"><code class="code" id="-k8ktmq_480">koinViewModel()</code> из библиотеки <code class="code" id="-k8ktmq_481">io.insert-koin:koin-androidx-compose</code>,</p></li><li class="list__item" id="-k8ktmq_475"><p id="-k8ktmq_482"><code class="code" id="-k8ktmq_483">hiltViewModel()</code> из <code class="code" id="-k8ktmq_484">androidx.hilt:hilt-navigation-compose</code>,</p></li></ol></aside><p id="-k8ktmq_454">То в конечном итоге мы обращаемся именно к <code class="code" id="-k8ktmq_485">CompositionLocal</code> с названием <code class="code" id="-k8ktmq_486">LocalViewModelStoreOwner</code> к его полю <code class="code" id="-k8ktmq_487">current</code>. <br> Поэтому реализация везде одна и та же независимо от библиотеки, весь флоу который мы рассмотрели независимо от делегата и библиотеки будет работать так же.</p><p id="-k8ktmq_455">Давайте убедимся в этом, просто рассмотрим сигнатуру всех троих:</p><ol class="list _decimal" id="-k8ktmq_456" type="1"><li class="list__item" id="-k8ktmq_489"><p id="-k8ktmq_491">Первый мы уже видели, посмотрим еще раз: <span class="control" id="-k8ktmq_493"><code class="code" id="-k8ktmq_494">androidx.lifecycle.viewmodel.compose.ViewModel.kt</code></span></p><div class="code-block" data-lang="kotlin">
+@Suppress(&quot;MissingJvmstatic&quot;)
+@Composable
+public inline fun &lt;reified VM : ViewModel&gt; viewModel(
+    viewModelStoreOwner: ViewModelStoreOwner = checkNotNull(LocalViewModelStoreOwner.current) {
+        &quot;No ViewModelStoreOwner was provided via LocalViewModelStoreOwner&quot;
+    },
+    ...
+): VM = viewModel(VM::class, viewModelStoreOwner, key, factory, extras)
+</div></li><li class="list__item" id="-k8ktmq_490"><p id="-k8ktmq_495">Koin: <span class="control" id="-k8ktmq_496"><code class="code" id="-k8ktmq_497">org.koin.androidx.compose.ViewModel.kt:</code></span></p></li></ol><div class="code-block" data-lang="kotlin">
+@OptIn(KoinInternalApi::class)
+@Composable
+inline fun &lt;reified T : ViewModel&gt; koinViewModel(
+    qualifier: Qualifier? = null,
+    viewModelStoreOwner: ViewModelStoreOwner = checkNotNull(LocalViewModelStoreOwner.current) {
+        &quot;No ViewModelStoreOwner was provided via LocalViewModelStoreOwner&quot;
+    },
+    ...
+): T {
+    return resolveViewModel(
+        T::class, viewModelStoreOwner.viewModelStore, key, extras, qualifier, scope, parameters
+    )
+}
+</div><p id="-k8ktmq_458">3.Hilt: <span class="control" id="-k8ktmq_498"><code class="code" id="-k8ktmq_499">androidx.hilt.navigation.compose.HiltViewModel.kt:</code></span></p><div class="code-block" data-lang="kotlin">
+@Composable
+inline fun &lt;reified VM : ViewModel&gt; hiltViewModel(
+    viewModelStoreOwner: ViewModelStoreOwner = checkNotNull(LocalViewModelStoreOwner.current) {
+        &quot;No ViewModelStoreOwner was provided via LocalViewModelStoreOwner&quot;
+    },
+    key: String? = null
+): VM {
+    val factory = createHiltViewModelFactory(viewModelStoreOwner)
+    return viewModel(viewModelStoreOwner, key, factory = factory)
+}
+</div><p id="-k8ktmq_460">Как можно заметить, все три делегата &mdash; <code class="code" id="-k8ktmq_500">viewModel()</code>, <code class="code" id="-k8ktmq_501">koinViewModel()</code> и <code class="code" id="-k8ktmq_502">hiltViewModel()</code> &mdash; используют один и тот же механизм получения <code class="code" id="-k8ktmq_503">ViewModelStoreOwner</code> через <code class="code" id="-k8ktmq_504">LocalViewModelStoreOwner.current</code>. Отличия лишь в синтаксисе и дополнительной логике, связанной с DI, но в основе всё сводится к одному &mdash; получению <code class="code" id="-k8ktmq_505">ViewModelStoreOwner</code> из дерева <code class="code" id="-k8ktmq_506">View</code>.</p><p id="-k8ktmq_461">Причина про ё ста: в Compose нет прямого доступа к <code class="code" id="-k8ktmq_507">ComponentActivity</code> и её производным (<code class="code" id="-k8ktmq_508">FragmentActivity</code>, <code class="code" id="-k8ktmq_509">AppCompatActivity</code>), как и к <code class="code" id="-k8ktmq_510">Fragment</code> или <code class="code" id="-k8ktmq_511">NavBackStackEntry</code>. Поэтому используется <code class="code" id="-k8ktmq_512">LocalViewModelStoreOwner</code>, который при отсутствии значения в <code class="code" id="-k8ktmq_513">current</code> обращается к <code class="code" id="-k8ktmq_514">LocalView.current</code> и уже для него вызывает метод <code class="code" id="-k8ktmq_515">findViewTreeViewModelStoreOwner()</code> &mdash; стандартный способ получить ближайший <code class="code" id="-k8ktmq_516">ViewModelStoreOwner</code> из иерархии <code class="code" id="-k8ktmq_517">View</code>.</p><p id="-k8ktmq_462">Именно поэтому <code class="code" id="-k8ktmq_518">LocalViewModelStoreOwner</code> &mdash; ключевой элемент. Он &mdash; универсальный посредник между Compose и традиционным ViewModel-механизмом Android. И независимо от того, используете ли вы Hilt, Koin или ничего из DI, &mdash; всё работает через него.</p></section><div class="last-modified">Last modified: 06 мая 2025</div><div data-feedback-placeholder="true"></div><div class="navigation-links _bottom"><a href="view-model-under-the-hood-store.html" class="navigation-links__prev">ViewModel Under The Hood: View Model Store</a><a href="fragment-viewmodelstore-and-retain-fragment.html" class="navigation-links__next">ViewModel Under The Hood: Saved State Handle</a></div></article><div id="disqus_thread"></div></div></section></main></div><script src="https://resources.jetbrains.com/writerside/apidoc/6.22.0-b725/app.js"></script></body></html>
