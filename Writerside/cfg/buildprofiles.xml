@@ -17,7 +17,7 @@
         <custom-css>style.css</custom-css>
 
         <algolia-id>WI7RDSUQ76</algolia-id>
-        <algolia-index>insider</algolia-index>
+        <algolia-index>pauk_pages</algolia-index>
         <algolia-api-key>06a2b9ad6b0ad21aaf6c82770d9946ea</algolia-api-key> <!-- Это Admin API Key -->
         <algolia-show-logo>true</algolia-show-logo>
 
@@ -35,7 +35,7 @@
         <variables>
 
             <algolia-id>WI7RDSUQ76</algolia-id>
-            <algolia-index>insider</algolia-index>
+            <algolia-index>pauk_pages</algolia-index>
             <algolia-api-key>06a2b9ad6b0ad21aaf6c82770d9946ea</algolia-api-key> <!-- Это Admin API Key -->
             <algolia-show-logo>true</algolia-show-logo>
             <noindex-content>false</noindex-content>
