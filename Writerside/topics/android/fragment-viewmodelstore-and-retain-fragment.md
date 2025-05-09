@@ -724,7 +724,6 @@ override fun onCreate(savedInstanceState: Bundle?) {
     // Output: onCreate: [androidx.lifecycle.ViewModelProvider.DefaultKey:androidx.fragment.app.FragmentManagerViewModel]
 }
 ```
-
 *Скриншот: ключ FragmentManagerViewModel, зарегистрированный в ViewModelStore активити*  
 ![Screenshot](studio1.png)
 

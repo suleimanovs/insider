@@ -2,9 +2,9 @@
 <!DOCTYPE instance-profile
         SYSTEM "https://resources.jetbrains.com/writerside/1.0/product-profile.dtd">
 
-
-<instance-profile id="in" name="Insider" start-page="start-page.md" is-library="true" status="eap">
+<instance-profile id="in" name="suleimanov" start-page="start-page.md" is-library="true" status="eap">
     <toc-element topic="start-page.md"/>
+
 <!--    <toc-element toc-title="Android" hidden="true">-->
 <!--        <toc-element topic="view-model-under-the-hood-store.md"/>-->
 <!--        <toc-element topic="view-model-under-the-hood-state-handle.md"/>-->
