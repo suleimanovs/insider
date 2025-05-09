@@ -4,6 +4,7 @@
                xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
     <sitemap priority="0.90" change-frequency="monthly"/>
 
+
     <variables>
         <header-logo>https://iili.io/3eop8YX.png</header-logo>
         <algolia-show-logo>true</algolia-show-logo>
@@ -15,25 +16,17 @@
         <primary-color>emerald</primary-color>
         <link-color>forest</link-color>
         <custom-css>style.css</custom-css>
-<!--        &#45;&#45;name 'instantsearch-app' \-->
-<!--        &#45;&#45;template 'InstantSearch.js' \-->
-<!--        &#45;&#45;app-id 'WI7RDSUQ76' \-->
-<!--        &#45;&#45;api-key '06a2b9ad6b0ad21aaf6c82770d9946ea' \-->
-<!--        &#45;&#45;index-name 'suleimanov_com_wi7rdsuq76_pages' \-->
-<!--        &#45;&#45;attributes-to-display 'keywords' \-->
-<!--        &#45;&#45;no-interactive-->
-
-
-
 
         <algolia-id>WI7RDSUQ76</algolia-id>
         <algolia-index>suleimanov_com_wi7rdsuq76_pages</algolia-index>
-        <algolia-api-key>06a2b9ad6b0ad21aaf6c82770d9946ea</algolia-api-key>
+        <algolia-api-key>aa58674737462288ab4d4a4cebcd469</algolia-api-key> <!-- Это Write API Key -->
         <algolia-show-logo>true</algolia-show-logo>
 
+
     </variables>
+
     <footer>
-        <copyright>2025 suleimanov.me </copyright>
+        <copyright>2025 suleimanov.me</copyright>
         <social type="linkedin" href="https://www.linkedin.com/in/suleimanovs/"/>
         <link href="https://t.me/suleimanovs">Telegram</link>
     </footer>
@@ -43,10 +36,22 @@
 
             <algolia-id>WI7RDSUQ76</algolia-id>
             <algolia-index>suleimanov_com_wi7rdsuq76_pages</algolia-index>
-            <algolia-api-key>06a2b9ad6b0ad21aaf6c82770d9946ea</algolia-api-key>
+            <algolia-api-key>aa58674737462288ab4d4a4cebcd469</algolia-api-key> <!-- Это Write API Key -->
             <algolia-show-logo>true</algolia-show-logo>
+
             <noindex-content>false</noindex-content>
         </variables>
+    </build-profile>
+
+    <build-profile instance="in">
+        <variables>
+            <algolia-id>WI7RDSUQ76</algolia-id>
+            <algolia-index>suleimanov_com_wi7rdsuq76_pages</algolia-index>
+            <algolia-api-key>aa58674737462288ab4d4a4cebcd469</algolia-api-key> <!-- Это Write API Key -->
+            <algolia-show-logo>true</algolia-show-logo>
+
+        </variables>
+
     </build-profile>
 
 </buildprofiles>
