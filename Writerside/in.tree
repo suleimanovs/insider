@@ -10,7 +10,7 @@
 
 <!--    <toc-element toc-title="Android" hidden="true">-->
 <!--        <toc-element topic="view-model-under-the-hood-store.md"/>-->
-<!--        <toc-element topic="view-model-under-the-hood-state-handle.md"/>-->
+<!--        <toc-element topic="view-model-under-the-hood-сompose.md"/>-->
 <!--        <toc-element topic="fragment-viewmodelstore-and-retain-fragment.md"/>-->
 <!--    </toc-element>-->
 
@@ -19,6 +19,6 @@
 
 <!--    <toc-element toc-title="Java">-->
 <!--    </toc-element>-->
-
+<toc-element topic="view-model-under-the-hood-state-handle.md" in="in"/>
 <!--    <toc-element topic="patterns-principle.md" hidden="true"/>-->
 </instance-profile>

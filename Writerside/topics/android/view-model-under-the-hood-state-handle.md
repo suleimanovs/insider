@@ -1,1020 +1,401 @@
-# ViewModel Under The Hood: Compose
+Это продолжение трех предыдущих статей.
 
-Это продолжение двух предыдущих статей. Если в первой мы разобрали, где в конечном итоге хранится `ViewModelStore` в
-случае с `Activity`, а во второй — как это устроено во `Fragment`, то сегодня разберёмся, где хранятся `ViewModel`-и,
-когда мы используем **Compose** (или даже просто `View`).  
+### Введение
+
+1. В первой мы разобрали, где в конечном итоге хранится `ViewModelStore` в случае с `Activity`,
+2. Во второй — как это устроено во `Fragment`,
+3. В третьей где хранятся `ViewModel`-и, когда мы используем **Compose** (или даже просто `View`).
+
+В этой статье рассмотрим Где хранится SavedStateHandle, SavedStateHandle vs onSaveInstanceState vs ViewModel(ViewModelStore)
 Особенно когда мы объявляем `ViewModel` прямо внутри `Composable` функций. Но, как всегда, начнём с базиса.
 
-Есть такой подход — **View-based ViewModel scoping**. Что он значит?  
-Мы все знаем стандартную практику, когда у каждого фрагмента или активити есть своя `ViewModel`.  
-Но также существует и менее популярная история — когда у каждой `View` может быть своя собственная `ViewModel`.  
-Насколько это полезно — решать вам. Вы спросите: а при чём тут Compose?  
-А я отвечу: дело в том, что Compose работает **примерно по той же схеме**. Давайте начнём с простого примера:
+### Базис
 
----
+В статье не будет описания как работать с этими Api, а будет о том как они работают изнутри, по этому я буду пологаться на то
+что вы уже работали с ними.
+Как всегда начнем с базиса, давайте сначала дадим определения для SavedStateHandle, onSaveInstanceState, ViewModel:
 
-### View-based ViewModel scoping — первый взгляд
+**ViewModel** - компонент архитектурного паттерна MVVM, который был предоставлен Google как примитив
+позволяющий пережить изменение конфигураций. Изменение конфигураций в свою очередь - это состояние, заставляющая
+activity/fragment пересоздаваться, это именно то состояние которое может пережить ViewModel. Увы на этом обьязанности ViewModel по
+хранению данных заканчивается
 
-Создадим кастомную `View`. Пусть это будет `TranslatableTextView`.  
-Для нашего примера не так важно, **что именно делает** эта вьюха — главное, что мы хотим рассмотреть подход View-based
-ViewModel scoping. Вот как это может выглядеть:
+Если proccess приложения умирает или прырывается proccess , то в таком случае ViewModel не справится,
+по этому тут в дело входит старый добрый метод onSaveInstanceState/onRestoreInstanceState
 
-```kotlin
-class TranslatableTextView(context: Context) : AppCompatTextView(context) {
+**onSaveInstanceState/onRestoreInstanceState** — это методы жизненного цикла Activity, Fragment и View(да View тоже может сохронять
+состояние)
+которые позволяют сохранять и восстанавливать временное состояние пользовательского интерфейса при изменениях конфигурации (например, при
+повороте экрана)
+или при полном уничтожении активности из-за нехватки ресурсов.
+В onSaveInstanceState данные сохраняются в Bundle, который автоматически передаётся в метод onRestoreInstanceState при восстановлении
+активности.
 
-    private val viewModel: TranslatableTextViewViewModel by lazy {
-        val owner = findViewTreeViewModelStoreOwner() ?: error("ViewModelStoreOwner not found for TranslatableTextView")
-        ViewModelProvider.create(owner = owner).get(TranslatableTextViewViewModel::class.java)
-    }
+Это базовый механизм для хранения состояния примитивных(и их массивы) типов данных, Parcelable/ Serializeble и еще пару нативных андроид
+типов,
+но он требует явного указания того, что именно нужно сохранить.
 
-    fun translateTo(locale: Locale) {
-        text = viewModel.getTranslatedText(text.toString(), locale)
-    }
-}
-```
+**SavedState API** — это современная альтернатива методу onSaveInstanceState, которая более гибко управляет состоянием, особенно в
+связке с ViewModel.
 
-Представим, что `TranslatableTextView` умеет переводить текст, как, например, в Telegram.  
-Если бы мы использовали обычную `ViewModel`, пришлось бы дублировать логику на всех экранах, где используется эта
-`View`. Но благодаря подходу **View-based ViewModel scoping**, у `TranslatableTextView` есть **своя собственная**
-`ViewModel`.
+**SavedStateHandle** — это объект, предоставленный в конструкторе ViewModel, который позволяет безопасно сохранять и восстанавливать данные,
+даже если процесс был уничтожен. В отличие от статичного использования onSaveInstanceState, SavedStateHandle предоставляет так же
+возможность
+подписаться на Flow, LiveData данные которые он хранит и восстанавливает
+Он автоматически интегрирован с ViewModel и поддерживает сохранение состояния при изменениях конфигурации, а также при полном уничтожении
+приложения(процесса).
+Дополнительное преимущество — это возможность подписываться на изменения значений в SavedStateHandle, получая реактивное поведение прямо в
+ViewModel.
 
-Что мы здесь видим?  
-– Инициализацию `viewModel` напрямую через ViewModelProvider без делегатов, с передачей ViewModelStoreOwner.  
-– Простой метод `translateTo`, который принимает `Locale` и обновляет текст вьюхи (`AppCompatTextView`) на переведённый.
+### onSaveInstanceState/ onRestoreInstanceState
 
-Давайте взглянем и на саму `ViewModel`, чтобы пример был полноценным и наглядным:
-
-```kotlin
-class TranslatableTextViewViewModel : ViewModel() {
-    fun getTranslatedText(currentText: String, locale: Locale): String {
-        // Здесь может быть настоящая локализация
-        return "Translated('$currentText') to ${locale.displayLanguage}"
-    }
-}
-```
-
-Теперь снова вернёмся к `TranslatableTextView`, чтобы детальнее рассмотреть инициализацию `ViewModel`.
-Она выглядит немного необычно:
+Давайте так же освижим память о методах onSaveInstanceState/ onRestoreInstanceState:
 
 ```kotlin
-class TranslatableTextView(context: Context) : AppCompatTextView(context) {
+class RestoreActivity : AppCompatActivity() {
 
-    private val viewModel: TranslatableTextViewViewModel by lazy {
-        val owner = findViewTreeViewModelStoreOwner() ?: error("ViewModelStoreOwner not found for TranslatableTextView")
-        ViewModelProvider.create(owner = owner).get(TranslatableTextViewViewModel::class.java)
-    }
-    ...
-}
-```
-
-Первое, что бросается в глаза — это вызов метода `findViewTreeViewModelStoreOwner()`.  
-Он возвращает нам `ViewModelStoreOwner`, а как мы помним, им могут быть только `ComponentActivity`, `Fragment` или
-`NavBackStackEntry`.
-
-Затем этот `owner` мы передаём в `ViewModelProvider`, чтобы тот создал (или вернул) нужную `ViewModel` и поместил её в
-`ViewModelStore`.  
-Напомню: `ViewModelStore` — это то место, где живёт и хранится наша `ViewModel`, и доступен он у каждого
-`ViewModelStoreOwner`.
-
-Давайте заглянем, как устроен сам метод `findViewTreeViewModelStoreOwner()` и каким образом он умеет доставать
-`ViewModelStoreOwner`:
-
-**ViewTreeViewModelStoreOwner.android.kt**:
-
-```kotlin
-/**
- * Retrieve the [ViewModelStoreOwner] associated with the given [View]. This may be used to retain
- * state associated with this view across configuration changes.
- *
- * @return The [ViewModelStoreOwner] associated with this view and/or some subset of its ancestors
- */
-@JvmName("get")
-public fun View.findViewTreeViewModelStoreOwner(): ViewModelStoreOwner? {
-    var currentView: View? = this
-    while (currentView != null) {
-        val storeOwner =
-            currentView.getTag(R.id.view_tree_view_model_store_owner) as? ViewModelStoreOwner
-        if (storeOwner != null) {
-            return storeOwner
-        }
-        currentView = currentView.getParentOrViewTreeDisjointParent() as? View
-    }
-    return null
-}
-```
-
-Если коротко, то в этом методе происходит следующее: у текущей `View`, на которой вызвали
-`findViewTreeViewModelStoreOwner`,  
-мы ищем тег с id `R.id.view_tree_view_model_store_owner`. Полученное значение приводим к `ViewModelStoreOwner`,  
-и если он не `null` — возвращаем его. А если `null`, то начинаем подниматься вверх по иерархии `View`.  
-Эту работу выполняет метод `getParentOrViewTreeDisjointParent`. В исходники его лезть не будем — он просто возвращает
-родителя текущей `View` (прямого родителя или не прямого родителя).  
-Поскольку это происходит внутри цикла, мы поднимаемся по иерархии, пока не найдём одного из родителей, имеющий
-тег `R.id.view_tree_view_model_store_owner` и в котором уже есть `ViewModelStoreOwner`.
-
-На этом, в стиле Кристофера Нолана, временно забываем про этот метод — и посмотрим, как мы будем использовать
-`TranslatableTextView`:
-
-```kotlin
-class MainActivity : AppCompatActivity() {
-
-    private val frameRootLayout by lazy { findViewById<FrameLayout>(R.id.frameRootLayout) }
+    private var counter = 0
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_main)
+        // Восстановление значения при пересоздании
+        counter = savedInstanceState?.getInt("counter_key") ?: 0
+    }
 
-        // Привязываем ViewModelStoreOwner к дереву ViewView(frameRootLayout)
-        frameRootLayout.setViewTreeViewModelStoreOwner(this)
+    override fun onRestoreInstanceState(savedInstanceState: Bundle) {
+        super.onRestoreInstanceState(savedInstanceState)
+        // Восстановление значения при пересоздании
+        counter = savedInstanceState.getInt("counter_key")
+    }
 
-        val translatableView = TranslatableTextView(this)
-        translatableView.text = "Hello, world!"
-        frameRootLayout.addView(translatableView)
-
-        // Пример использования перевода
-        translatableView.translateTo(Locale.ENGLISH)
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        // Сохраняем значение
+        outState.putInt("counter_key", counter)
+        Log.d("MainActivity", "onSaveInstanceState: Counter saved = $counter")
     }
 }
 ```
 
-Всё довольно просто, да?  
-У нас есть некий layout, у которого root — это `FrameLayout` с id `R.id.frameRootLayout`.  
-Мы находим этот `FrameLayout` и добавляем в него наш кастомный `View`: `TranslatableTextView`. Здесь всё понятно.
+**onSaveInstanceState** — вызывается для получения состояния Activity перед её уничтожением, чтобы это состояние могло быть
+восстановлено в методах `onCreate` или `onRestoreInstanceState`. `Bundle`, заполненный в этом методе, будет передан в оба метода.
 
-Но самое интересное — это вот эта строка:
+Этот метод вызывается перед тем, как активность может быть уничтожена, чтобы в будущем, при повторном создании, она могла восстановить своё
+состояние. Не следует путать этот метод с методами жизненного цикла, такими как `onPause`, который всегда вызывается, когда пользователь больше не
+взаимодействует с активностью, или `onStop`, который вызывается, когда активность становится невидимой. Пример, когда `onPause` и `onStop`
+вызываются, но `onSaveInstanceState` — нет: пользователь возвращается из Activity B в Activity A — в этом случае состояние B не требуется
+восстанавливать, поэтому `onSaveInstanceState` для B не вызывается. Другой пример: если Activity B запускается поверх Activity A, но A
+остаётся в памяти, то `onSaveInstanceState` для A также не вызывается, так как его состояние остаётся неизменным.
 
+Реализация по умолчанию этого метода автоматически сохраняет большую часть состояния пользовательского интерфейса, вызывая метод
+`onSaveInstanceState()` у каждого представления (`View`) в иерархии, у которого есть ID, и сохраняя ID элемента, который был в фокусе.
+Восстановление этих данных будет происходить в стандартной реализации метода `onRestoreInstanceState()`. Если метод переопределяется для
+сохранения дополнительной информации, которая не захвачена отдельными представлениями, рекомендуется вызвать реализацию по умолчанию через
+`super.onSaveInstanceState(outState)`. В противном случае разработчику придётся вручную сохранять состояние всех представлений.
+
+Если метод вызывается, то это произойдёт **после `onStop`** для приложений, нацеленных на платформы, начиная с Android P. Для более ранних
+версий Android этот метод будет вызван **до `onStop`**, и нет никаких гарантий, будет ли он вызван до или после `onPause`.
+
+
+**onRestoreInstanceState** — этот метод вызывается **после** `onStart`, когда активность повторно инициализируется из ранее сохранённого
+состояния, переданного в `savedInstanceState`.
+Большинство реализаций используют для восстановления состояния метод `onCreate`, но иногда бывает удобнее делать это здесь, после того как
+завершена вся инициализация, или чтобы подклассы могли решить, использовать ли вашу реализацию по умолчанию.
+Стандартная реализация этого метода восстанавливает состояние представлений (View), которое было ранее заморожено методом
+`onSaveInstanceState`.
+Этот метод вызывается **между `onStart` и `onPostCreate`**. Он срабатывает **только при повторном создании активности**; метод **не
+вызывается**, если `onStart` был вызван по любой другой причине (например, при переходе из фона на передний план).
+
+На этом примере временно забываем о них, чуть позже мы их снова встретим в более низкоуровневых цепочках вызовов.
+
+### Saved State Api
+
+Тот же Пример что и выше, только переписанный с использованием Saved State Api, делает ровно тоже самое:
 ```kotlin
-// Привязываем ViewModelStoreOwner к дереву View(frameRootLayout)
-frameRootLayout.setViewTreeViewModelStoreOwner(this)
-```
+class RestoreActivity : AppCompatActivity() {
 
----
-
-Мы вызываем `setViewTreeViewModelStoreOwner` и передаём в него `this` — то есть саму `Activity`.  
-Как мы знаем, `Activity` реализует интерфейс `ViewModelStoreOwner`,  
-поэтому мы спокойно можем передать её туда, где требуется `ViewModelStoreOwner`.
-
-Вот как выглядит цепочка наследования начиная с интерфейса ViewModelStoreOwner:
-
-```
-[interface] ViewModelStoreOwner → ComponentActivity → FragmentActivity → AppCompatActivity
-```
-
-То есть, когда мы передаём `this` из `Activity` в `setViewTreeViewModelStoreOwner`, то передаём полностью валидный
-`ViewModelStoreOwner`, и всё работает как надо.  
-Но как именно это связывание происходит внутри? За счёт чего потом `findViewTreeViewModelStoreOwner()` находит этого
-владельца(`ViewModelStoreOwner`)?
-
-Чтобы в этом разобраться, давайте заглянем в исходники метода `setViewTreeViewModelStoreOwner`, который мы ранее уже
-встретили.
-**ViewTreeViewModelStoreOwner.android.kt**:
-
-```kotlin
-
-/**
- * Set the [ViewModelStoreOwner] associated with the given [View]. Calls to [get] from this view or
- * descendants will return `viewModelStoreOwner`.
- *
- * This should only be called by constructs such as activities or fragments that manage a view tree
- * and retain state through a [ViewModelStoreOwner]. Callers should only set a [ViewModelStoreOwner]
- * that will be *stable.* The associated [ViewModelStore] should be cleared if the view tree is
- * removed and is not guaranteed to later become reattached to a window.
- *
- * @param viewModelStoreOwner ViewModelStoreOwner associated with the given view
- */
-@JvmName("set")
-public fun View.setViewTreeViewModelStoreOwner(viewModelStoreOwner: ViewModelStoreOwner?) {
-    setTag(R.id.view_tree_view_model_store_owner, viewModelStoreOwner)
-}
-```
-
-Рядом также находится метод `findViewTreeViewModelStoreOwner`, с которым мы уже знакомы.  
-Сейчас нас интересует `setViewTreeViewModelStoreOwner`. Как видим, он просто кладёт `viewModelStoreOwner`  
-в виде тега в указанную `View` по ключу `R.id.view_tree_view_model_store_owner`:
-
-```kotlin
-setTag(R.id.view_tree_view_model_store_owner, viewModelStoreOwner)
-```
-
-Все, кто работал с `View`, знают метод `setTag(Object?)`, но помимо этого есть и перегруженный метод:
-
-```java
-public void setTag(int key, final Object tag) {
-    ...
-}
-```
-
-Этот метод позволяет хранить разные теги по ключам, используя под капотом `SparseArray`. Это важный момент, потому что
-именно через этот механизм мы и будем передавать `ViewModelStoreOwner`.
-
-Теперь давайте разберёмся, что происходит на практике.
-
-В методе `onCreate` в `Activity` мы вызываем метод `setViewTreeViewModelStoreOwner` для рутовой`View`(**R.id.frameRootLayout**),
-передавая в качестве параметра `this`, то есть само `Activity`. Это потому, что `Activity`реализует интерфейс `ViewModelStoreOwner`.
-Мы связываем эту активность с деревом представлений(View), чтобы иметь доступ к `ViewModelStore`(так как Activity является
-ViewModelStoreOwner).
-
-Далее мы добавляем нашу кастомную `View`(он же TranslatableTextView) в этот `frameRootLayout`. Пример:
-
-```kotlin
-class MainActivity : AppCompatActivity() {
-
-    private val frameRootLayout by lazy { findViewById<FrameLayout>(R.id.frameRootLayout) }
+    private var counter = 0
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_main)
-
-        // Привязываем ViewModelStoreOwner к дереву View
-        frameRootLayout.setViewTreeViewModelStoreOwner(this)
-
-        val translatableView = TranslatableTextView(this)
-        translatableView.text = "Hello, world!"
-        frameRootLayout.addView(translatableView)
-
-        // Пример использования перевода
-        translatableView.translateTo(Locale.ENGLISH)
-    }
-}
-```
-
-Теперь, что происходит дальше?
-
-Когда мы находимся в нашем кастомном `View`, мы вызываем метод `findViewTreeViewModelStoreOwner`. Этот метод начинает
-искать тег с ID `R.id.view_tree_view_model_store_owner` в самой вьюшке. Если он не находит нужный тег, он поднимется по
-иерархии представлений, пока не найдёт родительский элемент, в котором этот тег присутствует:
-
-```kotlin
-class TranslatableTextView(context: Context) : AppCompatTextView(context) {
-
-    private val viewModel: TranslatableTextViewViewModel by lazy {
-        val owner = findViewTreeViewModelStoreOwner() ?: error("ViewTreeViewModelStoreOwner not found for TranslatableTextView")
-        ViewModelProvider.create(owner = owner).get(TranslatableTextViewViewModel::class.java)
-    }
-    ...
-}
-```
-
-Итак, этот механизм позволяет найти нужный `ViewModelStoreOwner` в дереве представлений, начиная с текущей вьюшки и
-двигаясь вверх по иерархии до родительского компонента, в котором хранятся `ViewModelStore`.
-
-В нашем случае `findViewTreeViewModelStoreOwner` находит `ViewModelStoreOwner` у родительского view: `FrameLayout(R.id.frameRootLayout)`, и
-мы
-получаем `ViewModelStoreOwner` и по умолчанию создаём `ViewModel` вызовом `ViewModelProvider`.
-В конечном итоге таким образом наша ViewModel, которую создали внутри TranslatableTextView, будет храниться в
-ViewModelStore, принадлежащей Activity.
-
-Теперь вопрос, а почему мы это рассмотрели? И при чём тут Compose? Ответ в следующей главе статьи.
-
-### Где Compose хранит `ViewModel`-и?
-
-Давайте возьмём очень простую `ViewModel` и очень простой composable screen. Начнём с `ViewModel`:
-
-```kotlin
-class MyViewModel : ViewModel() {
-    fun getName(): String = "Compose"
-}
-```
-
-Наша `ViewModel` очень простая, и она нам нужна только в качестве примера, чтобы добраться до сути. Далее, наш
-Composable Screen:
-
-```kotlin
-@Composable
-fun Greeting(modifier: Modifier = Modifier) {
-    val viewModel = androidx.lifecycle.viewmodel.compose.viewModel<MyViewModel>()
-    Text(
-        text = "Hello ${viewModel.getName()}",
-        modifier = modifier
-    )
-}
-```
-
-Теперь продолжим:
-
----
-
-`viewModel()` — это функция из библиотеки: **androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7**. Я специально указал
-полный путь к функции в примере, чтобы вас не смущало, где она хранится и откуда взялась. С использованием Koin,
-например, мы могли бы использовать `koinViewModel()` из библиотеки `io.insert-koin:koin-androidx-compose`, или даже
-`hiltViewModel()` из `androidx.hilt:hilt-navigation-compose`.
-
-Независимо от того, какой метод мы бы использовали для получения `ViewModel` в Compose, все они работают под капотом
-одинаково, особенно в контексте получения `ViewModelStore`, так как его из воздуха не взять. Поэтому давайте начнём
-изучение с `androidx.lifecycle.viewmodel.compose.viewModel()`, потому что он был первым, а библиотеки вроде Hilt и Koin
-для создания `ViewModel` в Compose используют похожий механизм.
-
-Далее, исходники метода `androidx.lifecycle.viewmodel.compose.viewModel` в файле:
-
-**`androidx.lifecycle.viewmodel.compose.ViewModel.kt:`**
-
-```kotlin
-@Suppress("MissingJvmstatic")
-@Composable
-public inline fun <reified VM : ViewModel> viewModel(
-    viewModelStoreOwner: ViewModelStoreOwner = checkNotNull(LocalViewModelStoreOwner.current) {
-        "No ViewModelStoreOwner was provided via LocalViewModelStoreOwner"
-    },
-    ...
-): VM = viewModel(VM::class, viewModelStoreOwner, key, factory, extras)
-```
-
-Остальные входные параметры нас не интересуют в этой статье, кроме параметра **`viewModelStoreOwner`**:
-
-```kotlin
-viewModelStoreOwner: ViewModelStoreOwner = checkNotNull(LocalViewModelStoreOwner.current) {
-    "No ViewModelStoreOwner was provided via LocalViewModelStoreOwner"
-},
-```
-
-Далее нас будет интересовать LocalViewModelStoreOwner.current - так как он нам предоставляет ViewModelStore, судя по
-всему. LocalViewModelStoreOwner.current из названия и синтаксиса сразу понятно, что это CompositionLocal:
-
-> `CompositionLocal` — это механизм в `Jetpack Compose`, позволяющий передавать значения по дереву UI без явной передачи через параметры,
-> с доступом к ним через .current в любой точке композиции. Для использования необходимо предварительно предоставить значение через
-> `CompositionLocalProvider` или задать его по умолчанию при создании.
-
-Давайте глянем на исходники LocalViewModelStoreOwner:
-
-```kotlin
-/**
- * The CompositionLocal containing the current [ViewModelStoreOwner].
- */
-public object LocalViewModelStoreOwner {
-    private val LocalViewModelStoreOwner =
-        compositionLocalOf<ViewModelStoreOwner?> { null }
-
-    /**
-     * Returns current composition local value for the owner or `null` if one has not
-     * been provided nor is one available via [findViewTreeViewModelStoreOwner] on the
-     * current [androidx.compose.ui.platform.LocalView].
-     */
-    public val current: ViewModelStoreOwner?
-        @Composable
-        get() = LocalViewModelStoreOwner.current ?: findViewTreeViewModelStoreOwner()
-
-    /**
-     * Associates a [LocalViewModelStoreOwner] key to a value in a call to
-     * [CompositionLocalProvider].
-     */
-    public infix fun provides(viewModelStoreOwner: ViewModelStoreOwner):
-            ProvidedValue<ViewModelStoreOwner?> {
-        return LocalViewModelStoreOwner.provides(viewModelStoreOwner)
-    }
-}
-```
-
-Видим, что `LocalViewModelStoreOwner` — это просто обёртка над настоящим `CompositionLocal`. Мы обращаемся именно к его полю
-current, чтобы прочесть текущее значение. Мы либо попытаемся достать значение из поля current у `CompositionLocal` — это
-означает, что кто-то где-то должен был его `provide`-ить. Если же там пусто, то в таком случае вызывается метод
-`findViewTreeViewModelStoreOwner`. При обычном сценарии использования из коробки мы попадаем именно под второй кейс,
-когда вызывается метод `findViewTreeViewModelStoreOwner`. Поэтому далее рассмотрим его исходники:
-
-**LocalViewModelStoreOwner.android.kt**
-
-```kotlin
-@Composable
-internal actual fun findViewTreeViewModelStoreOwner(): ViewModelStoreOwner? =
-    LocalView.current.findViewTreeViewModelStoreOwner()
-```
-
-И мы видим, что у другого `CompositionLocal` — `LocalView` вызывается метод View.findViewTreeViewModelStoreOwner() — это тот
-самый метод, который мы уже смотрели в первой части статьи. LocalView.current возвращает нам текущий View. Текущий View?
-Разве мы не работаем сейчас в compose? Откуда взялся текущий View? Об этом чуть позже узнаем, что это за View и откуда
-он взялся. Сейчас просто знайте, что под капотом LocalView.current нам возвращает текущий View, у которого мы можем
-вызвать extension-функцию `findViewTreeViewModelStoreOwner`, которую мы уже видели в первой части статьи, и положит
-ViewModel в ViewModelStore:
-
-**ViewTreeLifecycleOwner.android.kt**
-
-```kotlin
-/**
- * Retrieve the [ViewModelStoreOwner] associated with the given [View]. This may be used to retain
- * state associated with this view across configuration changes.
- *
- * @return The [ViewModelStoreOwner] associated with this view and/or some subset of its ancestors
- */
-@JvmName("get")
-public fun View.findViewTreeViewModelStoreOwner(): ViewModelStoreOwner? {
-    var currentView: View? = this
-    while (currentView != null) {
-        val storeOwner =
-            currentView.getTag(R.id.view_tree_view_model_store_owner) as? ViewModelStoreOwner
-        if (storeOwner != null) {
-            return storeOwner
-        }
-        currentView = currentView.getParentOrViewTreeDisjointParent() as? View
-    }
-    return null
-}
-```
-
-Пройдёмся ещё раз по флоу:
-
-Когда мы внутри нашего Composable-функций вызываем любую из extension-функций по созданию viewmodel: то ли viewModel из
-библиотеки **androidx.lifecycle:lifecycle-viewmodel-composе**, или хоть даже `koinViewModel()` из библиотеки
-`io.insert-koin:koin-androidx-compose`, или даже `hiltViewModel()` из `androidx.hilt:hilt-navigation-compose`, то в
-конечном итоге мы обращаемся именно к CompositionLocal с названием `LocalViewModelStoreOwner` к его полю current. А тот,
-в свою очередь, либо достаёт значение, которое внутри него хранится, либо обращается к Composable-методу
-`findViewTreeViewModelStoreOwner`. А тот, в свою очередь, обращается к `LocalView` — это ещё один `CompositionLocal`, у
-которого есть текущее `View`, и для него запускается extension-метод `View.findViewTreeViewModelStoreOwner`, и
-происходит
-поиск по дереву `View` в поисках `ViewModelStoreOwner`. В итоге он его находит, но как? В голове возникают два вопроса:
-
-1. При чём тут View-шки? Почему Compose обращается к LocalView, и LocalView откуда сам взялся?
-2. Из предыдущей главы в статье мы увидели, что прежде чем вызывать метод View.findViewTreeViewModelStoreOwner(), до
-   него мы клали ViewModelStoreOwner во внутренний тег внутри FrameLayout, который являлся рутовым View в нашем макете,
-   с помощью метода setViewTreeViewModelStoreOwner. Но в примере с Compose мы ничего никуда не клали — как всё это
-   работает само по себе?
-
-Всё довольно просто, разработчики Google позаботились об этом за нас. Обычно в Composable есть два подхода:
-
-1. Когда весь проект на Compose полностью, или как минимум в каждой активити UI-дерево начинается с `setContent{}`,
-   а не с `setContentView`:
-
-   ```kotlin
-   class MainActivity : ComponentActivity() {
-   
-       override fun onCreate(savedInstanceState: Bundle?) {
-           super.onCreate(savedInstanceState)
-           setContent {
-               Greeting(modifier = Modifier.fillMaxWidth())
-           }
-       }
-   }
-   ```
-
-2. Гибридный UI, где часть на compose, а часть на View. Тогда прибегают к использованию ComposeView:
-
-```xml
-<?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
-              android:id="@+id/linearLayout"
-              android:layout_width="match_parent"
-              android:layout_height="match_parent"
-              android:orientation="vertical">
-
-    <androidx.compose.ui.platform.ComposeView
-            android:id="@+id/composeView"
-            android:layout_width="match_parent"
-            android:layout_height="200dp"/>
-</LinearLayout>
-```
-
-```kotlin
-class MainActivity : ComponentActivity(R.layout.activity_main) {
-
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        val composeView = findViewById<ComposeView>(R.id.composeView)
-
-        composeView.setContent { Greeting() }
-    }
-}
-```
-
-В обоих случаях, если запустить в таком виде, как сейчас, всё заработает: наша `ViewModel` внутри функции **`Greeting`**
-без
-проблем создастся и положится в `ViewModelStore`, который принадлежит Activity. Почему так происходит?
-
-В обоих случаях мы вызываем метод setContent{}, в первом кейсе это `ComponentActivity.setContent{}`, а во втором
-`ComposeView.setContent {}`, которые открывают Composable-область.
-
-Рассмотрим сначала первый кейс, начнём с setContent для активити (ComponentActivity).
-
-#### Использование ComponentActivity.setContent:
-
-```kotlin
-public fun ComponentActivity.setContent(
-    parent: CompositionContext? = null,
-    content: @Composable () -> Unit
-) {
-    val existingComposeView =
-        window.decorView.findViewById<ViewGroup>(android.R.id.content).getChildAt(0) as? ComposeView
-
-    if (existingComposeView != null)
-        with(existingComposeView) {
-            setParentCompositionContext(parent)
-            setContent(content)
-        }
-    else
-        ComposeView(this).apply {
-            // Set content and parent **before** setContentView
-            // to have ComposeView create the composition on attach
-            setParentCompositionContext(parent)
-            setContent(content)
-            // Set the view tree owners before setting the content view so that the inflation
-            // process and attach listeners will see them already present
-            setOwners()
-            setContentView(this, DefaultActivityContentLayoutParams)
-        }
-}
-```
-
-> Обратите внимание, что это функция расширения setContent является расширением для ComponentActivity и имеет
-> дополнительную логику по инициализации Owner-ов и прочих компонентов. Внутри себя она использует ComposeView и его
-> метод
-> setContent.
-
-Что здесь происходит? У window есть DecorView, внутри этого DecorView лежит ещё один ViewGroup(FrameLayout). У этого
-ViewGroup извлекается ComposeView под индексом 0, если он есть. Если его нет, то создается новый и вызывается метод
-setContentView (который есть у всех активити и унаследован от самого Activity). Но то, что нам нужно, происходит до
-вызова метода setContentView — речь идёт о `setOwners`. Давайте глянем на его исходники тоже:
-
-```kotlin
-private fun ComponentActivity.setOwners() {
-    val decorView = window.decorView
-    ...
-    if (decorView.findViewTreeViewModelStoreOwner() == null) {
-        decorView.setViewTreeViewModelStoreOwner(this)
-    }
-    ...
-}
-```
-
-И именно здесь ViewModelStoreOwner кладётся в DecorView посредством вызова метода setViewTreeViewModelStoreOwner,
-куда передается this — то есть само активити. DecorView является самым(почти) корневым View во всей иерархии View,
-выше его стоит только сам Window.
-
-## Общая картина взаимодействия ViewModelStoreOwner, ComposeView и LocalView
-
-Теперь давайте обобщим весь процесс и сделаем итоги: когда мы используем ComponentActivity (или его наследников
-FragmentActivity и AppCompatActivity) в Compose и создаём ViewModel, используя делегаты compose/hilt/koin, то внутри
-идёт обращение к LocalViewModelStoreOwner.
-Тот отдаёт ViewModelStoreOwner, если он есть. Если нет, то обращается к Composable-методу
-`findViewTreeViewModelStoreOwner`. Тот, в свою очередь, внутри себя обращается к composition local — LocalView.current,
-получает View и у этого View вызывает другой extension-метод View.findViewTreeViewModelStoreOwner. Этот метод
-рекурсивно, начиная с LocalView, ищет сохранённый ViewModelStoreOwner в тегах View и так добирается вверх по иерархии
-View, пока не найдёт. Если найдёт, то вернёт его; если не найдёт, то вернёт null, и выбросится ошибка:
-**_No ViewModelStoreOwner was provided via LocalViewModelStoreOwner_**
-
-Как мы видели выше, при вызове `ComponentActivity.setContent{}` под капотом внутри вызывается метод
-`ComponentActivity.setOwners()`, в котором помещается ViewModelStoreOwner в тег DecorView. Получается, что при вызове
-метода View.findViewTreeViewModelStoreOwner(), пробираясь по иерархии View, в конечном итоге найдётся
-ViewModelStoreOwner внутри самой верхней View (DecorView), но в Compose нет прямого доступа к DecorView, вместо этого
-идёт обращение к LocalView.current:
-
-**LocalViewModelStoreOwner.android.kt**
-
-```kotlin
-@Composable
-internal actual fun findViewTreeViewModelStoreOwner(): ViewModelStoreOwner? =
-    LocalView.current.findViewTreeViewModelStoreOwner()
-```
-
-В этой цепочке мы не рассмотрели только один момент — откуда берётся `LocalView`. Точнее, понятно, что это
-`CompositionLocal`, но **откуда в нём ссылка на текущее `View`?** или **кем является текущее `View`?**
-
-Если кратко и абстрактно: `ComposeView` внутри себя сам вызывает `LocalView` и провайдит ему **самого себя**. Поэтому
-`LocalView` по умолчанию ссылается на тот `ComposeView`, в котором было запущено дерево Composable-функций. А дерево
-Compose в Android всегда начинается именно с ComposеView.
-
-Ниже — полный путь до момента, где `LocalView` получает значение. Без подробных комментариев, просто цепочка:
-
-```kotlin
-class ComposeView @JvmOverloads constructor(...) : AbstractComposeView(context, attrs, defStyleAttr)
-```
-
-`ComposeView` наследуется от `AbstractComposeView`. Смотрим, что происходит внутри `AbstractComposeView`:
-
-```kotlin
-abstract class AbstractComposeView(...) : ViewGroup(...) {
-    private fun ensureCompositionCreated() {
-        if (composition == null) {
-            composition = setContent(resolveParentCompositionContext()) {
-                Content()
+        savedStateRegistry.registerSavedStateProvider(
+            key = "counter_key",
+            provider = object : SavedStateRegistry.SavedStateProvider {
+                override fun saveState(): SavedState {
+                    return SavedState(bundleOf("counter" to counter))
+                }
             }
+        )
+
+        // Восстановление значения при пересоздании
+        counter = savedStateRegistry.consumeRestoredStateForKey("counter_key")?.getInt("counter", 0) ?: 0
+    }
+}
+```
+
+Мы вызываем у объекта savedStateRegistry метод registerSavedStateProvider куда передаем key и анонимный объект SavedStateRegistry.SavedStateProvider который
+возвращает bundle обернутый в объект SavedState, давайте сейчас же определим что из себя представляет этот тип SavedState, если зайти в исходники, а
+именно в expect логику, то тип описан следующим образом:
+androidx.savedstate.SavedState.kt
+```kotlin
+/**
+* An opaque (empty) common type that holds saveable values to be saved and restored by native
+* platforms that have a concept of System-initiated Process Death.
+*
+* That means, the OS will give the chance for the process to keep the state of the application
+* (normally using a serialization mechanism), and allow the app to restore its state later. That is
+* commonly referred to as "state restoration".
+*
+* required to act as a source input for a [SavedStateReader] or [SavedStateWriter].
+*
+* This class represents a container for persistable state data. It is designed to be
+* platform-agnostic, allowing seamless state saving and restoration across different environments.
+  */
+  public expect class SavedState
+```
+в контексте android нас интересует именно actual реализация, по этому далее специфичная для android actual:
+androidx.savedstate.SavedState.android.kt
+```kotlin
+public actual typealias SavedState = android.os.Bundle
+```
+Как видим в android нет на самом деле какого-то типа как SavedState, в actual реализаций это просто typealias который ссылается
+на тот же старый добрый родной класс Bundle, по этому всегда представляйте что там где используется SavedState - на самом деле используется
+класс Bundle, и ничто нам не мешает не использовать двоную обертку, а напрямую вернуть сам bundle:
+```
+savedStateRegistry.registerSavedStateProvider(
+    key = "counter_key",
+    provider = object : SavedStateRegistry.SavedStateProvider {
+        override fun saveState(): SavedState {
+           return bundleOf("counter" to counter)
         }
     }
-}
+)
 ```
+Раз с этим разобрались, дальше давайте зайдем в исходники метода registerSavedStateProvider, этот метод вызывается у переменной
+savedStateRegistry которая имеет тип SavedStateRegistry, давайте быстро узнаем определение этого класса:
 
-В методе `ensureCompositionCreated`, который вызывается, например, при `onMeasure` или `onAttachedToWindow`, или когда
-вызываем ComposeView.setContent, нас интересует вызов функции `setContent`:
+**`SavedStateRegistry`** - управляет сохранением и восстановлением сохранённого состояния, чтобы данные не терялись при пересоздании компонентов.
+Реализация привязана к SavedStateRegistryImpl, которая отвечает за фактическое хранение и восстановление данных.
+Интерфейс для подключения компонентов, которые потребляют и вносят данные в сохранённое состояние.
+Объект имеет такой же жизненный цикл, как и его владелец (Activity или Fragment):
+когда Activity или Fragment пересоздаются (например, при повороте экрана или изменении конфигурации),
+создаётся новый экземпляр этого объекта.
 
-```kotlin
-internal fun AbstractComposeView.setContent(...): Composition {
-    val composeView = ... ?: AndroidComposeView(...).also {
-        addView(it.view, DefaultLayoutParams)
-    }
-    return doSetContent(composeView, parent, content)
-}
+Но откуда береться `savedStateRegistry` переменная внутри activity мы рассмотрим позже, пока достаточно знать 
+что он есть у activity, далее исходники метода registerSavedStateProvider пренадлежащий классу `SavedStateRegistry`(expect):
+**androidx.savedstate.SavedStateRegistry.kt**
 ```
-
-Тут происходит следующее: создаётся объект класса `AndroidComposeView`, этот же объект помещается внутрь `ComposeView`
-вызовом `addView`. Напоминаю, что `AbstractComposeView` это абстрактный класс, и один из его наследников — это
-`ComposeView`. Хоть здесь работа идёт на уровне абстракций, фактически когда вызывается `addView`, то он вызывается для
-`ComposeView`.
-
-Если стало слишком много новых названий, которые вызывают путаницу, то вот краткое объяснение:
-
-- `AbstractComposeView` - абстрактный класс, который является ViewGroup и имеет уже много реализаций внутри
-- `ComposeView` - один из наследников `AbstractComposeView`, который позволяет нам запускать Composable функции внутри
-  себя. В Android всё упирается в работу с ним в конечном итоге, так как в Android нет способа запускать Composable
-  напрямую на уровне Window. Между Window и нашими Composable экранами стоят куча View и ViewGroup, в том числе и сам
-  `ComposeView`
-- `AndroidComposeView` - низкоуровневый класс, внутри которого в конечном итоге и рисуются наши Composable экраны
-
-Далее — `doSetContent`:
-
-```kotlin
-private fun doSetContent(
-    owner: AndroidComposeView,
-    parent: CompositionContext,
-    content: @Composable () -> Unit
-): Composition {
-    ...
-    val wrapped = owner.view.getTag(R.id.wrapped_composition_tag)
-            as? WrappedComposition
-        ?: WrappedComposition(owner, original).also {
-            owner.view.setTag(R.id.wrapped_composition_tag, it)
-        }
-    wrapped.setContent(content)
-}
-```
-
-Переходим в `WrappedComposition.setContent`:
-
-```kotlin
-private class WrappedComposition(
-    val owner: AndroidComposeView,
-    val original: Composition
-) : Composition, LifecycleEventObserver, CompositionServices {
-    override fun setContent(content: @Composable () -> Unit) {
-        ...
-        ProvideAndroidCompositionLocals(owner, content)
-        ...
-    }
-}
-```
-
-И вот — ключевой момент:
-
-```kotlin
-@Composable
-internal fun ProvideAndroidCompositionLocals(
-    owner: AndroidComposeView,
-    content: @Composable () -> Unit
+public expect class SavedStateRegistry internal constructor(
+    impl: SavedStateRegistryImpl,
 ) {
-    CompositionLocalProvider(
-        ...
-    LocalView provides owner.view,
-    ...
-    ) {
-        content()
+
+    /** This interface marks a component that contributes to saved state. */
+    public fun interface SavedStateProvider {
+        
+        public fun saveState(): SavedState
     }
+
+    ...
+    public val isRestored: Boolean
+    ...
+    @MainThread public fun consumeRestoredStateForKey(key: String): SavedState?
+    ...
+    @MainThread public fun registerSavedStateProvider(key: String, provider: SavedStateProvider)
+    ...
+    public fun getSavedStateProvider(key: String): SavedStateProvider?
+    ...
+    @MainThread public fun unregisterSavedStateProvider(key: String)
 }
 ```
 
-Здесь `LocalView` получает значение `owner.view`, где `owner` — это `AndroidComposeView`, созданный внутри
-`ComposeView`.
+в expect версий нет реализаций, только сигнатуры методов, так же мы увидели исходники интерфейса SavedStateProvider который является 
+каллбэком для получения bundle который нужно сохранить, что бы увидеть реализацию метода registerSavedStateProvider, надо поискать
+**actual реализацию, далее actual реализация SavedStateRegistry:**
+```kotlin
+public actual class SavedStateRegistry internal actual constructor(
+    private val impl: SavedStateRegistryImpl,
+) {
+
+    @get:MainThread
+    public actual val isRestored: Boolean
+        get() = impl.isRestored
+
+    @MainThread
+    public actual fun consumeRestoredStateForKey(key: String): SavedState? =
+        impl.consumeRestoredStateForKey(key)
+
+    @MainThread
+    public actual fun registerSavedStateProvider(key: String, provider: SavedStateProvider) {
+        impl.registerSavedStateProvider(key, provider)
+    }
+
+    public actual fun getSavedStateProvider(key: String): SavedStateProvider? =
+        impl.getSavedStateProvider(key)
+
+    @MainThread
+    public actual fun unregisterSavedStateProvider(key: String) {
+        impl.unregisterSavedStateProvider(key)
+    }
+
+    public actual fun interface SavedStateProvider {
+        public actual fun saveState(): SavedState
+    }
+    ...
+}
+```
+
+actual реализация делегирует свои вызовы готовой имплементацией SavedStateRegistryImpl:
+
+
+
+Давайте начнем разбираться, начнем рассматривать поэтапно:
+```kotlin
+savedStateRegistry.registerSavedStateProvider(key = "counter_key") { 
+    SavedState(bundleOf("counter" to counter)) 
+}
+```
+
+внутри activity нам доступна поле savedStateRegistry, это поле доступна так потому что Activity реализует interface SavedStateRegistryOwner
+если зайти в исходники то можно это увидеть
+что ComponentActivity реализует интерфейс SavedStateRegistryOwner, на самом деле ComponentActivity реализует много интерфейсов, в исходниках
+ниже опущены родители.:
+```
+open class ComponentActivity() : ..., SavedStateRegistryOwner, ... {
+     
+    final override val savedStateRegistry: SavedStateRegistry
+        get() = savedStateRegistryController.savedStateRegistry
+        
+}
+```
+SavedStateRegistryOwner - это просто interface который хранит в себе SavedStateRegistry, его реализует Activity, Fragment и NavBackStackEntry,
+
+
+
+
+
+
+`SavedStateRegistry` — это механизм для сохранения состояния компонентов Android (в основном `Activity` и `Fragment`) при изменениях конфигурации (поворот экрана, изменение языка и т.п.) или уничтожении приложения.
+Этот механизм позволяет сохранять данные в объекте `Bundle`, который автоматически восстанавливается при пересоздании компонента.
+
+`SavedStateRegistry` доступен в любом компоненте, реализующем интерфейс `SavedStateRegistryOwner`. Этим интерфейсом обладают:
+
+* `ComponentActivity` — это базовый класс для всех современных `Activity`.
+* `Fragment` — любой `Fragment` также реализует этот интерфейс.
+
+`SavedStateRegistryOwner` предоставляет доступ к объекту `SavedStateRegistry`, который автоматически создается в момент создания компонента в `onCreate`. Это позволяет сохранять и восстанавливать состояние компонентов без необходимости ручного управления процессом.
 
 ---
 
-**Вывод:** `LocalView` получает ссылку на `View`, внутри которого выполняется композиция, за счёт того, что
-`ComposeView` сам инициализирует `AndroidComposeView`, который далее передаётся в `ProvideAndroidCompositionLocals`.
-`AndroidComposeView` создаётся и хранится **внутри** `ComposeView`, и `LocalView` ссылается именно на этот
-`AndroidComposeView`, а не на сам `ComposeView`.
-
-`ComposeView` наследуется от `AbstractComposeView`, который в свою очередь — `ViewGroup`. То есть `ComposeView` — это не
-сам `AndroidComposeView`, а просто контейнер, который при вызове `setContent` создаёт `AndroidComposeView` и вставляет
-его внутрь.
-
-Поэтому, когда в `ProvideAndroidCompositionLocals` происходит вот это:
+### Метод `registerSavedStateProvider`
 
 ```kotlin
-LocalView provides owner.view
+savedStateRegistry.registerSavedStateProvider(key = "counter_key") { 
+    SavedState(bundleOf("counter" to counter)) 
+}
 ```
 
-`owner.view` — это `AndroidComposeView`, а не `ComposeView`.
+Метод `registerSavedStateProvider` используется для регистрации провайдера состояния, который будет вызван перед уничтожением активности или фрагмента для сохранения данных. Провайдер состояния реализует интерфейс `SavedStateProvider` и возвращает объект типа `SavedState`.
 
-Иерархия `View`, если `Activity` — это `AppCompatActivity`, будет выглядеть так:
-
-```
-ViewRootImpl
-└── DecorView -> имеет слабую ссылку на ViewModelStoreOwner (то есть активити)
-    └── LinearLayout
-        └── FrameLayout
-            └── FitWindowsLinearLayout (action_bar_root)
-                └── ContentFrameLayout (android:id/content)
-                    └── ComposeView
-                        └── AndroidComposeView -> имеет слабую ссылку на ViewModelStoreOwner (то есть активити)
-```
-
-А если это `ComponentActivity` или `FragmentActivity`, то чуть короче:
-
-```
-ViewRootImpl
-└── DecorView -> имеет слабую ссылку на ViewModelStoreOwner (то есть активити)
-    └── LinearLayout
-        └── FrameLayout (android:id/content)
-            └── ComposeView
-                └── AndroidComposeView -> имеет слабую ссылку на ViewModelStoreOwner (то есть активити)
-```
-
-Ключевая мысль — `LocalView` по умолчанию указывает на `AndroidComposeView`, который создаётся внутри `ComposeView`
-динамически. Сам `ComposeView` — просто оболочка, которая знает, как всё связать и встроить дерево `Composable` в нужное
-место иерархии.
+* `key` — строковый идентификатор, с которым связывается состояние.
+* `provider` — объект, реализующий интерфейс `SavedStateProvider`, который возвращает объект типа `SavedState`.
 
 ---
 
-Тут мы рассмотрели первый кейс, когда мы используем ComponentActicity.setContent{} с передачей нашей композиции и
-создания ViewModel. Второй флоу использования — это внутри иерархии View, например, если у нас все экраны на
-Fragment/View, и мы в каких-то местах используем Compose. Это возможно благодаря ComposeView. Рассмотрим такой кейс:
-
-#### Использование СomposeView.setContent:
-
-Вот пример кода из примеров выше:
+### Интерфейс `SavedStateProvider`
 
 ```kotlin
-class MainActivity : ComponentActivity(R.layout.activity_main) {
+public fun interface SavedStateProvider {
+    fun saveState(): SavedState
+}
+```
+
+`SavedStateProvider` — это функциональный интерфейс, который требует реализации метода `saveState()`. Этот метод вызывается при необходимости сохранить состояние компонента. В примере выше он возвращает объект `SavedState`, содержащий данные в виде `Bundle`.
+
+---
+
+### Метод `consumeRestoredStateForKey`
+
+```kotlin
+counter = savedStateRegistry.consumeRestoredStateForKey("counter_key")?.getInt("counter", 0) ?: 0
+```
+
+Метод `consumeRestoredStateForKey` используется для получения сохранённого состояния по указанному ключу. Если состояние было успешно восстановлено, метод возвращает объект `SavedState`. Если данные не были сохранены или ключ неверен, метод вернёт `null`. Важно помнить, что после первого вызова данные по этому ключу больше недоступны — они удаляются из памяти.
+
+Этот метод можно вызывать **только после** `super.onCreate()`. В противном случае будет выброшено исключение `IllegalArgumentException`.
+
+---
+
+### Метод `unregisterSavedStateProvider`
+
+Метод позволяет отвязать ранее зарегистрированного провайдера по ключу. После этого вызова состояние по данному ключу не будет восстановлено:
+
+```kotlin
+savedStateRegistry.unregisterSavedStateProvider("counter_key")
+```
+
+---
+
+### Метод `getSavedStateProvider`
+
+Для проверки, зарегистрирован ли провайдер по ключу, можно воспользоваться методом:
+
+```kotlin
+val provider = savedStateRegistry.getSavedStateProvider("counter_key")
+```
+
+Метод возвращает объект типа `SavedStateProvider`, если он зарегистрирован, иначе — `null`.
+
+---
+
+### Пример использования
+
+```kotlin
+class RestoreActivity : AppCompatActivity() {
+
+    private var counter = 0
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        val composeView = findViewById<ComposeView>(R.id.composeView)
 
-        composeView.setContent { Greeting() }
-    }
-}
-```
-
-```kotlin
-@Composable
-fun Greeting(modifier: Modifier = Modifier) {
-    val viewModel = androidx.lifecycle.viewmodel.compose.viewModel<MyViewModel>()
-    Text(
-        text = "Hello ${viewModel.getName()}",
-        modifier = modifier
-    )
-}
-```
-
-Как работает setContent у ComposeView мы уже рассмотрели. Внутри себя ComposeView.setContent не кладёт ссылку на
-ViewModelStoreOwner и не имеет внутри себя вызов функции setViewTreeViewModelStoreOwner, он только помогает провайдить
-LocalView.
-
-Но если запустить код в текущем виде, всё заработает как и ожидалось. В чём дело? Ситуация аналогичная, как и ранее,
-когда уже за нас предусмотрели такую логику. Дело в следующем: при вызове метода setContentView(R.layout.activity_main)
-или даже при передаче ссылки на layout в конструктор: ComponentActivity(R.layout.activity_main) происходит следующая
-цепочка:
-
-Если передаем Layout Id в конструктор:
-
-```kotlin
-open class ComponentActivity() ... {
-
-    @ContentView
-    constructor(@LayoutRes contentLayoutId: Int) : this() {
-    this.contentLayoutId = contentLayoutId
-}
-
-    override fun onCreate(savedInstanceState: Bundle?) {
-        ...
-        if (contentLayoutId != 0) {
-            setContentView(contentLayoutId)
+        savedStateRegistry.registerSavedStateProvider(key = "counter_key") { 
+            Log.d("RestoreActivity", "Сохранение состояния: $counter")
+            SavedState(bundleOf("counter" to counter))
         }
+
+        counter = savedStateRegistry.consumeRestoredStateForKey("counter_key")
+            ?.getInt("counter", 0) ?: 0
+
+        Log.d("RestoreActivity", "Восстановленное значение: $counter")
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        counter++
+        Log.d("RestoreActivity", "onSaveInstanceState: $counter")
     }
 }
 ```
-
-В методе `onCreate` вызывается setContentView, если передали contentLayoutId в конструктор. Если же напрямую вызвали
-setContentView, то логика следующая:
-
-Когда мы вызываем метод setContentView() и передаем нашу View или id макета, то под капотом происходит следующее (далее
-исходники метода setContentView):
-
-```kotlin
-open class ComponentActivity() ... {
-
-    override fun setContentView(@LayoutRes layoutResID: Int) {
-        initializeViewTreeOwners()
-        reportFullyDrawnExecutor.viewCreated(window.decorView)
-        super.setContentView(layoutResID)
-    }
-}
-```
-
-Название метода initializeViewTreeOwners выглядит заманчивым, поэтому глянем в исходники:
-
-```kotlin
-@CallSuper
-open class ComponentActivity() ... {
-
-    open fun initializeViewTreeOwners() {
-        ...
-        window.decorView.setViewTreeViewModelStoreOwner(this)
-        ...
-    }
-}
-```
-
-И мы здесь видим, что у window вызывается метод `getDecorView` (в Kotlin все геттеры из Java имеют синтаксис как у
-переменной), и дальше вызывается функция setViewTreeViewModelStoreOwner, который помещает this (ViewModelStoreOwner) в
-тег внутрь DecorView.
-
-Сделаем итоги: когда мы начинаем свой UI с метода setContentView или передаем layout id в конструктор активити, то
-внутри самого ComponentActivity (он же родитель для FragmentActivity и AppCompatActivity) срабатывает логика, которая
-помещает себя (активити реализует интерфейс ViewModelStoreOwner) во внутренний тег DecorView (он же почти самый высокий
-по иерархии) посредством вызова метода setViewTreeViewModelStoreOwner. Далее, когда мы добавляем в иерархию View свой
-ComposeView, чтобы начать писать на Compose, то внутри ComposeView провайдится значение для LocalView.current. Затем при
-создании ViewModel внутри Compose идет обращение к LocalViewModelStoreOwner, а именно к его полю current. Там
-проверяется, есть ли значение, и если нет, вызывается метод `findViewTreeViewModelStoreOwner` у LocalView, который ищет
-ViewModelStoreOwner, поднимаясь вверх по иерархии, пока не найдет. Таким образом, в конечном итоге находится
-ViewModelStoreOwner у DecorView. Вот так всё и работает. Далее диаграмма иерархии View:
-
-```
-ViewRootImpl
-└── DecorView -> имеет слабую ссылку на ViewModelStoreOwner (то есть активити)
-    └── LinearLayout
-        └── FrameLayout (android:id/content)
-            └── FrameLayout (app:id/frameRootLayout)
-                └── ComposeView (app:id/composeView)
-                    └── AndroidComposeView
-```
-
-На этом статья почти закончена, осталось пролить свет на один момент. К этому моменту вся информация выше наводит на
-мысль: а почему мы в начале статьи вручную сами вызывали метод `setViewTreeViewModelStoreOwner`, если всё это делается
-за
-нас?
-
-(P.S. я возвращаюсь к примеру в начале статьи с View (TranslatableTextView))
-
-Благодаря тому, что мы установили ViewModelStoreOwner для нашего корневого layout внутри нашего макета, тег внутри
-FrameLayout (frameRootLayout) имеет ссылку (weak) на ViewModelStoreOwner:
-
-```kotlin
-class MainActivity : AppCompatActivity() {
-
-    private val frameRootLayout by lazy { findViewById<FrameLayout>(R.id.frameRootLayout) }
-
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_main)
-        ...
-        // Привязываем ViewModelStoreOwner к дереву View
-        frameRootLayout.setViewTreeViewModelStoreOwner(this)
-        ...
-    }
-}
-```
-
-И метод `findViewTreeViewModelStoreOwner`, когда пробегается по иерархии View, сначала поищет в TranslatableTextView, а
-затем, если он не найдет, будет подниматься вверх по родителям. Родитель — это frameRootLayout (FrameLayout), там он и
-найдет ViewModelStoreOwner. Но что, если мы удалим установку `frameRootLayout.setViewTreeViewModelStoreOwner(this)` и
-запустим код?
-
-```kotlin
-class TranslatableTextView(context: Context) : AppCompatTextView(context) {
-
-    private val viewModel: TranslatableTextViewViewModel by lazy {
-        val owner = findViewTreeViewModelStoreOwner() ?: error("ViewModelStoreOwner not found for TranslatableTextView")
-        ViewModelProvider.create(owner = owner).get(TranslatableTextViewViewModel::class.java)
-    }
-    ...
-}
-```
-
-То всё так же будет работать. Почему? Дело в том, что, как мы уже ранее рассмотрели в иерархии, есть ещё один родитель —
-DecorView. Как это выглядит:
-
-```
-ViewRootImpl
-└── DecorView -> имеет слабую ссылку на ViewModelStoreOwner (то есть активити)
-    └── LinearLayout
-        └── FrameLayout (android:id/content)
-            └── FrameLayout (app:id/frameRootLayout)
-                └── TranslatableTextView 
-```
-
-И когда мы вызываем метод AppCompatActivity.setContentView() и передаем нашу View или id макета, то под капотом
-происходит следующее (далее исходники метода setContentView):
-
-```kotlin
-open class ComponentActivity() ... {
-
-    override fun setContentView(@LayoutRes layoutResID: Int) {
-        initializeViewTreeOwners()
-        ...
-    }
-}
-```
-
-Название метода initializeViewTreeOwners выглядит заманчивым, поэтому глянем в исходники:
-
-```kotlin
-@CallSuper
-open class ComponentActivity() ... {
-
-    open fun initializeViewTreeOwners() {
-        ...
-        window.decorView.setViewTreeViewModelStoreOwner(this)
-        ...
-    }
-}
-```
-
-Вот твой текст с дополнениями — ничего не удалял и не переформулировал, только аккуратно вставил новые куски, чтобы
-сохранить стиль и усилить подачу:
 
 ---
 
-Итог такой: вызывайте `setViewTreeViewModelStoreOwner` только если сами хотите указать, в какую `View` вы хотите
-поместить  
-определенный `ViewModelStoreOwner`. В Compose вызывайте `LocalViewModelStoreOwner provides yourViewModelStoreOwner`
-только  
-если у вас появилась в этом необходимость, но на практике не встречал, чтобы кто-то занимался этим, так как решения из  
-коробки от Google всё решают, и в ручной работе обычно нет необходимости — unless вы реально что-то очень кастомное
-мутите.
+### Лог выполнения
+
+```
+Восстановленное значение: 0
+onSaveInstanceState: 1
+Сохранение состояния: 1
+Восстановленное значение: 1
+```
 
 ---
 
-## ViewModel Compose DI Delegates:
+### KMP (Kotlin Multiplatform)
 
-Когда мы рассмотрели `ViewModel` для `Composable` функций, мы рассмотрели только `composable` функцию `viewModel()` —  
-функцию из библиотеки: **androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7** без DI. И инициализация была такая:
+Почти все современные API для работы с состоянием в Android (включая `SavedStateRegistry`) переписаны под KMP (Kotlin Multiplatform). Это позволяет:
 
-```kotlin
-@Composable
-fun Greeting(modifier: Modifier = Modifier) {
-    // тут специально не импортировал функцию
-    val viewModel = androidx.lifecycle.viewmodel.compose.viewModel<MyViewModel>()
-}
-```
+1. Использовать единый механизм сохранения состояния между Android и iOS.
+2. Работать с одним и тем же API в Kotlin Multiplatform Shared Module (KMM).
 
-Ранее я говорил что:
-> Когда мы внутри нашего `Composable`-функций вызываем любую из extension-функций по созданию `viewModel`: то ли
-> 1. `viewModel` из библиотеки **androidx.lifecycle:lifecycle-viewmodel-composе**,
-> 2. `koinViewModel()` из библиотеки `io.insert-koin:koin-androidx-compose`,
-> 3. `hiltViewModel()` из `androidx.hilt:hilt-navigation-compose`,
+---
 
-То в конечном итоге мы обращаемся именно к `CompositionLocal` с названием `LocalViewModelStoreOwner` к его полю
-`current`.  
-Поэтому реализация везде одна и та же независимо от библиотеки, весь флоу который мы рассмотрели независимо от делегата
-и библиотеки будет работать так же.
-
-Давайте убедимся в этом, просто рассмотрим сигнатуру всех троих:
-
-1. Первый мы уже видели, посмотрим еще раз:
-   **`androidx.lifecycle.viewmodel.compose.ViewModel.kt`**
-    ```kotlin
-    @Suppress("MissingJvmstatic")
-    @Composable
-    public inline fun <reified VM : ViewModel> viewModel(
-        viewModelStoreOwner: ViewModelStoreOwner = checkNotNull(LocalViewModelStoreOwner.current) {
-            "No ViewModelStoreOwner was provided via LocalViewModelStoreOwner"
-        },
-        ...
-    ): VM = viewModel(VM::class, viewModelStoreOwner, key, factory, extras)
-    ```
-
-2. Koin:
-   **`org.koin.androidx.compose.ViewModel.kt:`**
-
-```kotlin
-@OptIn(KoinInternalApi::class)
-@Composable
-inline fun <reified T : ViewModel> koinViewModel(
-    qualifier: Qualifier? = null,
-    viewModelStoreOwner: ViewModelStoreOwner = checkNotNull(LocalViewModelStoreOwner.current) {
-        "No ViewModelStoreOwner was provided via LocalViewModelStoreOwner"
-    },
-    ...
-): T {
-    return resolveViewModel(
-        T::class, viewModelStoreOwner.viewModelStore, key, extras, qualifier, scope, parameters
-    )
-}
-```
-
-3.Hilt:
-**`androidx.hilt.navigation.compose.HiltViewModel.kt:`**
-
-```kotlin
-@Composable
-inline fun <reified VM : ViewModel> hiltViewModel(
-    viewModelStoreOwner: ViewModelStoreOwner = checkNotNull(LocalViewModelStoreOwner.current) {
-        "No ViewModelStoreOwner was provided via LocalViewModelStoreOwner"
-    },
-    key: String? = null
-): VM {
-    val factory = createHiltViewModelFactory(viewModelStoreOwner)
-    return viewModel(viewModelStoreOwner, key, factory = factory)
-}
-```
-
-Как можно заметить, все три делегата — `viewModel()`, `koinViewModel()` и `hiltViewModel()` — используют один и тот же
-механизм получения `ViewModelStoreOwner` через `LocalViewModelStoreOwner.current`. Отличия лишь в синтаксисе и
-дополнительной логике, связанной с DI, но в основе всё сводится к одному — получению `ViewModelStoreOwner` из дерева
-`View`.
-
-Причина про
-ё ста: в Compose нет прямого доступа к `ComponentActivity` и её производным (`FragmentActivity`,
-`AppCompatActivity`), как и к `Fragment` или `NavBackStackEntry`. Поэтому используется `LocalViewModelStoreOwner`,
-который при отсутствии значения в `current` обращается к `LocalView.current` и уже для него вызывает метод
-`findViewTreeViewModelStoreOwner()` — стандартный способ получить ближайший `ViewModelStoreOwner` из иерархии `View`.
-
-Именно поэтому `LocalViewModelStoreOwner` — ключевой элемент. Он — универсальный посредник между Compose и традиционным
-ViewModel-механизмом Android. И независимо от того, используете ли вы Hilt, Koin или ничего из DI, — всё работает через
-него.
-
-
+Хочешь, чтобы я добавил сравнение с обычным `onSaveInstanceState` и объяснил, в чем основные отличия? Или продолжим с разбором внутренних механизмов `SavedStateRegistry`?
