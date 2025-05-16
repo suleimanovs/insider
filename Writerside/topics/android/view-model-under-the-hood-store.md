@@ -97,8 +97,7 @@ class MainActivity : ComponentActivity() {
 
 Обратите внимание, что мы также передаём в метод
 `ViewModelProvider.create` параметр `owner = this`. Если заглянуть в исходники метода **create**, можно заметить, что
-требуется
-тип owner: ViewModelStoreOwner:
+требуется тип owner: ViewModelStoreOwner:
 
 ```kotlin
 public actual companion object {
