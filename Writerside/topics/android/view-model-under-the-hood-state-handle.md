@@ -540,9 +540,7 @@ open class ComponentActivity() : ..., SavedStateRegistryOwner, ... {
 
     @CallSuper
     override fun onSaveInstanceState(outState: Bundle) {
-        if (lifecycle is LifecycleRegistry) {
-            (lifecycle as LifecycleRegistry).currentState = Lifecycle.State.CREATED
-        }
+        ...
         super.onSaveInstanceState(outState)
         savedStateRegistryController.performSave(outState)
     }
@@ -586,7 +584,7 @@ class MainActivity : ComponentActivity() {
 Разработчики из google знали что часто понадобиться передавать SavedStateHandle в ViewModel, и что бы разработчикам не приходилось каждый
 раз создавать фабрику для передачи - имеется готовая фабрика которая работает под капотом, так же имеются готовые классы вроде
 
-`AbstractSavedStateViewModelFactory` -  начиная с lifecycle-viewmodel-savedstate-android-**2.9.0** - обьявлен устаревшим
+`AbstractSavedStateViewModelFactory` - начиная с lifecycle-viewmodel-savedstate-android-**2.9.0** - обьявлен устаревшим
 `SavedStateViewModelFactory` - актуален на данный момент для создания ViewModel с SavedStateHandle
 
 Давайте теперь посмотрим как это работает на уровне Activity, Логику ViewModelProvider/ViewModel мы уже рассмотрели, сейчас просто пройдемся
@@ -689,11 +687,12 @@ open class ComponentActivity() : ..., SavedStateRegistryOwner, ... {
 
 Это ключевая часть того как в итоге SavedStateHandle подключается к ViewModel и к SavedStateRegistryOwner
 
-Так же глянем на исходники SavedStateViewModelFactory:
-```kotlin
+Чтобы понять, как SavedStateHandle создаётся и восстанавливается для ViewModel, давайте разберёмся, что происходит в
+SavedStateViewModelFactory:
 
+```kotlin
 public actual class SavedStateViewModelFactory :
-   ViewModelProvider.OnRequeryFactory, ViewModelProvider.Factory {
+    ViewModelProvider.OnRequeryFactory, ViewModelProvider.Factory {
 
     override fun <T : ViewModel> create(modelClass: Class<T>, extras: CreationExtras): T {
         ...
@@ -702,48 +701,52 @@ public actual class SavedStateViewModelFactory :
             extras[VIEW_MODEL_STORE_OWNER_KEY] != null
         ) {
             ...
-                    newInstance(modelClass, constructor, extras.createSavedStateHandle())
+            newInstance(modelClass, constructor, extras.createSavedStateHandle())
 
             ...
         } else {
-           val viewModel =
-              if (lifecycle != null) {
-                 create(key, modelClass) //legacy way
-              } else {
-                 throw IllegalStateException(
-                    "SAVED_STATE_REGISTRY_OWNER_KEY and" +
-                            "VIEW_MODEL_STORE_OWNER_KEY must be provided in the creation extras to" +
-                            "successfully create a ViewModel."
-                 )
-              }
-           viewModel
+            val viewModel =
+                if (lifecycle != null) {
+                    create(key, modelClass) // legacy way
+                } else {
+                    throw IllegalStateException(
+                        "SAVED_STATE_REGISTRY_OWNER_KEY and" +
+                                "VIEW_MODEL_STORE_OWNER_KEY must be provided in the creation extras to" +
+                                "successfully create a ViewModel."
+                    )
+                }
+            viewModel
         }
-       ...
+        ...
     }
 }
 
 
 internal fun <T : ViewModel?> newInstance(
-   modelClass: Class<T>,
-   constructor: Constructor<T>,
-   vararg params: Any
+    modelClass: Class<T>,
+    constructor: Constructor<T>,
+    vararg params: Any
 ): T {
-   return try {
-      constructor.newInstance(*params)
-   } 
-   ...
+    return try {
+        constructor.newInstance(*params)
+    }
+    ...
 }
 ```
 
-
-Тут сокращена логика их исходников что бы сосредоточиться на главном, внутри метода create у фабрики проверяется имеют ли extras
+Тут сокращена логика из исходников что бы сосредоточиться на главном, внутри метода create у фабрики проверяется имеют ли extras
 поля c ключами SAVED_STATE_REGISTRY_OWNER_KEY и VIEW_MODEL_STORE_OWNER_KEY, если имеется, до дальше происходит
-вызов метода newInstance которая через рефлексию вызывает конструктор и передает параметры, но интерусующая часть, это вызов createSavedStateHandle():
+вызов метода newInstance которая через рефлексию вызывает конструктор и передает параметры одним из которых является SavedStateHandle,
+но интерусующая часть, Обратим внимание на вызов createSavedStateHandle():
+
 ```kotlin
 newInstance(modelClass, constructor, extras.createSavedStateHandle())
 ```
 
-давайте глянем в исходники createSavedStateHandle:
+Что происходит внутри createSavedStateHandle?
+
+Для того чтобы понять, как создаётся SavedStateHandle, необходимо заглянуть в исходный код метода:
+
 ```kotlin
 
 @MainThread
@@ -774,7 +777,16 @@ public fun CreationExtras.createSavedStateHandle(): SavedStateHandle {
 }
 ```
 
-Видим что достаются нужные компоненты по ключам, далее исходники метода createSavedStateHandle:
+Здесь из CreationExtras извлекаются три ключевых объекта:
+
+1. savedStateRegistryOwner — ссылка на SavedStateRegistry для управления состоянием.
+2. viewModelStateRegistryOwner — ссылка на ViewModelStore для привязки к жизненному циклу.
+3. defaultArgs — начальные параметры, если они были переданы.
+
+Все эти зависимости передаются в другой метод `createSavedStateHandle`, который как раз и занимается созданием или восстановлением
+SavedStateHandle
+для данной ViewModel.
+
 ```kotlin
 
 private fun createSavedStateHandle(
@@ -794,108 +806,671 @@ private fun createSavedStateHandle(
 }
 ```
 
-savedStateHandlesProvider - Это функция расширения которая возвращает объект SavedStateHandlesProvider(SavedStateProvider)
+Тут сначала ищеться нужный SavedStateHandle внутри SavedStateHandlesVM, если не найдено то происходит создание SavedStateHandle, он кладется
+в SavedStateHandlesVM для хранение, и фукнция createSavedStateHandle возвращает
+управление обратно другой фукнций CreationExtras.createSavedStateHandle() которую мы уже видели, и в конечном итоге управление возрващается
+в factory, таким образом создается SavedStateHandle для конкретной ViewModel.
+
+Так же в этом методе видим некие вызовы вроде `savedStateRegistryOwner.savedStateHandlesProvider` и
+` viewModelStoreOwner.savedStateHandlesVM`
+
+Переход к провайдеру: savedStateHandlesProvider
+
+Теперь посмотрим, как это связано с провайдером. В коде вызывается savedStateRegistryOwner.savedStateHandlesProvider.
+На самом деле это просто extension, который вытаскивает объект(SavedStateProvider) из SavedStateRegistry:
+
+Этот провайдер ответственен за доступ ко всем сохранённым состояниям(SavedStateHandle) которые привязаны к разным ViewModel-кам
+
 ```kotlin
 internal val SavedStateRegistryOwner.savedStateHandlesProvider: SavedStateHandlesProvider
 get() =
-   savedStateRegistry.getSavedStateProvider(SAVED_STATE_KEY) as? SavedStateHandlesProvider
-      ?: throw IllegalStateException(
-         "enableSavedStateHandles() wasn't called " +
-                 "prior to createSavedStateHandle() call"
-      )
+    savedStateRegistry.getSavedStateProvider(SAVED_STATE_KEY) as? SavedStateHandlesProvider
+        ?: throw IllegalStateException(
+            "enableSavedStateHandles() wasn't called " +
+                    "prior to createSavedStateHandle() call"
+        )
 
 internal class SavedStateHandlesProvider(
-   private val savedStateRegistry: SavedStateRegistry,
-   viewModelStoreOwner: ViewModelStoreOwner
+    private val savedStateRegistry: SavedStateRegistry,
+    viewModelStoreOwner: ViewModelStoreOwner
 ) : SavedStateRegistry.SavedStateProvider {
-   private var restored = false
-   private var restoredState: SavedState? = null
+    private var restored = false
+    private var restoredState: SavedState? = null
 
-   private val viewModel by lazy { viewModelStoreOwner.savedStateHandlesVM }
+    private val viewModel by lazy { viewModelStoreOwner.savedStateHandlesVM }
 
-   override fun saveState(): SavedState {
-      return savedState {
-         // Ensure that even if ViewModels aren't recreated after process death and
-         // recreation
-         // that we keep their state until they are recreated
-         restoredState?.let { putAll(it) }
-         // But if we do have ViewModels, prefer their state over what we may
-         // have restored
-         viewModel.handles.forEach { (key, handle) ->
-            val savedState = handle.savedStateProvider().saveState()
-            if (savedState.read { !isEmpty() }) {
-               putSavedState(key, savedState)
-            }
-         }
-
-         // After we've saved the state, allow restoring a second time
-         restored = false
-      }
-   }
-
-   /** Restore the state from the SavedStateRegistry if it hasn't already been restored. */
-   fun performRestore() {
-      if (!restored) {
-         val newState = savedStateRegistry.consumeRestoredStateForKey(SAVED_STATE_KEY)
-         restoredState = savedState {
+    override fun saveState(): SavedState {
+        return savedState {
+            // Ensure that even if ViewModels aren't recreated after process death and
+            // recreation
+            // that we keep their state until they are recreated
             restoredState?.let { putAll(it) }
-            newState?.let { putAll(it) }
-         }
-         restored = true
-         // Grab a reference to the ViewModel for later usage when we saveState()
-         // This ensures that even if saveState() is called after the Lifecycle is
-         // DESTROYED, we can still save the state
-         viewModel
-      }
-   }
+            // But if we do have ViewModels, prefer their state over what we may
+            // have restored
+            viewModel.handles.forEach { (key, handle) ->
+                val savedState = handle.savedStateProvider().saveState()
+                if (savedState.read { !isEmpty() }) {
+                    putSavedState(key, savedState)
+                }
+            }
 
-   /** Restore the state associated with a particular SavedStateHandle, identified by its [key] */
-   fun consumeRestoredStateForKey(key: String): SavedState? {
-      performRestore()
-      val state = restoredState ?: return null
-      if (state.read { !contains(key) }) return null
+            // After we've saved the state, allow restoring a second time
+            restored = false
+        }
+    }
 
-      val result = state.read { getSavedStateOrNull(key) ?: savedState() }
-      state.write { remove(key) }
-      if (state.read { isEmpty() }) {
-         this.restoredState = null
-      }
+    /** Restore the state from the SavedStateRegistry if it hasn't already been restored. */
+    fun performRestore() {
+        ...
+    }
 
-      return result
-   }
+    /** Restore the state associated with a particular SavedStateHandle, identified by its [key] */
+    fun consumeRestoredStateForKey(key: String): SavedState? {
+        ...
+    }
 }
 ``` 
 
-savedStateHandlesVM - это фукнция расщирения которая возвращает SavedStateHandlesVM:
+Взаимодействие с SavedStateHandlesVM
+
+Теперь перейдём к тому, как данные хранятся внутри ViewModel. savedStateHandlesVM — это расширение, которое создаёт или восстанавливает
+объект SavedStateHandlesVM, хранящий в себе мапу из ключей на SavedStateHandle:
+
 ```kotlin
 
 internal val ViewModelStoreOwner.savedStateHandlesVM: SavedStateHandlesVM
-    get() =
-        ViewModelProvider.create(
-                owner = this,
-                factory =
-                    object : ViewModelProvider.Factory {
-                        override fun <T : ViewModel> create(
-                            modelClass: KClass<T>,
-                            extras: CreationExtras
-                        ): T {
-                            @Suppress("UNCHECKED_CAST") return SavedStateHandlesVM() as T
-                        }
-                    }
-            )[VIEWMODEL_KEY, SavedStateHandlesVM::class]
+get() =
+    ViewModelProvider.create(
+        owner = this,
+        factory =
+            object : ViewModelProvider.Factory {
+                override fun <T : ViewModel> create(
+                    modelClass: KClass<T>,
+                    extras: CreationExtras
+                ): T {
+                    @Suppress("UNCHECKED_CAST") return SavedStateHandlesVM() as T
+                }
+            }
+    )[VIEWMODEL_KEY, SavedStateHandlesVM::class]
 
 internal class SavedStateHandlesVM : ViewModel() {
-   val handles = mutableMapOf<String, SavedStateHandle>()
+    val handles = mutableMapOf<String, SavedStateHandle>()
+}
+```
+
+Здесь создаётся объект SavedStateHandlesVM, внутри которого поддерживается Map, связывающая ключи с объектами SavedStateHandle.
+SavedStateHandlesVM - нужен для того что бы хранить и управлять всеми SavedStateHandle всех ViewModel-ей в рамках одного ViewModelStoreOwner
+и SavedStateRegisrtyOwner.
+SavedStateHandlesProvider - класс реализующий интерфейс SavedStateProvider, когда SavedStateController вызывает performSave,
+тогда он так же обращается к SavedStateHandlesProvider и вызывает его метод saveState, далее он кладет все существующие SavedStateHandle
+в объект SaveState(Bundle) и возвращает его, но что бы все этот процесс работал, нужно что бы регистрировали SavedStateHandlesProvider
+у SavedStateRegsitry, но пока что мы в коде не встретили блок кода который отвечал бы за регистрацию providera, то есть
+посредством вызова метода: `savedStateRegistry.registerSavedStateProvider`, на самом деле такая логика есть, и она трегириться
+в ComponentActivity/Fragment/NavbackStackEntry - то есть во всех SavedStateRegistryOwner-ов, давайте просто глянем как это вызывается
+в ComponentActivity:
+
+```kotlin
+open class ComponentActivity() : ..., SavedStateRegistryOwner, ... {
+
+    init {
+        ...
+        enableSavedStateHandles()
+        ...
+    }
+}
+```
+
+Видим вызов некого метода `enableSavedStateHandles` - самое название звучит заманчиво, далее исхожники метода enableSavedStateHandles:
+
+```kotlin
+
+@MainThread
+public fun <T> T.enableSavedStateHandles() where T : SavedStateRegistryOwner, T : ViewModelStoreOwner {
+    ...
+    // Add the SavedStateProvider used to save SavedStateHandles
+    // if we haven't already registered the provider
+    if (savedStateRegistry.getSavedStateProvider(SAVED_STATE_KEY) == null) {
+        val provider = SavedStateHandlesProvider(savedStateRegistry, this)
+        savedStateRegistry.registerSavedStateProvider(SAVED_STATE_KEY, provider)
+        lifecycle.addObserver(SavedStateHandleAttacher(provider))
+    }
+}
+```
+
+enableSavedStateHandles - типизированный метод который требует что бы вызывающая область являлась одновременно как SavedStateRegistryOwner
+так и ViewModelStoreOwner, ComponentActivity/Fragment/NavbackStackEntry идеально подходят для этого, все трое одновременно реализуют
+интерфейсы SavedStateRegistryOwner и ViewModelStoreOwner, давайте в кратце поймем что происходит в этом методе,
+для начала у SavedStateRegistry запрашивается сохроненный provider(SavedStateProvider) по ключу `SAVED_STATE_KEY`, это ключ для хранения
+SavedStateHandlesProvider(он же SavedStateProvider), если по ключу нечего не найдено, то есть null, это означает что provider
+еще не был регистрирован, тогда создается объект SavedStateHandlesProvider(он же SavedStateProvider), регистрируется в savedStateRegistry.
+
+Мы подробно разобрали, как механизм `SavedStateHandle` автоматически создаётся и подключается к `ViewModel`. Это достигается за счёт
+встроенного механизма фабрики `SavedStateViewModelFactory`, которая при создании ViewModel извлекает необходимые зависимости из объекта
+`CreationExtras`. Эти зависимости включают в себя:
+
+1. **SavedStateRegistryOwner** — для управления сохранением и восстановлением состояния.
+2. **ViewModelStoreOwner** — для привязки жизненного цикла ViewModel.
+3. **DefaultArgs** — начальные параметры, если они были переданы.
+
+В момент инициализации ViewModel, фабрика `SavedStateViewModelFactory` через метод `createSavedStateHandle` формирует объект
+`SavedStateHandle`. Этот объект связывается с `SavedStateRegistry` и регистрируется в нём посредством специального провайдера —
+`SavedStateHandlesProvider`(SavedStateProvider).
+
+Механизм регистрации провайдера запускается автоматически при создании `ComponentActivity`, `Fragment` или `NavBackStackEntry`. Это
+обеспечивается вызовом метода `enableSavedStateHandles`, который регистрирует провайдер в `SavedStateRegistry` под ключом `SAVED_STATE_KEY`.
+В дальнейшем, при вызове `onSaveInstanceState`, этот провайдер сохраняет все текущие состояния из SavedStateHandle, привязанные к ключам
+`ViewModel`.
+
+Таким образом, когда компонент пересоздаётся (например, при смене ориентации экрана или в случае уничтожения и восстановления Activity),
+механизм восстановления срабатывает автоматически. `SavedStateRegistry` восстанавливает состояние из провайдера, а `SavedStateHandle` вновь
+связывается с ViewModel, обеспечивая прозрачную работу с сохранёнными данными.
+
+Это позволяет нам не заботиться о ручной передаче сохранённого состояния при каждом пересоздании ViewModel. Android-фреймворк делает это за
+нас, используя мощный механизм фабрик и хранилищ состояний, что делает `SavedStateHandle` удобным и надежным инструментом для управления
+состоянием внутри ViewModel.
+
+На текущий момент мы понимаем как SavedStateHandle работает в связке с ViewModel, и как он в итоге соеденятся к SavedStateRegisrty,
+Так же до этого мы узнали как работает сам SavedStateRegisrty и SavedStateRegistryController, и увидели их связть с методами
+onSaveInstanceState и onRestoreInstanceState, оказалось и Saved State Api и древние методы onSaveInstanceState и onRestoreInstanceState
+работают в итоге по одному и тому же пути к конечном итоге, давайте вернемся к точке где они встречаються, далее
+код который мы уже видели:
+
+```kotlin
+open class ComponentActivity() : ..., SavedStateRegistryOwner, ... {
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        // Restore the Saved State first so that it is available to
+        // OnContextAvailableListener instances
+        savedStateRegistryController.performRestore(savedInstanceState)
+        super.onCreate(savedInstanceState)
+        ...
+    }
+
+    @CallSuper
+    override fun onSaveInstanceState(outState: Bundle) {
+        ...
+        super.onSaveInstanceState(outState)
+        savedStateRegistryController.performSave(outState)
+    }
+}
+```
+
+То есть в стандартной практике при использований механизма сохронения состояния используют эти два метода,
+onCreate - получает на вход параметр savedInstanceState с типом Bundle, именно в этом методе как раз читают сохроненное значение
+onSaveInstanceState - получает на вход параметр outState с типом Bundle, в этом параметр outState записывают значения которые должны быть
+сохранены
+
+Давайте поймем каким же образом вся это конструкция работает, то каким образом значения сохроенное в outState метода onSaveInstanceState
+переживает изменение конфигураций, и даже смерть системы, и поймем каким образом сохроненные знаячения обратно прилетают в onCreate,
+посмотрим на метод onSaveInstancrState внутри super-а, то есть в самом классе Activity:
+
+```java
+public class Activity extends ContextThemeWrapper ...{
+
+final void performSaveInstanceState(@NonNull Bundle outState) {
+    dispatchActivityPreSaveInstanceState(outState);
+    onSaveInstanceState(outState);
+    saveManagedDialogs(outState);
+    mActivityTransitionState.saveState(outState);
+    storeHasCurrentPermissionRequest(outState);
+    if (DEBUG_LIFECYCLE) Slog.v(TAG, "onSaveInstanceState " + this + ": " + outState);
+    dispatchActivityPostSaveInstanceState(outState);
+}
+
+protected void onSaveInstanceState(@NonNull Bundle outState) {
+    outState.putBundle(WINDOW_HIERARCHY_TAG, mWindow.saveHierarchyState());
+
+    Parcelable p = mFragments.saveAllState();
+    if (p != null) {
+        outState.putParcelable(FRAGMENTS_TAG, p);
+    }
+    getAutofillClientController().onSaveInstanceState(outState);
+    dispatchActivitySaveInstanceState(outState);
+}
+}    
+```
+
+Все что происходит внутри этого метода нас сейчас не волнует, можно увидеть что метод onSaveInstanceState вызывает другой
+финальный метод performSaveInstanceState, давайте теперь поймем кто же его вызывает? Этот вызов иницириуется классом Instrumentation:
+android.app.Instrumentation.java:
+
+```java
+
+@android.ravenwood.annotation.RavenwoodKeepPartialClass
+public class Instrumentation {
+   ...
+
+    public void callActivityOnSaveInstanceState(@NonNull Activity activity,
+                                                @NonNull Bundle outState) {
+        activity.performSaveInstanceState(outState);
+    }
+   ...
+}
+```
+
+<note>
+<title>
+Официальная документация гласит следующее об этом классе:
+</title>
+Base class for implementing application instrumentation code. 
+When running with instrumentation turned on, this class will be instantiated for you before any of the application code, 
+allowing you to monitor all of the interaction the system has with the application. 
+An Instrumentation implementation is described to the system through an AndroidManifest.xml's <instrumentation/> tag.
+</note>
+
+Нужно теперь понимать кто же вызывает Instrumentation.callActivityOnSaveInstanceState? И мы встречаем ActivityThread:
+
+```java
+public final class ActivityThread extends ClientTransactionHandler implements ActivityThreadInternal {
+    ...
+
+    private void callActivityOnSaveInstanceState(ActivityClientRecord r) {
+        r.state = new Bundle();
+        r.state.setAllowFds(false);
+        if (r.isPersistable()) {
+            r.persistentState = new PersistableBundle();
+            mInstrumentation.callActivityOnSaveInstanceState(
+                    r.activity, r.state,
+                    r.persistentState
+            );
+        } else {
+            mInstrumentation.callActivityOnSaveInstanceState(r.activity, r.state);
+        }
+    }
+   ...
+}
+```
+
+Что здесь происходит? callActivityOnSaveInstanceState на вход принимает параметр r c типом ActivityClientRecord,
+у этого класса ActivityClientRecord есть поле state который является Bundle, ему присвается нговый объект Bundle,
+
+Класс `ActivityClientRecord` мы уже встречали когда рассматривали ViewModelStore,  `ActivityClientRecord` представляет собой запись
+активности и используется для хранения всей информации, связанной
+с реальным экземпляром активности.  
+Это своего рода структура данных для ведения учета активности в процессе выполнения приложения.
+
+Основные поля класса `ActivityClientRecord`:
+
+- `state` — объект `Bundle`, содержащий сохраненное состояние активности. Да, да, это тот самый Bundle который мы
+  получаем в методе `onCreate`, `onRestoreInstanceState` и `onSaveInstanceState`
+- `lastNonConfigurationInstances` — объект `Activity#NonConfigurationInstance`, в котором хранится
+  `ComponentActivity#NonConfigurationInstances` в котором хранится`ViewModelStore`.
+- `intent` — объект `Intent`, представляющий намерение запуска активности.
+- `window` — объект `Window`, связанный с активностью.
+- `activity` — сам объект `Activity`.
+- `parent` — родительская активность (если есть).
+- `createdConfig` — объект `Configuration`, содержащий настройки, примененные при создании активности.
+- `overrideConfig` — объект `Configuration`, содержащий текущие настройки активности.
+
+Пока что не будем отвлекаться, и узнаем кто же вызывает callActivityOnSaveInstanceState:
+
+```java
+public final class ActivityThread extends ClientTransactionHandler implements ActivityThreadInternal {
+
+    private void callActivityOnStop(ActivityClientRecord r, boolean saveState, String reason) {
+        // Before P onSaveInstanceState was called before onStop, starting with P it's
+        // called after. Before Honeycomb state was always saved before onPause.
+        final boolean shouldSaveState = saveState && !r.activity.mFinished && r.state == null
+                && !r.isPreHoneycomb();
+        final boolean isPreP = r.isPreP();
+        if (shouldSaveState && isPreP) {
+            callActivityOnSaveInstanceState(r);
+        }
+        ...
+    }
+
+    private Bundle performPauseActivity(ActivityClientRecord r, boolean finished, String reason,
+                                        PendingTransactionActions pendingActions) {
+       ...
+        // Pre-Honeycomb apps always save their state before pausing
+        final boolean shouldSaveState = !r.activity.mFinished && r.isPreHoneycomb();
+        if (shouldSaveState) {
+            callActivityOnSaveInstanceState(r);
+        }
+       ...
+    }
+}
+```
+
+```java
+public final class ActivityThread extends ClientTransactionHandler implements ActivityThreadInternal {
+
+    private void performStopActivityInner(ActivityClientRecord r, StopInfo info,
+                                          boolean saveState, boolean finalStateRequest, String reason) {
+      ...
+        callActivityOnStop(r, saveState, reason);
+    }
+
+    private void handleRelaunchActivityInner(@NonNull ActivityClientRecord r,
+                                             @Nullable List<ResultInfo> pendingResults,
+                                             @Nullable List<ReferrerIntent> pendingIntents,
+                                             @NonNull PendingTransactionActions pendingActions, boolean startsNotResumed,
+                                             @NonNull Configuration overrideConfig, @NonNull ActivityWindowInfo activityWindowInfo,
+                                             @NonNull String reason) {
+       ...
+        if (!r.stopped) {
+            callActivityOnStop(r, true /* saveState */, reason);
+        }
+       ...
+    }
+}
+```
+
+```java
+public final class ActivityThread extends ClientTransactionHandler implements ActivityThreadInternal {
+    @Override
+    public void handleRelaunchActivity(@NonNull ActivityClientRecord tmp,
+                                       @NonNull PendingTransactionActions pendingActions) {
+      ...
+        handleRelaunchActivityInner(r, tmp.pendingResults, tmp.pendingIntents,
+                pendingActions, tmp.startsNotResumed, tmp.overrideConfig, tmp.mActivityWindowInfo,
+                "handleRelaunchActivity");
+    }
+
+
+    @Override
+    public void handleStopActivity(ActivityClientRecord r,
+                                   PendingTransactionActions pendingActions, boolean finalStateRequest, String reason) {
+      ...
+        performStopActivityInner(r, stopInfo, true /* saveState */, finalStateRequest,
+                reason);
+      ...
+    }
+}
+```
+
+Последующие вызовы методов performStopActivity и handleRelaunchActivity упираются в классы ActivityRelaunchItem.execute(),
+ActivityTransactionItem.execute() и TransactionExecutor.execute() - которые мы уже встречали в первой статье
+
+На данный момент мы выследили следующий вызов:
+
+`handleStopActivity` → `performStopActivityInner` → `callActivityOnStop` → `callActivityOnSaveInstanceState` →
+`Instrumentation.callActivityOnSaveInstanceState` → `Activity.performSaveInstanceState` → `onSaveInstanceState`.
+
+Это ключевая цепочка, которая обеспечивает сохранение состояния `Activity` при изменениях конфигурации или завершении её работы. Обратим
+внимание, что вызов `callActivityOnSaveInstanceState` из `Instrumentation` — это и есть та самая точка, где система передаёт управление
+обратно в `Activity`, вызывая метод `performSaveInstanceState`, который, в свою очередь, инициирует сохранение всех данных в объект`Bundle`.
+
+Параллельно, в случае изменения конфигурации или пересоздания активности, запускается другая цепочка:
+
+`handleRelaunchActivity` → `handleRelaunchActivityInner` → `callActivityOnStop` → `callActivityOnSaveInstanceState` →
+`Instrumentation.callActivityOnSaveInstanceState` → `Activity.performSaveInstanceState` → `onSaveInstanceState`.
+
+Эти две цепочки работают независимо, но сходятся в методе `callActivityOnStop`, который гарантирует сохранение данных в `Bundle` перед тем,
+как `Activity` будет остановлена или пересоздана.
+
+Далее, сформированный объект `Bundle`, содержащий состояние `Activity`, сохраняется в объекте `ActivityClientRecord`. Этот объект
+представляет собой структуру данных, хранящую всю необходимую информацию о `Activity` во время её жизненного цикла. Именно в поле `state`
+этого класса система сохраняет переданный `Bundle`, чтобы при пересоздании `Activity` восстановить её состояние.
+
+Таким образом, мы понимаем, что вся эта цепочка запускается не из самой `Activity`, а из внутренней логики Android через `ActivityThread`.
+Это ещё раз подтверждает, что все жизненные циклы управляются системой через единый механизм клиент-серверных транзакций, а `ActivityThread`
+выполняет роль посредника, координирующего вызовы между `Activity` и основной системой.
+
+---
+
+## Цепочка вызова onCreate
+
+Начнем наше движение с самого низа — с метода `onCreate`. Как видно из кода, его вызов происходит внутри метода `performCreate`, который, в
+свою очередь, вызывается из метода `callActivityOnCreate` класса `Instrumentation`.
+
+```java
+public class Activity extends ContextThemeWrapper ...{
+
+public void onCreate(@Nullable Bundle savedInstanceState, @Nullable PersistableBundle persistentState) {
+    onCreate(savedInstanceState);
+}
+
+@MainThread
+@CallSuper
+protected void onCreate(@Nullable Bundle savedInstanceState) {
+        ...
+}
+
+final void performCreate(Bundle icicle) {
+    performCreate(icicle, null);
+}
+
+@UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
+final void performCreate(Bundle icicle, PersistableBundle persistentState) {
+        ...
+    if (persistentState != null) {
+        onCreate(icicle, persistentState);
+    } else {
+        onCreate(icicle);
+    }
+        ...
+}
+}
+```
+
+Метод `performCreate` является связующим звеном между логикой вызова `onCreate` и более низкоуровневыми компонентами системы.
+Сам же вызов `performCreate` осуществляется в классе `Instrumentation`:
+
+```java
+public class Instrumentation {
+    ...
+
+    public void callActivityOnCreate(Activity activity, Bundle icicle) {
+        ...
+        activity.performCreate(icicle);
+        ...
+    }
+}
+```
+
+Класс `Instrumentation` управляет жизненным циклом `Activity` и вызывает `performCreate`, передавая ему объект `Bundle` для восстановления
+состояния.
+
+Теперь поднимемся выше. Кто же вызывает `callActivityOnCreate`? За это отвечает метод `performLaunchActivity` в классе `ActivityThread`:
+
+```java
+public final class ActivityThread extends ClientTransactionHandler implements ActivityThreadInternal {
+
+    private Activity performLaunchActivity(ActivityClientRecord r, Intent customIntent) {
+        ...
+        if (r.isPersistable()) {
+            mInstrumentation.callActivityOnCreate(activity, r.state, r.persistentState);
+        } else {
+            mInstrumentation.callActivityOnCreate(activity, r.state);
+        }
+        ...
+    }
+}
+```
+
+Здесь мы видим, что в зависимости от состояния активности (сохранено ли оно в `PersistentState`), `callActivityOnCreate` вызывается с разным
+количеством параметров, но всегда через `Instrumentation`.
+
+Далее, этот метод `performLaunchActivity` вызывается из метода `handleLaunchActivity` того же класса:
+
+```java
+public final class ActivityThread extends ClientTransactionHandler implements ActivityThreadInternal {
+
+    @Override
+    public Activity handleLaunchActivity(ActivityClientRecord r,
+                                         PendingTransactionActions pendingActions, int deviceId, Intent customIntent) {
+    ...
+        final Activity a = performLaunchActivity(r, customIntent);
+    ...
+    }
+}
+```
+
+### Перезапуск Activity при релаунче (например, при повороте экрана)
+
+При пересоздании Activity, например, при повороте экрана, срабатывает метод `handleRelaunchActivity`:
+
+```java
+public final class ActivityThread extends ClientTransactionHandler implements ActivityThreadInternal {
+
+    @Override
+    public void handleRelaunchActivity(@NonNull ActivityClientRecord tmp,
+                                       @NonNull PendingTransactionActions pendingActions) {
+        ...
+        handleRelaunchActivityInner(r, tmp.pendingResults, tmp.pendingIntents,
+                pendingActions, tmp.startsNotResumed, tmp.overrideConfig, tmp.mActivityWindowInfo,
+                "handleRelaunchActivity");
+    }
+
+    private void handleRelaunchActivityInner(@NonNull ActivityClientRecord r,...) {
+    ....
+        handleLaunchActivity(r, pendingActions, mLastReportedDeviceId, customIntent);
+    }
+}
+```
+
+Вызов метода handleRelaunchActivity иницирует класс команда `ActivityRelaunchItem`, которая действует как маркер для того, чтобы выполнить
+перезапуск с сохранением состояния:
+
+```java
+public class ActivityRelaunchItem extends ActivityTransactionItem {
+
+    @Override
+    public void execute(@NonNull ClientTransactionHandler client, @NonNull ActivityClientRecord r,
+                        @NonNull PendingTransactionActions pendingActions) {
+        ...
+        client.handleRelaunchActivity(mActivityClientRecord, pendingActions);
+        ...
+    }
 }
 
 ```
 
-Вернемся к функций createSavedStateHandle :
-```kotlin
-    return viewModel.handles[key]
-        ?: SavedStateHandle.createHandle(provider.consumeRestoredStateForKey(key), defaultArgs)
-            .also { viewModel.handles[key] = it }
+Эта команда инициирует следующую цепочку вызовов:
+
+`ActivityRelaunchItem.execute` → `handleRelaunchActivity` → `handleRelaunchActivityInner` → `handleLaunchActivity` →
+`performLaunchActivity` → `callActivityOnCreate` → `performCreate` → `onCreate`.
+
+### Создание Activity после уничтожения процесса или при первом запуске
+
+В случае, если процесс был уничтожен или это первый запуск `Activity`, используется другая команда — `LaunchActivityItem`. Она запускает
+аналогичную, но отдельную цепочку вызовов:
+
+```java
+public class LaunchActivityItem extends ClientTransactionItem {
+
+    @Override
+    public void execute(@NonNull ClientTransactionHandler client,
+                        @NonNull PendingTransactionActions pendingActions) {
+        ...
+        ActivityClientRecord r = new ActivityClientRecord(...,mState, mPersistentState, ...);
+        client.handleLaunchActivity(r, pendingActions, mDeviceId, null /* customIntent */);
+        ...
+    }
+}
+
 ```
-Тут сначала ищеться нужный  SavedStateHandle внутри SavedStateHandlesVM, если не найдено то происходит создание SavedStateHandle, он кладется в SavedStateHandlesVM для хранение, и фукнция createSavedStateHandle возвращает
-управление обратно другой фукнций CreationExtras.createSavedStateHandle() которую мы уже видели, и в конечном итоге управление возрващается
-в factory, таким образом создается SavedStateHandle для конкретной ViewModel,
+
+Цепочка выглядит так:
+`LaunchActivityItem.execute` → `handleLaunchActivity` → `performLaunchActivity` → `callActivityOnCreate` → `performCreate` → `onCreate`.
+
+Точно, это важный момент! Можно переформулировать так, чтобы это стало понятнее и подчеркнуть, что оба поля (`state` и `lastNonConfigurationInstances`) действительно находятся в `ActivityClientRecord`. Вот улучшенная версия:
+
+Далее, к сожалению, подниматься выше по цепочкам вызовов не имеет смысла, иначе статья начнёт раздуваться до гигантских масштабов. Но прежде чем двигаться дальше, у нас остаётся несколько ключевых вопросов, которые нужно раскрыть:
+
+1. **Где в конечном итоге хранится этот `Bundle`? И кто именно вызывает команды `LaunchActivityItem` и `ActivityRelaunchItem`?**
+Эти классы явно играют важную роль в процессе восстановления, но до конца неясно, кто же запускает их выполнение.
+
+2. **Если, как мы уже выяснили, `Bundle` действительно находится в поле `state` внутри класса `ActivityClientRecord`, то почему он умеет "переживать" смерть процесса, а вот `NonConfigurationInstance`, который тоже хранится в этом же объекте — в поле `lastNonConfigurationInstances` — нет?**
+Напомню, что под капотом `NonConfigurationInstance` содержит в себе такие важные вещи, как `ViewModelStore`, `RetainFragments` и даже `ActivityGroup`. Однако при перезапуске процесса его содержимое пропадает, в то время как `Bundle` успешно восстанавливается. Почему так?
+
+Нанчнем с первого:
+
+```java
+public class TransactionExecutor {
+
+    public void execute(@NonNull ClientTransaction transaction) {
+        if (DEBUG_RESOLVER) {
+            Slog.d(TAG, tId(transaction) + "Start resolving transaction");
+            Slog.d(TAG, transactionToString(transaction, mTransactionHandler));
+        }
+
+        Trace.traceBegin(Trace.TRACE_TAG_WINDOW_MANAGER, "clientTransactionExecuted");
+        try {
+            if (transaction.getTransactionItems() != null) {
+                executeTransactionItems(transaction);
+            } else {
+                // TODO(b/260873529): cleanup after launch.
+                executeCallbacks(transaction);
+                executeLifecycleState(transaction);
+            }
+        } catch (Exception e) {
+            Slog.e(TAG, "Failed to execute the transaction: "
+                    + transactionToString(transaction, mTransactionHandler));
+            throw e;
+        } finally {
+            Trace.traceEnd(Trace.TRACE_TAG_WINDOW_MANAGER);
+        }
+
+        mPendingActions.clear();
+        if (DEBUG_RESOLVER) Slog.d(TAG, tId(transaction) + "End resolving transaction");
+    }
+
+    @VisibleForTesting
+    @Deprecated
+    public void executeCallbacks(@NonNull ClientTransaction transaction) {
+        final List<ClientTransactionItem> callbacks = transaction.getCallbacks();
+        if (callbacks == null || callbacks.isEmpty()) {
+            // No callbacks to execute, return early.
+            return;
+        }
+        if (DEBUG_RESOLVER) Slog.d(TAG, tId(transaction) + "Resolving callbacks in transaction");
+
+        // In case when post-execution state of the last callback matches the final state requested
+        // for the activity in this transaction, we won't do the last transition here and do it when
+        // moving to final state instead (because it may contain additional parameters from server).
+        final ActivityLifecycleItem finalStateRequest = transaction.getLifecycleStateRequest();
+        final int finalState = finalStateRequest != null ? finalStateRequest.getTargetState()
+                : UNDEFINED;
+        // Index of the last callback that requests some post-execution state.
+        final int lastCallbackRequestingState = lastCallbackRequestingState(transaction);
+
+        final int size = callbacks.size();
+        for (int i = 0; i < size; ++i) {
+            final ClientTransactionItem item = callbacks.get(i);
+
+            // Skip the very last transition and perform it by explicit state request instead.
+            final int postExecutionState = item.getPostExecutionState();
+            final boolean shouldExcludeLastLifecycleState = postExecutionState != UNDEFINED
+                    && i == lastCallbackRequestingState && finalState == postExecutionState;
+            executeNonLifecycleItem(transaction, item, shouldExcludeLastLifecycleState);
+        }
+    }
+}
+```
+
+```java
+public final class ActivityThread extends ClientTransactionHandler implements ActivityThreadInternal {
+
+    class H extends Handler {
+
+        public void handleMessage(Message msg) {
+            if (DEBUG_MESSAGES) Slog.v(TAG, ">>> handling: " + codeToString(msg.what));
+            switch (msg.what) {
+                ...
+                case EXECUTE_TRANSACTION:
+                    final ClientTransaction transaction = (ClientTransaction) msg.obj;
+                    final ClientTransactionListenerController controller =
+                            ClientTransactionListenerController.getInstance();
+                    controller.onClientTransactionStarted();
+                    try {
+                        mTransactionExecutor.execute(transaction);
+                    } finally {
+                        controller.onClientTransactionFinished();
+                    }
+                    if (isSystem()) {
+                        // Client transactions inside system process are recycled on the client side
+                        // instead of ClientLifecycleManager to avoid being cleared before this
+                        // message is handled.
+                        transaction.recycle();
+                    }
+                    // TODO(lifecycler): Recycle locally scheduled transactions.
+                    break;
+                ...    
+            }
+        }
+    }
+}
+        
+```

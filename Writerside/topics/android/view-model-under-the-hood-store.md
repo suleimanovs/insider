@@ -672,14 +672,7 @@ public abstract class ActivityTransactionItem extends ClientTransactionItem {
     ActivityClientRecord getActivityClientRecord(
             @NonNull ClientTransactionHandler client, IBinder token) {
         final ActivityClientRecord r = client.getActivityClient(token); // <- получение клиент от ClientTransactionHandler(ActivityThread)
-        if (r == null) {
-            throw new IllegalArgumentException("Activity client record must not be null to execute "
-                    + "transaction item: " + this);
-        }
-        if (client.getActivity(token) == null) {
-            throw new IllegalArgumentException("Activity must not be null to execute "
-                    + "transaction item: " + this);
-        }
+        ...
         return r;
     }
 }
@@ -698,6 +691,21 @@ public final class ActivityThread extends ClientTransactionHandler
         return mActivities.get(token); // <- Возвращает из Map ActivityClientRecord по ключу
     }
    ...
+}
+```
+
+От ActivityTransactionItem - наследуется класс ActivityRelaunchItem, который и запускает у ActivityThread метод `handleRelaunchActivity`:
+```java
+
+public class ActivityRelaunchItem extends ActivityTransactionItem {
+
+    @Override
+    public void execute(@NonNull ClientTransactionHandler client, @NonNull ActivityClientRecord r,
+                        @NonNull PendingTransactionActions pendingActions) {
+        ...
+        client.handleRelaunchActivity(mActivityClientRecord, pendingActions);
+        ...
+    }
 }
 ```
 
@@ -799,13 +807,15 @@ flowchart TD
     subgraph ViewModelStore.kt["ViewModelStore.kt"]
         MAP["private val map = mutableMapOf&lt;String, ViewModel&gt;()"]
     end
-    scheduleTransactionItemNow["ClientLifecycleManager.scheduleTransactionItemNow()"] --> scheduleTransaction["ClientLifecycleManager.scheduleTransactionItemNow()"]
+    scheduleTransactionItemNow["ClientLifecycleManager.scheduleTransactionItemNow()"] --> scheduleTransaction["ClientLifecycleManager.scheduleTransaction()"]
     scheduleTransaction --> ClientTransaction["ClientTransaction.schedule()"]
     ClientTransaction --> IApplicationThread.scheduleTransaction["IApplicationThread.scheduleTransaction()"]
     IApplicationThread.scheduleTransaction --> IApplicationThread.scheduleRelaunchActivity["IApplicationThread.scheduleRelaunchActivity()"]
     IApplicationThread.scheduleRelaunchActivity --> A["ActivityTransactionItem.execute()"]
+    ClientTransactionHandler["ClientTransactionHandler.handleRelaunchActivity()"]
     A --> B["ActivityRelaunchItem.execute()"]
-    B --> C
+    B --> ClientTransactionHandler
+    ClientTransactionHandler --> C
     F -- "До уничтожения получает Activity . NonConfigurationInstances" --> X4
     C --> D
     D --> E
@@ -815,7 +825,7 @@ flowchart TD
     H --> NonConfigurationInstances.java
     X2 --> NonConfigurationInstances.java
     LAUNCHER -- "Передает ActivityClientRecord . lastNonConfigurationInstances" --> X3
-    X3 -- Присваевает --> X2
+    X3 -- Присваивает --> X2
     RetainMethod --> NonConfigurationInstances.kt
     J -- Содержит --> NonConfigurationInstances.kt
     R --> ViewModelStore.kt

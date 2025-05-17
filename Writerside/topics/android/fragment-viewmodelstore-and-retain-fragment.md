@@ -724,6 +724,7 @@ override fun onCreate(savedInstanceState: Bundle?) {
     // Output: onCreate: [androidx.lifecycle.ViewModelProvider.DefaultKey:androidx.fragment.app.FragmentManagerViewModel]
 }
 ```
+
 *Скриншот: ключ FragmentManagerViewModel, зарегистрированный в ViewModelStore активити*  
 ![Screenshot](studio1.png)
 
@@ -1017,14 +1018,16 @@ final class FragmentManagerViewModel extends ViewModel {
 - `mChildNonConfigs` — для хранения вложенных `FragmentManagerViewModel`, соответствующих дочерним фрагментам /
   `FragmentManager`.
 
-Но вот поле, которому мы до сих пор не уделяли внимания — это самое верхнее: `mRetainedFragments`. Это коллекция, которая хранит фрагменты по ключу.  
+Но вот поле, которому мы до сих пор не уделяли внимания — это самое верхнее: `mRetainedFragments`. Это коллекция, которая хранит фрагменты
+по ключу.  
 Стоп… что? Фрагменты **внутри** `ViewModel`?! Именно так.
 
 Все фрагменты, у которых установлен флаг `setRetainInstance(true)`, попадают именно туда.  
 Заинтриговал? Тогда давай разбираться глубже.
 
 Как создать Retain Fragment?  
-Retain-фрагменты — это не какой-то отдельный класс, наследник `Fragment`. Это всё тот же старый добрый `Fragment`, но с активированным флагом `setRetainInstance`:
+Retain-фрагменты — это не какой-то отдельный класс, наследник `Fragment`. Это всё тот же старый добрый `Fragment`, но с активированным
+флагом `setRetainInstance`:
 
 ```kotlin
 class MyFragment : Fragment() {
@@ -1038,12 +1041,16 @@ class MyFragment : Fragment() {
 
 > Так как Retain-фрагменты устарели, метод `setRetainInstance` также помечен аннотацией `@Deprecated`.
 
-С этого момента наш фрагмент становится *Retain*, и он сможет пережить изменение конфигурации — по той же схеме, по которой выживают `ViewModel`.  
-Как именно? Мы уже немного знаем, но всё же давай проследим путь целиком — от вызова `setRetainInstance()` до хранения внутри `FragmentManagerViewModel#mRetainedFragments`.
+С этого момента наш фрагмент становится *Retain*, и он сможет пережить изменение конфигурации — по той же схеме, по которой выживают
+`ViewModel`.  
+Как именно? Мы уже немного знаем, но всё же давай проследим путь целиком — от вызова `setRetainInstance()` до хранения внутри
+`FragmentManagerViewModel#mRetainedFragments`.
 
 Для этого заглянем в исходники метода `setRetainInstance`:
 **Fragment.java:**
+
 ```java
+
 @Deprecated
 public void setRetainInstance(boolean retain) {
     ...
@@ -1055,7 +1062,9 @@ public void setRetainInstance(boolean retain) {
     ...
 }
 ```
-Логика простая: если флаг `retain` установлен в `true`, фрагмент передаётся в `FragmentManager` как *Retain* — через метод `addRetainedFragment`.  
+
+Логика простая: если флаг `retain` установлен в `true`, фрагмент передаётся в `FragmentManager` как *Retain* — через метод
+`addRetainedFragment`.  
 Если `false` — наоборот, удаляется из списка Retain-фрагментов через `removeRetainedFragment`.
 
 Давайте продолжим и заглянем в сам `FragmentManager` и рассмотрим метод его `addRetainedFragment`:
@@ -1108,11 +1117,14 @@ void removeRetainedFragment(@NonNull Fragment fragment) {
 
 Осталось понять как же потом эти фрагменты восстанавливаются после изменения конфигураций, одного их хранения не достаточно
 ведь их нужно обратно вернуть после того как Activity пересоздается, все фрагменты пересоздаются, FragmentManager тоже, но Retain фрагменты
-не должны пересоздаваться, а должны браться из `mRetainedFragments`, мы уже в начале статьи видели метод attachController у `FragmentManager`:
+не должны пересоздаваться, а должны браться из `mRetainedFragments`, мы уже в начале статьи видели метод attachController у
+`FragmentManager`:
+
 ```java
-    @SuppressLint("SyntheticAccessor")
-    void attachController(@NonNull FragmentHostCallback<?> host,
-            @NonNull FragmentContainer container, @Nullable final Fragment parent) {
+
+@SuppressLint("SyntheticAccessor")
+void attachController(@NonNull FragmentHostCallback<?> host,
+                      @NonNull FragmentContainer container, @Nullable final Fragment parent) {
 
     ...
 
@@ -1122,7 +1134,9 @@ void removeRetainedFragment(@NonNull Fragment fragment) {
     ...
 }
 ```
+
 Видим что идет обращение к методу restoreSaveStateInternal:
+
 ```java
 void restoreSaveStateInternal(@Nullable Parcelable state) {
     ...
@@ -1142,13 +1156,138 @@ void restoreSaveStateInternal(@Nullable Parcelable state) {
 ```
 
 Нас интересует это строка, очередное обращение к `mNonConfig`:
+
 ```java
 Fragment retainedFragment = mNonConfig.findRetainedFragmentByWho(fs.mWho);
 ```
+
 Вот и сам метод findRetainedFragmentByWho внутри FragmentManagerViewModel:
+
 ```java
-    @Nullable
-    Fragment findRetainedFragmentByWho(String who) {
-        return mRetainedFragments.get(who);
-    }
+
+@Nullable
+Fragment findRetainedFragmentByWho(String who) {
+    return mRetainedFragments.get(who);
+}
 ```
+
+Таким образом, при восстановлении `FragmentManager` и пересоздании `Activity`, **Retain-фрагменты** переживают это пересоздание: они
+открепляются, а после восстановления `FragmentManager` и `Activity` — снова подключаются.
+
+Ранее я упоминал, что **Retain-фрагменты** существовали до появления `ViewModel`. Но в текущей реализации мы видим, что они переживают
+пересоздание `Activity` благодаря хранению в `FragmentManagerViewModel`, и именно там они поддерживаются. Но как они работали до появления
+`ViewModel` в Android?
+
+Кратко напомню: это было во времена `android.app.Fragment`. Сейчас они устарели и заменены на `androidx.fragment.app.Fragment`. В старой
+реализации механизм напоминал работу с `NonConfigurationInstances`. Если кратко, то для **Retain-фрагментов** в `android.app.Fragment`
+использовался следующий механизм — они хранились здесь:
+
+```kotlin
+@Deprecated
+public class FragmentManagerNonConfig {
+    private final List<Fragment> mFragments;
+    private final List<FragmentManagerNonConfig> mChildNonConfigs;
+
+    FragmentManagerNonConfig(List<Fragment> fragments,
+    List<FragmentManagerNonConfig> childNonConfigs)
+    {
+        mFragments = fragments;
+        mChildNonConfigs = childNonConfigs;
+    }
+
+    /**
+     * @return the retained instance fragments returned by a FragmentManager
+     */
+    List<Fragment> getFragments()
+    {
+        return mFragments;
+    }
+
+    /**
+     * @return the FragmentManagerNonConfigs from any applicable fragment's child FragmentManager
+     */
+    List<FragmentManagerNonConfig> getChildNonConfigs()
+    {
+        return mChildNonConfigs;
+    }
+}
+```
+
+Далее объект `FragmentManagerNonConfig` хранился внутри `NonConfigurationInstances` в поле `fragments` и переживал изменения конфигураций
+ровно по той же схеме, которую мы уже рассмотрели в первой статье:
+
+```java
+public class Activity extends ContextThemeWrapper ...{
+
+static final class NonConfigurationInstances {
+    Object activity;
+    HashMap<String, Object> children;
+    FragmentManagerNonConfig fragments;
+    ArrayMap<String, LoaderManager> loaders;
+    VoiceInteractor voiceInteractor;
+}
+}
+```
+
+Мы кратко рассмотрели этот механизм, потому что он представляет собой тройное устаревание:
+
+* сами `android.app.Fragment` устарели и были заменены на `androidx.fragment.app.Fragment`;
+* концепция **Retain-фрагментов**, которая позволяла фрагментам переживать пересоздание `Activity`, устарела, и теперь вместо неё
+  рекомендуется использовать `ViewModel`;
+* способ хранения этих фрагментов через `FragmentManagerNonConfig` также устарел — его заменил более современный механизм с использованием
+  `FragmentManagerViewModel`, несмотря на то, что концепция **Retain-фрагментов** уже не считается актуальной.
+
+Таким образом, это не просто устаревшая реализация, а целая цепочка из трёх устаревших технологий, которые были полностью переработаны в
+современных версиях Android.
+
+На этом, пожалуй, всё. В этой статье мы рассмотрели некоторые смежные моменты и пересечения, подведём итоги.
+
+---
+
+### **ViewModel в Fragment**
+
+```
+MyViewModel -> ViewModelStore -> FragmentManagerViewModel -> ViewModelStore(Activity's) -> 
+ComponentActivity.NonConfigurationInstances -> Activity.NonConfigurationInstances -> 
+ActivityThread.ActivityClientRecord
+```
+
+Современный способ хранения состояний в `Fragment` основан на использовании `ViewModel`, которая помещается в `ViewModelStore`. Управление этим хранилищем осуществляется через `FragmentManagerViewModel`. В свою очередь, `FragmentManagerViewModel` привязан к `ViewModelStore` активности, которая сохраняет его в `NonConfigurationInstances`. Эта цепочка позволяет сохранять состояние фрагмента даже при изменении конфигурации, избегая пересоздания объектов, которые критичны для долгосрочного хранения данных.
+
+---
+
+### **RetainFragment в `androidx.fragment.app.Fragment`**
+
+```
+MyRetainFragment -> FragmentManagerViewModel -> ViewModelStore(Activity's) -> 
+ComponentActivity.NonConfigurationInstances -> Activity.NonConfigurationInstances -> 
+ActivityThread.ActivityClientRecord
+```
+
+Термин **RetainFragment** в `androidx.fragment.app.Fragment` — это скорее пережиток старых версий API. В современных реализациях `androidx`, фрагменты с сохранением состояния через `setRetainInstance(true)` фактически больше не рекомендуется использовать. Вместо этого управление состоянием переместилось в `ViewModel`, которая синхронизируется с жизненным циклом фрагмента через `FragmentManagerViewModel`. Сохранение происходит в `ViewModelStore` активности, которая, как и в первом случае, попадает в `NonConfigurationInstances` при пересоздании `Activity`. Таким образом, **RetainFragment** в классическом понимании уже не используется, его роль полностью взяла на себя связка `Fragment` + `ViewModel`.
+
+---
+
+### **RetainFragment в `android.app.Fragment` (устаревший механизм)**
+
+```
+MyRetainFragment -> FragmentManagerNonConfig -> Activity.NonConfigurationInstances -> 
+ActivityThread.ActivityClientRecord
+```
+
+В старой реализации Android, когда использовались `android.app.Fragment`, механизм пересоздания фрагментов реализовывался через `FragmentManagerNonConfig`. Объекты `RetainFragment` помещались в специальный контейнер, который сохранялся в `NonConfigurationInstances`. При пересоздании активности, эта структура восстанавливалась из `ActivityClientRecord` в `ActivityThread`. Этот механизм сейчас полностью устарел и был заменён на использование `ViewModel`, так как это более надёжный и гибкий способ сохранить данные на время изменения конфигурации.
+
+---
+
+### **Итоги**
+
+Эволюция механизмов хранения состояний в `Fragment` прошла несколько стадий:
+
+1. **android.app.Fragment** с `FragmentManagerNonConfig` → полностью устарел, более не поддерживается.
+2. **RetainFragment** в `androidx.fragment.app.Fragment` → больше не рекомендуется, его заменяет связка с `ViewModel`.
+3. **Современный подход** — `ViewModelStore` внутри `FragmentManagerViewModel`, который напрямую привязан к жизненному циклу фрагмента и сохраняется в `Activity`.
+
+Теперь вместо устаревших концепций рекомендуется использовать обычные фрагменты в паре с `ViewModel`, что делает код более предсказуемым и легко поддерживаемым.
+
+---
+
