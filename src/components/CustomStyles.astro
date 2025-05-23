@@ -20,44 +20,37 @@ import '@fontsource-variable/inter';
 ---
 
 <style is:inline>
-  :root {
-    --aw-font-sans: 'Inter Variable';
-    --aw-font-serif: 'Inter Variable';
-    --aw-font-heading: 'Inter Variable';
+:root {
+  --aw-color-bg-page: #ffffff;
+  --aw-color-text-default: #121212;
+  --aw-color-text-heading: #000000;
+  --aw-color-text-muted: rgba(60, 60, 60, 0.6);
 
-    --aw-color-primary: rgb(1 97 239);
-    --aw-color-secondary: rgb(1 84 207);
-    --aw-color-accent: rgb(109 40 217);
+  --aw-color-primary: #10b981; /* emerald */
+  --aw-color-secondary: #5e3dbb;
+  --aw-color-accent: #7b61ff;
 
-    --aw-color-text-heading: rgb(0 0 0);
-    --aw-color-text-default: rgb(16 16 16);
-    --aw-color-text-muted: rgb(16 16 16 / 66%);
-    --aw-color-bg-page: rgb(255 255 255);
+  --aw-color-border: rgba(0, 0, 0, 0.1);
+  --aw-color-surface: #f7f7f7;
+      ::selection {
+        background-color: lavender;
+      }
+}
 
-    --aw-color-bg-page-dark: rgb(3 6 32);
+.dark {
+  --aw-color-bg-page: #0a0a0a;
+  --aw-color-text-default: #e0e0e0;
+  --aw-color-text-heading: #ffffff;
+  --aw-color-text-muted: rgba(200, 200, 200, 0.4);
 
-    ::selection {
-      background-color: lavender;
-    }
-  }
-
-  .dark {
-    --aw-font-sans: 'Inter Variable';
-    --aw-font-serif: 'Inter Variable';
-    --aw-font-heading: 'Inter Variable';
-
-    --aw-color-primary: rgb(1 97 239);
-    --aw-color-secondary: rgb(1 84 207);
-    --aw-color-accent: rgb(109 40 217);
-
-    --aw-color-text-heading: rgb(247, 248, 248);
-    --aw-color-text-default: rgb(229 236 246);
-    --aw-color-text-muted: rgb(229 236 246 / 66%);
-    --aw-color-bg-page: rgb(3 6 32);
+  --aw-color-primary: #10b981; /* emerald */
+  --aw-color-secondary: #5e3dbb;
+  --aw-color-accent: #a78bfa;
 
     ::selection {
       background-color: black;
       color: snow;
     }
-  }
+    }
+ 
 </style>

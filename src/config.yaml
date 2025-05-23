@@ -1,30 +1,30 @@
 site:
-  name: AstroWind
-  site: 'https://astrowind.vercel.app'
+  name: suleimanov         # ← имя сайта (отображается в <title> и шапке)
+  site: 'https://suleimanov.com'  # ← твой домен
   base: '/'
   trailingSlash: false
 
-  googleSiteVerificationId: orcPxI47GSa-cRvY11tUe6iGg2IO_RPvnA1q95iEM3M
+  googleSiteVerificationId: null # ← если не используешь Google Search Console
 
 # Default SEO metadata
 metadata:
   title:
-    default: AstroWind
-    template: '%s — AstroWind'
-  description: "\U0001F680 Suitable for Startups, Small Business, Sass Websites, Professional Portfolios, Marketing Websites, Landing Pages & Blogs."
+    default: Suleimanov
+    template: '%s — Suleimanov'   # ← будет "Post title — Suleimanov"
+  description: "Личный технический блог Османа Сулейманова. Kotlin, Compose, архитектура, подкапотные механизмы и авторская философия."  # ← SEO-описание
   robots:
     index: true
     follow: true
   openGraph:
-    site_name: AstroWind
+    site_name: Suleimanov
     images:
-      - url: '~/assets/images/default.png'
+      - url: '~/assets/images/default.png' # ← можешь заменить на свой логотип позже
         width: 1200
         height: 628
     type: website
   twitter:
-    handle: '@onwidget'
-    site: '@onwidget'
+    handle: '@suleimanovs'  # ← если у тебя есть Twitter/X
+    site: '@suleimanovs'
     cardType: summary_large_image
 
 i18n:

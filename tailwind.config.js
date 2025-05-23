@@ -22,6 +22,7 @@ export default {
       animation: {
         fade: 'fadeInUp 1s both',
       },
+      
 
       keyframes: {
         fadeInUp: {

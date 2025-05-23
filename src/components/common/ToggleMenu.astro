@@ -10,20 +10,25 @@ const {
 } = Astro.props;
 ---
 
-<button type="button" class={className} aria-label={label} data-aw-toggle-menu>
+<button
+  type="button"
+  class="flex flex-col h-8 w-8 rounded justify-center items-center cursor-pointer group"
+  aria-label={label}
+  data-aw-toggle-menu
+>
   <span class="sr-only">{label}</span>
   <slot>
     <span
       aria-hidden="true"
-      class="h-0.5 w-6 my-1 rounded-full bg-black dark:bg-white transition ease transform duration-200 opacity-80 group-[.expanded]:rotate-45 group-[.expanded]:translate-y-2.5"
-    ></span>
+      class="h-0.5 w-4 my-0.5 rounded-full bg-black dark:bg-white transition ease transform duration-200 opacity-80 group-[.expanded]:rotate-45 group-[.expanded]:translate-y-1.5"
+    />
     <span
       aria-hidden="true"
-      class="h-0.5 w-6 my-1 rounded-full bg-black dark:bg-white transition ease transform duration-200 opacity-80 group-[.expanded]:opacity-0"
-    ></span>
+      class="h-0.5 w-4 my-0.5 rounded-full bg-black dark:bg-white transition ease transform duration-200 opacity-80 group-[.expanded]:opacity-0"
+    />
     <span
       aria-hidden="true"
-      class="h-0.5 w-6 my-1 rounded-full bg-black dark:bg-white transition ease transform duration-200 opacity-80 group-[.expanded]:-rotate-45 group-[.expanded]:-translate-y-2.5"
-    ></span>
+      class="h-0.5 w-4 my-0.5 rounded-full bg-black dark:bg-white transition ease transform duration-200 opacity-80 group-[.expanded]:-rotate-45 group-[.expanded]:-translate-y-1.5"
+    />
   </slot>
 </button>
