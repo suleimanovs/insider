@@ -1,6 +1,6 @@
 ---
 import { Icon } from 'astro-icon/components';
-
+import { twMerge } from 'tailwind-merge';
 import { UI } from 'astrowind:config';
 
 export interface Props {
@@ -13,7 +13,7 @@ export interface Props {
 const {
   label = 'Toggle between Dark and Light mode',
   class:
-    className = 'text-muted dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 focus:outline-none focus:ring-4 focus:ring-gray-200 dark:focus:ring-gray-700 rounded-lg text-sm p-2.5 inline-flex items-center',
+className = 'text-muted dark:text-gray-400 border border-gray-300 dark:border-gray-600 hover:border-gray-400 dark:hover:border-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-inherit dark:hover:text-inherit rounded-full p-2.5 inline-flex items-center transition-colors duration-200',
   iconClass = 'w-6 h-6',
   iconName = 'tabler:sun',
 } = Astro.props;
@@ -21,8 +21,23 @@ const {
 
 {
   !(UI.theme && UI.theme.endsWith(':only')) && (
-    <button type="button" class={className} aria-label={label} data-aw-toggle-color-scheme>
-      <Icon name={iconName} class={iconClass} />
-    </button>
+<button
+  type="button"
+  class={twMerge(
+    className,
+    'relative transition-all duration-500 ease-in-out group'
+  )}
+  aria-label={label}
+  data-aw-toggle-color-scheme
+>
+  <Icon
+    name="tabler:sun"
+    class={`${iconClass} transition-transform duration-500 ease-in-out scale-100 dark:scale-0 absolute group-active:rotate-180`}
+  />
+  <Icon
+    name="tabler:moon"
+    class={`${iconClass} transition-transform duration-500 ease-in-out scale-0 dark:scale-100 group-active:rotate-180`}
+  />
+</button>
   )
 }
