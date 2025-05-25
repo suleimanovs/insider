@@ -45,7 +45,7 @@ const {
   showRssFeed = false,
   position = 'center',
 } = Astro.props;
-
+const isMobile = true 
 const currentPath = `/${trimSlash(new URL(Astro.url).pathname)}`;
 const navItemClass =
   'appearance-none bg-transparent border-none text-[14px] hover:text-link dark:hover:text-white px-4 py-3 flex items-center whitespace-nowrap';
@@ -138,6 +138,21 @@ const navItemClass =
           );
         })
       }
+      
+<li class="mt-4 flex flex-row items-center gap-4 px-4 md:hidden">
+    {showToggleTheme && <ToggleTheme iconClass="w-5 h-5" />}
+    {showRssFeed && (
+      <a
+        class="w-8 h-8 text-gray-500 dark:text-gray-400 border border-gray-300 dark:border-gray-600 hover:border-gray-400 dark:hover:border-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-inherit dark:hover:text-inherit rounded-full inline-flex items-center justify-center transition-colors duration-200"
+        aria-label="RSS Feed"
+        href={getAsset('/rss.xml')}
+      >
+        <Icon name="tabler:rss" class="w-4 h-4" />
+      </a>
+    )}
+    <SubscribeButton />
+  </li>
+  
     </ul>
    </nav>
 

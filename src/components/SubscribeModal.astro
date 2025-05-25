@@ -1,9 +1,11 @@
+---
+import Button from '~/components/ui/Button.astro';
+---
+
 <div id="subscribe-modal" class="fixed inset-0 z-50 hidden bg-black/50 backdrop-blur-sm flex items-center justify-center">
   <div class="bg-white dark:bg-gray-900 p-6 rounded shadow-xl w-full max-w-sm relative">
-  
-  
-  
     <button class="absolute top-2 right-2 text-gray-500" onclick="toggleModal()">✕</button>
+
     <form
       action="https://buttondown.com/api/emails/embed-subscribe/suleimanov"
       method="post"
@@ -13,7 +15,12 @@
     >
       <label for="bd-email" class="text-sm font-medium">Enter your email</label>
       <input type="email" name="email" id="bd-email" required class="border px-3 py-2 rounded w-full" />
-      <input type="submit" value="Subscribe" class="bg-accent text-white py-2 px-4 rounded cursor-pointer" />
+
+      <Button
+        type="submit"
+        text="Subscribe"
+        class="class: 'ml-2 py-2.5 px-5.5 md:px-6 font-semibold shadow-none text-sm w-full"
+      />
     </form>
   </div>
 </div>
