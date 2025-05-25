@@ -1,0 +1,14 @@
+---
+import Button from '~/components/ui/Button.astro';
+---
+
+<Button
+  {...{
+    type: 'button',
+    text: 'Subscribe',
+    onclick: 'toggleModal()',
+    class: 'ml-2 py-2.5 px-5.5 md:px-6 font-semibold shadow-none text-sm w-auto',
+  }}
+/>
+
+<script src="/src/scripts/subscribe.js" defer></script>

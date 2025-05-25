@@ -85,6 +85,15 @@
   @apply rotate-45 translate-y-[-8px] translate-x-[14px];
 }
 
+#subscribe-modal {
+  transition: opacity 0.3s ease-in-out;
+}
+#subscribe-modal.hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+
+
 /* To deprecated */
 
 .dd *:first-child {

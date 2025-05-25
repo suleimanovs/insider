@@ -4,6 +4,8 @@ import Logo from '~/components/Logo.astro';
 import ToggleTheme from '~/components/common/ToggleTheme.astro';
 import ToggleMenu from '~/components/common/ToggleMenu.astro';
 import Button from '~/components/ui/Button.astro';
+import SubscribeModal from '~/components/SubscribeModal.astro';
+import SubscribeButton from '~/components/SubscribeButton.astro';
 
 import { getHomePermalink } from '~/utils/permalinks';
 import { trimSlash, getAsset } from '~/utils/permalinks';
@@ -162,17 +164,14 @@ const navItemClass =
 
           )}
         </div>
-        {actions?.length ? (
           <span class="ml-4 rtl:ml-0 rtl:mr-4">
-            {actions.map((btnProps) => (
-              <Button {...btnProps} class="ml-2 py-2.5 px-5.5 md:px-6 font-semibold shadow-none text-sm w-auto" />
-            ))}
+               <SubscribeButton />
           </span>
-        ) : (
-          ''
-        )}
       </div>
+      
 
     </div>
   </div>
+  
+  <SubscribeModal />
 </header>
