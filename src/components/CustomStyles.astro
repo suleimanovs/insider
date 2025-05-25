@@ -21,36 +21,41 @@ import '@fontsource-variable/inter';
 
 <style is:inline>
 :root {
-  --aw-color-bg-page: #ffffff;
-  --aw-color-text-default: #121212;
-  --aw-color-text-heading: #000000;
-  --aw-color-text-muted: rgba(60, 60, 60, 0.6);
+  --aw-color-bg-page:         #ffffff;              /* основной фон страницы */
+  --aw-color-surface:         #f7f7f7;              /* поверхность: карточки, блоки */
+  --aw-color-border:          rgba(0, 0, 0, 0.1);   /* границы */
+  
+  --aw-color-text-heading:    #000000;              /* заголовки */
+  --aw-color-text-default:    #121212;              /* основной текст */
+  --aw-color-text-muted:      rgba(60, 60, 60, 0.6);/* приглушённый текст */
 
-  --aw-color-primary: #10b981; /* emerald */
-  --aw-color-secondary: #5e3dbb;
-  --aw-color-accent: #7b61ff;
+  --aw-color-primary:         #10b981;              /* основной акцент: emerald */
+  --aw-color-secondary:       #5e3dbb;              /* вторичный цвет: фиолетовый */
+  --aw-color-accent:          #06b6d4;              /* дополнительный акцент: cyan */
 
-  --aw-color-border: rgba(0, 0, 0, 0.1);
-  --aw-color-surface: #f7f7f7;
-      ::selection {
-        background-color: lavender;
-      }
+  ::selection {
+    background-color: lavender;                     /* выделение текста */
+  }
 }
 
+
 .dark {
-  --aw-color-bg-page: #0a0a0a;
-  --aw-color-text-default: #e0e0e0;
-  --aw-color-text-heading: #ffffff;
-  --aw-color-text-muted: rgba(200, 200, 200, 0.4);
+  --aw-color-bg-page:         #0a0a0a;              /* основной фон */
+  --aw-color-surface:         #1a1a1a;              /* фон блоков (рекомендуется добавить для темной) */
+  --aw-color-border:          rgba(255, 255, 255, 0.1); /* светлая граница */
 
-  --aw-color-primary: #10b981; /* emerald */
-  --aw-color-secondary: #5e3dbb;
-  --aw-color-accent: #a78bfa;
+  --aw-color-text-heading:    #ffffff;              /* заголовки */
+  --aw-color-text-default:    #e0e0e0;              /* основной текст */
+  --aw-color-text-muted:      rgba(200, 200, 200, 0.4); /* приглушённый текст */
 
-    ::selection {
-      background-color: black;
-      color: snow;
-    }
-    }
- 
+  --aw-color-primary:         #10b981;              /* emerald */
+  --aw-color-secondary:       #5e3dbb;              /* фиолетовый */
+  --aw-color-accent:          #06b6d4;              /* cyan (такой же как в светлой, или #22d3ee чуть ярче) */
+
+  ::selection {
+    background-color: black;
+    color: snow;
+  }
+}
+
 </style>

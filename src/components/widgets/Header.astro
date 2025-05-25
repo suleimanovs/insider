@@ -77,7 +77,7 @@ const navItemClass =
   <a href={getHomePermalink()} class="flex items-center gap-2 min-w-0 shrink-0">
     <Logo />
   </a>
-  <div class="ml-auto md:hidden">
+  <div class="ml-auto md:hidden flex items-center">
     <ToggleMenu />
   </div>
 </div>
@@ -85,6 +85,7 @@ const navItemClass =
   <nav
     class="items-center w-full md:w-auto hidden md:flex md:mx-5 text-default overflow-y-auto overflow-x-hidden md:overflow-y-visible md:overflow-x-auto md:justify-self-center"
     aria-label="Main navigation"
+    id="mobile-menu"
   >
     <ul
       class="flex flex-col md:flex-row md:self-center w-full md:w-auto text-xl md:text-[0.9375rem] tracking-[0.01rem] font-medium md:justify-center"
@@ -137,6 +138,8 @@ const navItemClass =
       }
     </ul>
    </nav>
+
+  <script type="module" src="/src/scripts/menu-toggle.js" />
 
     <div
       class:list={[

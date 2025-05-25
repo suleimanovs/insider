@@ -5,6 +5,20 @@ import js from '@eslint/js';
 import tseslint from 'typescript-eslint';
 import typescriptParser from '@typescript-eslint/parser';
 
+import { defineConfig } from 'astro/config';
+import Icons from 'astro-icon';
+
+export default defineConfig({
+  integrations: [
+    Icons({
+      collections: {
+        'simple-icons': async () => await import('@iconify-json/simple-icons'),
+      },
+    }),
+  ],
+});
+
+
 export default [
   js.configs.recommended,
   ...eslintPluginAstro.configs['flat/recommended'],

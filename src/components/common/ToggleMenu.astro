@@ -11,24 +11,32 @@ const {
 ---
 
 <button
-  type="button"
-  class="flex flex-col h-8 w-8 rounded justify-center items-center cursor-pointer group"
-  aria-label={label}
-  data-aw-toggle-menu
+  id="custom-toggle-menu"
+  class="relative size-10 lg:hidden"
+  aria-expanded="false"
+  aria-controls="mobile-menu"
+  aria-label="Menu"
 >
-  <span class="sr-only">{label}</span>
-  <slot>
-    <span
-      aria-hidden="true"
-      class="h-0.5 w-4 my-0.5 rounded-full bg-black dark:bg-white transition ease transform duration-200 opacity-80 group-[.expanded]:rotate-45 group-[.expanded]:translate-y-1.5"
+  <svg
+    class="styles_hamburger__F4zzS size-10"
+    viewBox="0 0 100 100"
+    width="24"
+    xmlns="http://www.w3.org/2000/svg"
+    stroke-width="5.5"
+    fill="none"
+    stroke="currentColor"
+  >
+    <path
+      class="styles_line__D4vEx styles_top__K0nNB"
+      d="m 70,33 h -40 c 0,0 -8.5,-0.149796 -8.5,8.5 0,8.649796 8.5,8.5 8.5,8.5 h 20 v -20"
     />
-    <span
-      aria-hidden="true"
-      class="h-0.5 w-4 my-0.5 rounded-full bg-black dark:bg-white transition ease transform duration-200 opacity-80 group-[.expanded]:opacity-0"
+    <path
+      class="styles_line__D4vEx"
+      d="m 70,50 h -40"
     />
-    <span
-      aria-hidden="true"
-      class="h-0.5 w-4 my-0.5 rounded-full bg-black dark:bg-white transition ease transform duration-200 opacity-80 group-[.expanded]:-rotate-45 group-[.expanded]:-translate-y-1.5"
+    <path
+      class="styles_line__D4vEx styles_bottom__4yuSE"
+      d="m 30,67 h 40 c 0,0 8.5,0.149796 8.5,-8.5 0,-8.649796 -8.5,-8.5 -8.5,-8.5 h -20 v 20"
     />
-  </slot>
+  </svg>
 </button>
