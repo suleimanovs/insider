@@ -1447,4 +1447,118 @@ public class LaunchActivityItem extends ClientTransactionItem {
 
 1. **Кто создаёт `LaunchActivityItem` и передаёт в него `Bundle`**, который как раз и переживает смерть или остановку процесса.
 2. **Кто вызывает метод `execute` у `LaunchActivityItem`** и запускает описанную выше цепочку вызовов :
-`LaunchActivityItem.execute` → `handleLaunchActivity` → `performLaunchActivity` → `callActivityOnCreate` → `performCreate` → `onCreate`.
+   `LaunchActivityItem.execute` → `handleLaunchActivity` → `performLaunchActivity` → `callActivityOnCreate` → `performCreate` → `onCreate`.
+
+И так идем дальше, выше вызова `LaunchActivityItem.execute`, стоит класс `TransactionExecutor`
+
+```java
+public class TransactionExecutor {
+
+    private final ClientTransactionHandler mTransactionHandler;
+
+    public TransactionExecutor(@NonNull ClientTransactionHandler clientTransactionHandler) {
+        mTransactionHandler = clientTransactionHandler;
+    }
+
+    public void execute(@NonNull ClientTransaction transaction) {
+        ...
+        executeTransactionItems(transaction);
+        ...
+    }
+
+    public void executeTransactionItems(@NonNull ClientTransaction transaction) {
+        final List<ClientTransactionItem> items = transaction.getTransactionItems();
+        final int size = items.size();
+        for (int i = 0; i < size; i++) {
+            final ClientTransactionItem item = items.get(i);
+            if (item.isActivityLifecycleItem()) {
+                executeLifecycleItem(transaction, (ActivityLifecycleItem) item);
+            } else {
+                executeNonLifecycleItem(transaction, item,
+                        shouldExcludeLastLifecycleState(items, i));
+            }
+        }
+    }
+
+   private void executeLifecycleItem(@NonNull ClientTransaction transaction,
+                                     @NonNull ActivityLifecycleItem lifecycleItem) {
+      final IBinder token = lifecycleItem.getActivityToken();
+      final ActivityClientRecord r = mTransactionHandler.getActivityClient(token);
+        ...
+      // Execute the final transition with proper parameters.
+      lifecycleItem.execute(mTransactionHandler, mPendingActions);
+      lifecycleItem.postExecute(mTransactionHandler, mPendingActions);
+   }
+
+    private void executeNonLifecycleItem(@NonNull ClientTransaction transaction,
+                                         @NonNull ClientTransactionItem item, boolean shouldExcludeLastLifecycleState) {
+        final IBinder token = item.getActivityToken();
+        ActivityClientRecord r = mTransactionHandler.getActivityClient(token);
+        ...
+        item.execute(mTransactionHandler, mPendingActions);
+        ...
+    }
+}
+```
+
+`TransactionExecutor` - это как раз класс который работает со всеми транзакциями, то есть с ClientTransactionItem, и ClientTransaction -
+который
+является массивом или очередью которая хранит ClientTransactionItem-ы,
+
+Конструктор `TransactionExecutor` принимает на вход `ClientTransactionHandler`, если вы не забыли, то ActivityThread реализует абстрактный
+класс `ClientTransactionHandler`, по этому фактический в конструктор `TransactionExecutor` прилетает ActivityThread.
+
+У `TransactionExecutor` есть метод `execute` который вызывает другой метод `executeTransactionItems`,
+`executeTransactionItems` - в свою очередь пробегается по всем элемента внутри очереди транзакций, то есть в `ClientTransaction`,
+и в итоге определяет какой метод вызывать, `executeNonLifecycleItem` или `executeLifecycleItem`.
+
+Различие этих методов в том, что `executeLifecycleItem` вызывается для транзакций, представляющих этапы жизненного цикла активности — такие
+как `ResumeActivityItem`, `PauseActivityItem`, `StopActivityItem`, `DestroyActivityItem`. Эти элементы отвечают за переходы между
+состояниями уже существующей `Activity`. Их назначение — вызвать соответствующие колбэки (`onPause`, `onStop`, и так далее) на объекте
+активности, который уже был создан и существует в памяти.
+
+С другой стороны, `executeNonLifecycleItem` используется для выполнения транзакций, которые **не** относятся к жизненному циклу. Главный
+представитель — `LaunchActivityItem`, который отвечает за создание `Activity` с нуля. Это может происходить либо при первом запуске
+`Activity`, либо после того, как система уничтожила процесс, и теперь восстанавливает его. Внутри `executeNonLifecycleItem` вызывается
+`item.execute(...)`, который, в случае `LaunchActivityItem`, инициирует полную цепочку создания: от `ActivityClientRecord` до вызова
+`onCreate`.
+
+Внутри `LaunchActivityItem` в методе executeNonLifecycleItem мы видим что у item(ClientTransactionItem) вызывается метод
+`execute` с передачей `ClientTransactionHandler` и PendingTransactionActions, фактический здесь у `LaunchActivityItem` вызывается метод
+`execute`, не забываем что `LaunchActivityItem` наследуется от класса `ClientTransactionHandler`
+
+Теперь поймем кем вызывается метод `execute` у `TransactionExecutor`, этим занимается класс H который является Handler-ом:
+
+```java
+public final class ActivityThread extends ClientTransactionHandler implements ActivityThreadInternal {
+
+    final H mH = new H();
+    private final TransactionExecutor mTransactionExecutor = new TransactionExecutor(this);
+    
+    class H extends Handler {
+
+        public void handleMessage(Message msg) {
+            switch (msg.what) {
+                ...
+                case EXECUTE_TRANSACTION:
+                    final ClientTransaction transaction = (ClientTransaction) msg.obj;
+                    final ClientTransactionListenerController controller = ClientTransactionListenerController.getInstance();
+                    controller.onClientTransactionStarted();
+                    try {
+                        mTransactionExecutor.execute(transaction);
+                    } finally {
+                        controller.onClientTransactionFinished();
+                    }
+                    ...
+                ...
+            }
+        }
+    }
+}
+```
+Вспоминаем что `ClientTransactionHandler` является родителем для ActivityThread, далее видим что создаем объект класса H,
+так же видим создание объекта TransactionExecutor, с передачей внутрь this,то есть саму ActivityThread так как TransactionExecutor требует в конструкторе
+ClientTransactionHandler, передается ActivityThread, далее обратим внимание на исходники класса H, а именно метод `handleMessage`,
+которая вызывает у `TransactionExecutor` метод `execute` c передачей транзакций, предварительно доставая из Message объект
+ClientTransaction который внутри себя хранить массив/очеред транзакций. Весь этот код вызывается когда тип сообщения `EXECUTE_TRANSACTION`
+
