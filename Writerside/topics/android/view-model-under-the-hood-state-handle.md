@@ -604,18 +604,22 @@ class MainActivity : ComponentActivity() {
 }
 ```
 
-Тут на первый взгляд можно ожидать, что будет краш при запуске приложения, так как если `ViewModel` на вход принимает какой-либо параметр, то
-нужна фабрика `ViewModel`, он же `ViewModelProvider.Factory`, где мы вручную должны каким-то образом положить требуемый параметр в конструктор.
+Тут на первый взгляд можно ожидать, что будет краш при запуске приложения, так как если `ViewModel` на вход принимает какой-либо параметр,
+то
+нужна фабрика `ViewModel`, он же `ViewModelProvider.Factory`, где мы вручную должны каким-то образом положить требуемый параметр в
+конструктор.
 И в нашем примере конструктор не пустой, но если мы запустим этот код, то никакого краша и ошибки не будет, всё запустится и
 инициализируется должным образом. Почему так?
 
-Разработчики из google знали что часто понадобиться передавать `SavedStateHandle` в `ViewModel`, и что бы разработчикам не приходилось каждый
+Разработчики из google знали что часто понадобиться передавать `SavedStateHandle` в `ViewModel`, и что бы разработчикам не приходилось
+каждый
 раз создавать фабрику для передачи - имеется готовая фабрика которая работает под капотом, так же имеются готовые классы вроде
 
 `AbstractSavedStateViewModelFactory` - начиная с lifecycle-viewmodel-savedstate-android-**2.9.0** - обьявлен устаревшим
 `SavedStateViewModelFactory` - актуален на данный момент для создания ViewModel с SavedStateHandle
 
-Давайте теперь посмотрим как это работает на уровне `Activity`, логику `ViewModelProvider/ViewModel` мы уже рассматривали, сейчас просто пройдемся
+Давайте теперь посмотрим как это работает на уровне `Activity`, логику `ViewModelProvider/ViewModel` мы уже рассматривали, сейчас просто
+пройдемся
 по интересующей нас теме, когда мы обращаемся к `ViewModelProvider.create`:
 
 ```kotlin
@@ -672,7 +676,6 @@ public interface HasDefaultViewModelProviderFactory {
 }
 ```
 
-
 Реализация интерфейса `HasDefaultViewModelProviderFactory` в `Activity`:
 
 ```kotlin
@@ -719,6 +722,7 @@ open class ComponentActivity() : ..., SavedStateRegistryOwner, HasDefaultViewMod
 `SavedStateViewModelFactory`
 
 **androidx.lifecycle.SavedStateViewModelFactory.android.kt:**
+
 ```kotlin
 public actual class SavedStateViewModelFactory :
     ViewModelProvider.OnRequeryFactory, ViewModelProvider.Factory {
@@ -739,8 +743,8 @@ public actual class SavedStateViewModelFactory :
                 } else {
                     throw IllegalStateException(
                         "SAVED_STATE_REGISTRY_OWNER_KEY and" +
-                        "VIEW_MODEL_STORE_OWNER_KEY must be provided in the creation extras to" +
-                        "successfully create a ViewModel."
+                                "VIEW_MODEL_STORE_OWNER_KEY must be provided in the creation extras to" +
+                                "successfully create a ViewModel."
                     )
                 }
             viewModel
@@ -761,8 +765,10 @@ internal fun <T : ViewModel?> newInstance(
 }
 ```
 
-Тут сокращена логика из исходников, чтобы сосредоточиться на главном. Внутри метода `create` у фабрики проверяется, содержат ли `extras` поля с ключами `SAVED_STATE_REGISTRY_OWNER_KEY` и `VIEW_MODEL_STORE_OWNER_KEY`.
-Если содержат — вызывается метод `newInstance`, который через рефлексию вызывает конструктор и передаёт параметры, одним из которых является `SavedStateHandle`.
+Тут сокращена логика из исходников, чтобы сосредоточиться на главном. Внутри метода `create` у фабрики проверяется, содержат ли `extras`поля
+с ключами `SAVED_STATE_REGISTRY_OWNER_KEY` и `VIEW_MODEL_STORE_OWNER_KEY`.
+Если содержат — вызывается метод `newInstance`, который через рефлексию вызывает конструктор и передаёт параметры, одним из которых является
+`SavedStateHandle`.
 
 Но нас интересует другой момент. Обратим внимание на вызов `createSavedStateHandle()`:
 
@@ -770,9 +776,11 @@ internal fun <T : ViewModel?> newInstance(
 newInstance(modelClass, constructor, extras.createSavedStateHandle())
 ```
 
-Что происходит внутри `createSavedStateHandle()`? Чтобы понять, как создаётся `SavedStateHandle`, нужно заглянуть в исходный код этого метода:
+Что происходит внутри `createSavedStateHandle()`? Чтобы понять, как создаётся `SavedStateHandle`, нужно заглянуть в исходный код этого
+метода:
 
 **androidx.lifecycle.SavedStateHandleSupport.kt:**
+
 ```kotlin
 @MainThread
 public fun CreationExtras.createSavedStateHandle(): SavedStateHandle {
@@ -812,6 +820,7 @@ public fun CreationExtras.createSavedStateHandle(): SavedStateHandle {
 SavedStateHandle для данной ViewModel.
 
 **androidx.lifecycle.SavedStateHandleSupport.kt:**
+
 ```kotlin
 private fun createSavedStateHandle(
     savedStateRegistryOwner: SavedStateRegistryOwner,
@@ -830,7 +839,8 @@ private fun createSavedStateHandle(
 }
 ```
 
-Тут сначала ищется нужный `SavedStateHandle` внутри `SavedStateHandlesVM`. Если он не найден — создаётся новый, сохраняется в `SavedStateHandlesVM`,
+Тут сначала ищется нужный `SavedStateHandle` внутри `SavedStateHandlesVM`. Если он не найден — создаётся новый, сохраняется в
+`SavedStateHandlesVM`,
 а функция `createSavedStateHandle` возвращает управление обратно в `CreationExtras.createSavedStateHandle()`, которую мы уже видели.
 В конечном итоге управление возвращается в фабрику, таким образом создаётся `SavedStateHandle` для конкретной `ViewModel`.
 
@@ -843,14 +853,15 @@ private fun createSavedStateHandle(
 Перейдем к провайдеру: `savedStateHandlesProvider`
 
 **androidx.lifecycle.SavedStateHandleSupport.kt:**
+
 ```kotlin
 internal val SavedStateRegistryOwner.savedStateHandlesProvider: SavedStateHandlesProvider
-    get() =
-        savedStateRegistry.getSavedStateProvider(SAVED_STATE_KEY) as? SavedStateHandlesProvider
-            ?: throw IllegalStateException(
-                "enableSavedStateHandles() wasn't called " +
-                        "prior to createSavedStateHandle() call"
-            )
+get() =
+    savedStateRegistry.getSavedStateProvider(SAVED_STATE_KEY) as? SavedStateHandlesProvider
+        ?: throw IllegalStateException(
+            "enableSavedStateHandles() wasn't called " +
+                    "prior to createSavedStateHandle() call"
+        )
 
 internal class SavedStateHandlesProvider(
     private val savedStateRegistry: SavedStateRegistry,
@@ -893,26 +904,25 @@ internal class SavedStateHandlesProvider(
 }
 ```
 
-### Взаимодействие с `SavedStateHandlesVM`
-
-Теперь перейдём к тому, как данные хранятся внутри `ViewModel`. `savedStateHandlesVM` — это расширение, которое создаёт или восстанавливает
+Взаимодействие с `SavedStateHandlesVM`. Теперь перейдём к тому, как данные хранятся внутри `ViewModel`. `savedStateHandlesVM` — это
+расширение, которое создаёт или восстанавливает
 объект `SavedStateHandlesVM`, хранящий в себе мапу из ключей на `SavedStateHandle`:
 
 ```kotlin
 internal val ViewModelStoreOwner.savedStateHandlesVM: SavedStateHandlesVM
-    get() =
-        ViewModelProvider.create(
-            owner = this,
-            factory =
-                object : ViewModelProvider.Factory {
-                    override fun <T : ViewModel> create(
-                        modelClass: KClass<T>,
-                        extras: CreationExtras
-                    ): T {
-                        @Suppress("UNCHECKED_CAST") return SavedStateHandlesVM() as T
-                    }
+get() =
+    ViewModelProvider.create(
+        owner = this,
+        factory =
+            object : ViewModelProvider.Factory {
+                override fun <T : ViewModel> create(
+                    modelClass: KClass<T>,
+                    extras: CreationExtras
+                ): T {
+                    @Suppress("UNCHECKED_CAST") return SavedStateHandlesVM() as T
                 }
-        )[VIEWMODEL_KEY, SavedStateHandlesVM::class]
+            }
+    )[VIEWMODEL_KEY, SavedStateHandlesVM::class]
 
 internal class SavedStateHandlesVM : ViewModel() {
     val handles = mutableMapOf<String, SavedStateHandle>()
@@ -920,10 +930,12 @@ internal class SavedStateHandlesVM : ViewModel() {
 ```
 
 Здесь создаётся объект `SavedStateHandlesVM`, внутри которого поддерживается `Map`, связывающая ключи с объектами `SavedStateHandle`.
-`SavedStateHandlesVM` нужен для того, чтобы хранить и управлять всеми `SavedStateHandle` всех `ViewModel` в рамках одного `ViewModelStoreOwner` и `SavedStateRegistryOwner`.
+`SavedStateHandlesVM` нужен для того, чтобы хранить и управлять всеми `SavedStateHandle` всех `ViewModel` в рамках одного
+`ViewModelStoreOwner` и `SavedStateRegistryOwner`.
 
 `SavedStateHandlesProvider` — класс, реализующий интерфейс `SavedStateProvider`. Когда `SavedStateController` вызывает `performSave`,
-он также обращается к `SavedStateHandlesProvider` и вызывает его метод `saveState`. Далее он кладёт все существующие `SavedStateHandle` в объект `SavedState` (`Bundle`) и возвращает его.
+он также обращается к `SavedStateHandlesProvider` и вызывает его метод `saveState`. Далее он кладёт все существующие `SavedStateHandle` в
+объект `SavedState` (`Bundle`) и возвращает его.
 
 Но чтобы весь этот процесс работал, необходимо зарегистрировать `SavedStateHandlesProvider` в `SavedStateRegistry`,
 однако пока что в коде мы не встретили блок, отвечающий за регистрацию провайдера, то есть вызов метода:
@@ -943,10 +955,9 @@ open class ComponentActivity() : ..., SavedStateRegistryOwner, ... {
 }
 ```
 
-Видим вызов некого метода `enableSavedStateHandles` - самое название звучит заманчиво, далее исхожники метода enableSavedStateHandles:
+Видим вызов некого метода `enableSavedStateHandles` — само название звучит заманчиво. Далее — исходники метода `enableSavedStateHandles`:
 
 ```kotlin
-
 @MainThread
 public fun <T> T.enableSavedStateHandles() where T : SavedStateRegistryOwner, T : ViewModelStoreOwner {
     ...
@@ -960,12 +971,17 @@ public fun <T> T.enableSavedStateHandles() where T : SavedStateRegistryOwner, T 
 }
 ```
 
-enableSavedStateHandles - типизированный метод который требует что бы вызывающая область являлась одновременно как SavedStateRegistryOwner
-так и ViewModelStoreOwner, ComponentActivity/Fragment/NavbackStackEntry идеально подходят для этого, все трое одновременно реализуют
-интерфейсы SavedStateRegistryOwner и ViewModelStoreOwner, давайте в кратце поймем что происходит в этом методе,
-для начала у SavedStateRegistry запрашивается сохроненный provider(SavedStateProvider) по ключу `SAVED_STATE_KEY`, это ключ для хранения
-SavedStateHandlesProvider(он же SavedStateProvider), если по ключу нечего не найдено, то есть null, это означает что provider
-еще не был регистрирован, тогда создается объект SavedStateHandlesProvider(он же SavedStateProvider), регистрируется в savedStateRegistry.
+`enableSavedStateHandles` — это типизированный метод, который требует, чтобы вызывающая область одновременно являлась и
+`SavedStateRegistryOwner`,
+и `ViewModelStoreOwner`. `ComponentActivity` / `Fragment` / `NavBackStackEntry` идеально подходят под это — все трое реализуют оба
+интерфейса.
+
+Давайте вкратце поймём, что происходит в этом методе.
+Для начала у `SavedStateRegistry` запрашивается сохранённый `provider` (`SavedStateProvider`) по ключу `SAVED_STATE_KEY`. Это ключ для
+хранения `SavedStateHandlesProvider` (он же `SavedStateProvider`).
+
+Если по ключу ничего не найдено, то есть `null`, это означает, что `provider` ещё не был зарегистрирован. Тогда создаётся объект
+`SavedStateHandlesProvider` (он же `SavedStateProvider`) и регистрируется в `savedStateRegistry`.
 
 Мы подробно разобрали, как механизм `SavedStateHandle` автоматически создаётся и подключается к `ViewModel`. Это достигается за счёт
 встроенного механизма фабрики `SavedStateViewModelFactory`, которая при создании ViewModel извлекает необходимые зависимости из объекта
@@ -992,11 +1008,13 @@ SavedStateHandlesProvider(он же SavedStateProvider), если по ключ�
 нас, используя мощный механизм фабрик и хранилищ состояний, что делает `SavedStateHandle` удобным и надежным инструментом для управления
 состоянием внутри ViewModel.
 
-На текущий момент мы понимаем как SavedStateHandle работает в связке с ViewModel, и как он в итоге соеденятся к SavedStateRegisrty,
-Так же до этого мы узнали как работает сам SavedStateRegisrty и SavedStateRegistryController, и увидели их связть с методами
-onSaveInstanceState и onRestoreInstanceState, оказалось и Saved State Api и древние методы onSaveInstanceState и onRestoreInstanceState
-работают в итоге по одному и тому же пути к конечном итоге, давайте вернемся к точке где они встречаються, далее
-код который мы уже видели:
+На текущий момент мы понимаем, как `SavedStateHandle` работает в связке с `ViewModel` и как он в итоге соединяется с `SavedStateRegistry`.
+Также до этого мы узнали, как работают сам `SavedStateRegistry` и `SavedStateRegistryController`, и увидели их связь с методами
+`onSaveInstanceState` и `onRestoreInstanceState`.
+
+Оказалось, что и `Saved State API`, и древние методы `onSaveInstanceState` / `onRestoreInstanceState` в конечном итоге работают по одному и
+тому же пути.
+Давайте вернёмся к точке, где они встречаются. Далее — код, который мы уже видели:
 
 ```kotlin
 open class ComponentActivity() : ..., SavedStateRegistryOwner, ... {
@@ -1018,14 +1036,17 @@ open class ComponentActivity() : ..., SavedStateRegistryOwner, ... {
 }
 ```
 
-То есть в стандартной практике при использований механизма сохронения состояния используют эти два метода,
-onCreate - получает на вход параметр savedInstanceState с типом Bundle, именно в этом методе как раз читают сохроненное значение
-onSaveInstanceState - получает на вход параметр outState с типом Bundle, в этом параметр outState записывают значения которые должны быть
-сохранены
+То есть в стандартной практике при использовании механизма сохранения состояния применяются два метода:
 
-Давайте поймем каким же образом вся это конструкция работает, то каким образом значения сохроенное в outState метода onSaveInstanceState
-переживает изменение конфигураций, и даже смерть системы, и поймем каким образом сохроненные знаячения обратно прилетают в onCreate,
-посмотрим на метод onSaveInstancrState внутри super-а, то есть в самом классе Activity:
+* `onCreate` — получает на вход параметр `savedInstanceState` типа `Bundle`. Именно в этом методе читаются сохранённые значения.
+* `onSaveInstanceState` — получает на вход параметр `outState` типа `Bundle`. В этот параметр записываются значения, которые должны быть
+  сохранены.
+
+Давайте разберёмся, каким образом вся эта конструкция работает:
+как значения, сохранённые в `outState` метода `onSaveInstanceState`, переживают изменение конфигурации и даже смерть процесса,
+и как эти сохранённые данные возвращаются обратно в `onCreate`.
+
+Посмотрим на реализацию метода `onSaveInstanceState` в `super`, то есть в самом классе `Activity`:
 
 ```java
 public class Activity extends ContextThemeWrapper ...{
@@ -1050,12 +1071,14 @@ protected void onSaveInstanceState(@NonNull Bundle outState) {
     getAutofillClientController().onSaveInstanceState(outState);
     dispatchActivitySaveInstanceState(outState);
 }
-}    
+}
 ```
 
-Все что происходит внутри этого метода нас сейчас не волнует, можно увидеть что метод onSaveInstanceState вызывает другой
-финальный метод performSaveInstanceState, давайте теперь поймем кто же его вызывает? Этот вызов иницириуется классом Instrumentation:
-android.app.Instrumentation.java:
+Всё, что происходит внутри этого метода, нас сейчас не волнует. Главное, что `onSaveInstanceState` вызывает другой финальный метод —
+`performSaveInstanceState`.
+
+Теперь давайте поймём, кто вызывает `performSaveInstanceState`. Этот вызов инициируется классом `Instrumentation`:
+**android.app.Instrumentation.java:**
 
 ```java
 
@@ -1075,13 +1098,13 @@ public class Instrumentation {
 <title>
 Официальная документация гласит следующее об этом классе:
 </title>
-Base class for implementing application instrumentation code. 
-When running with instrumentation turned on, this class will be instantiated for you before any of the application code, 
-allowing you to monitor all of the interaction the system has with the application. 
-An Instrumentation implementation is described to the system through an AndroidManifest.xml's <instrumentation/> tag.
+Base class for implementing application instrumentation code.  
+When running with instrumentation turned on, this class will be instantiated for you before any of the application code,  
+allowing you to monitor all of the interaction the system has with the application.  
+An Instrumentation implementation is described to the system through an AndroidManifest.xml's `<instrumentation/>` tag.
 </note>
 
-Нужно теперь понимать кто же вызывает Instrumentation.callActivityOnSaveInstanceState? И мы встречаем ActivityThread:
+Теперь нужно понять, кто же вызывает `Instrumentation.callActivityOnSaveInstanceState`? И тут мы встречаем `ActivityThread`:
 
 ```java
 public final class ActivityThread extends ClientTransactionHandler implements ActivityThreadInternal {
@@ -1104,13 +1127,13 @@ public final class ActivityThread extends ClientTransactionHandler implements Ac
 }
 ```
 
-Что здесь происходит? callActivityOnSaveInstanceState на вход принимает параметр r c типом ActivityClientRecord,
-у этого класса ActivityClientRecord есть поле state который является Bundle, ему присвается нговый объект Bundle,
+Что здесь происходит? `callActivityOnSaveInstanceState` на вход принимает параметр `r` типа `ActivityClientRecord`.
+У этого класса есть поле `state`, которое является `Bundle`. Ему присваивается новый объект `Bundle`.
 
-Класс `ActivityClientRecord` мы уже встречали когда рассматривали ViewModelStore,  `ActivityClientRecord` представляет собой запись
-активности и используется для хранения всей информации, связанной
-с реальным экземпляром активности.  
-Это своего рода структура данных для ведения учета активности в процессе выполнения приложения.
+Класс `ActivityClientRecord` мы уже встречали, когда рассматривали `ViewModelStore`.
+`ActivityClientRecord` представляет собой запись активности и используется для хранения всей информации, связанной с реальным экземпляром
+активности.
+Это своего рода структура данных для учёта активности в процессе выполнения приложения.
 
 Основные поля класса `ActivityClientRecord`:
 
@@ -1125,7 +1148,7 @@ public final class ActivityThread extends ClientTransactionHandler implements Ac
 - `createdConfig` — объект `Configuration`, содержащий настройки, примененные при создании активности.
 - `overrideConfig` — объект `Configuration`, содержащий текущие настройки активности.
 
-Пока что не будем отвлекаться, и узнаем кто же вызывает callActivityOnSaveInstanceState:
+Пока что не будем отвлекаться, и узнаем кто же вызывает `callActivityOnSaveInstanceState`:
 
 ```java
 public final class ActivityThread extends ClientTransactionHandler implements ActivityThreadInternal {
@@ -1202,8 +1225,9 @@ public final class ActivityThread extends ClientTransactionHandler implements Ac
 }
 ```
 
-Последующие вызовы методов performStopActivity и handleRelaunchActivity упираются в классы ActivityRelaunchItem.execute(),
-ActivityTransactionItem.execute() и TransactionExecutor.execute() - которые мы уже встречали в первой статье
+Последующие вызовы методов `performStopActivity` и `handleRelaunchActivity` упираются в классы `ActivityRelaunchItem.execute()`,
+`StopActivityItem.execute()`, `performStopActivity` - вызывается из `StopActivityItem.execute()`, а `handleRelaunchActivity` вызывается
+из `ActivityRelaunchItem.execute()`,
 
 На данный момент мы выследили следующий вызов:
 
@@ -1343,7 +1367,8 @@ public final class ActivityThread extends ClientTransactionHandler implements Ac
 }
 ```
 
-Вызов метода handleRelaunchActivity иницирует класс команда `ActivityRelaunchItem`, которая действует как маркер для того, чтобы выполнить
+Вызов метода handleRelaunchActivity иницирует класс команда/транзакция `ActivityRelaunchItem`, которая действует как маркер для того, чтобы
+выполнить
 перезапуск с сохранением состояния:
 
 ```java
@@ -1373,6 +1398,28 @@ public class ActivityRelaunchItem extends ActivityTransactionItem {
 ```java
 public class LaunchActivityItem extends ClientTransactionItem {
 
+    @Nullable
+    private final Bundle mState;
+
+    @Nullable
+    private final PersistableBundle mPersistentState;
+
+    public LaunchActivityItem(
+            // остальные параметры
+            @Nullable Bundle state,
+            @Nullable PersistableBundle persistentState,
+            // остальные параметры
+    ) {
+        this(
+                // передаваемые аргументы до
+                state != null ? new Bundle(state) : null,
+                persistentState != null ? new PersistableBundle(persistentState) : null,
+                // оставшиеся аргументы
+        );
+    ...
+    }
+
+
     @Override
     public void execute(@NonNull ClientTransactionHandler client,
                         @NonNull PendingTransactionActions pendingActions) {
@@ -1388,117 +1435,16 @@ public class LaunchActivityItem extends ClientTransactionItem {
 Цепочка выглядит так:
 `LaunchActivityItem.execute` → `handleLaunchActivity` → `performLaunchActivity` → `callActivityOnCreate` → `performCreate` → `onCreate`.
 
-Точно, это важный момент! Можно переформулировать так, чтобы это стало понятнее и подчеркнуть, что оба поля (`state` и
-`lastNonConfigurationInstances`) действительно находятся в `ActivityClientRecord`. Вот улучшенная версия:
+Следует запомнить важную вещь, прежде чем подниматься выше, нужно понимать что `LaunchActivityItem` — это транзакция, которая в своём
+конструкторе принимает
+`Bundle` и `PersistableBundle` (последний мы рассматривать не будем). Класс `LaunchActivityItem` наследуется от `ClientTransactionItem`.
 
-Далее, к сожалению, подниматься выше по цепочкам вызовов не имеет смысла, иначе статья начнёт раздуваться до гигантских масштабов. Но прежде
-чем двигаться дальше, у нас остаётся несколько ключевых вопросов, которые нужно раскрыть:
+`ClientTransactionItem` — это абстрактный базовый класс, от которого наследуются все транзакции, связанные с жизненным циклом `Activity`. В
+него входят `LaunchActivityItem`, `ActivityRelaunchItem`, `ResumeActivityItem` (последние — **не прямые**, а транзитивные наследники) и
+другие элементы, участвующие в управлении состоянием `Activity`.
 
-1. **Где в конечном итоге хранится этот `Bundle`? И кто именно вызывает команды `LaunchActivityItem` и `ActivityRelaunchItem`?**
-   Эти классы явно играют важную роль в процессе восстановления, но до конца неясно, кто же запускает их выполнение.
+Наша цель дальше — выяснить два момента:
 
-2. **Если, как мы уже выяснили, `Bundle` действительно находится в поле `state` внутри класса `ActivityClientRecord`, то почему он умеет "
-   переживать" смерть процесса, а вот `NonConfigurationInstance`, который тоже хранится в этом же объекте — в
-   поле `lastNonConfigurationInstances` — нет?**
-   Напомню, что под капотом `NonConfigurationInstance` содержит в себе такие важные вещи, как `ViewModelStore`, `RetainFragments` и даже
-   `ActivityGroup`. Однако при перезапуске процесса его содержимое пропадает, в то время как `Bundle` успешно восстанавливается. Почему так?
-
-Нанчнем с первого:
-
-```java
-public class TransactionExecutor {
-
-    public void execute(@NonNull ClientTransaction transaction) {
-        if (DEBUG_RESOLVER) {
-            Slog.d(TAG, tId(transaction) + "Start resolving transaction");
-            Slog.d(TAG, transactionToString(transaction, mTransactionHandler));
-        }
-
-        Trace.traceBegin(Trace.TRACE_TAG_WINDOW_MANAGER, "clientTransactionExecuted");
-        try {
-            if (transaction.getTransactionItems() != null) {
-                executeTransactionItems(transaction);
-            } else {
-                // TODO(b/260873529): cleanup after launch.
-                executeCallbacks(transaction);
-                executeLifecycleState(transaction);
-            }
-        } catch (Exception e) {
-            Slog.e(TAG, "Failed to execute the transaction: "
-                    + transactionToString(transaction, mTransactionHandler));
-            throw e;
-        } finally {
-            Trace.traceEnd(Trace.TRACE_TAG_WINDOW_MANAGER);
-        }
-
-        mPendingActions.clear();
-        if (DEBUG_RESOLVER) Slog.d(TAG, tId(transaction) + "End resolving transaction");
-    }
-
-    @VisibleForTesting
-    @Deprecated
-    public void executeCallbacks(@NonNull ClientTransaction transaction) {
-        final List<ClientTransactionItem> callbacks = transaction.getCallbacks();
-        if (callbacks == null || callbacks.isEmpty()) {
-            // No callbacks to execute, return early.
-            return;
-        }
-        if (DEBUG_RESOLVER) Slog.d(TAG, tId(transaction) + "Resolving callbacks in transaction");
-
-        // In case when post-execution state of the last callback matches the final state requested
-        // for the activity in this transaction, we won't do the last transition here and do it when
-        // moving to final state instead (because it may contain additional parameters from server).
-        final ActivityLifecycleItem finalStateRequest = transaction.getLifecycleStateRequest();
-        final int finalState = finalStateRequest != null ? finalStateRequest.getTargetState()
-                : UNDEFINED;
-        // Index of the last callback that requests some post-execution state.
-        final int lastCallbackRequestingState = lastCallbackRequestingState(transaction);
-
-        final int size = callbacks.size();
-        for (int i = 0; i < size; ++i) {
-            final ClientTransactionItem item = callbacks.get(i);
-
-            // Skip the very last transition and perform it by explicit state request instead.
-            final int postExecutionState = item.getPostExecutionState();
-            final boolean shouldExcludeLastLifecycleState = postExecutionState != UNDEFINED
-                    && i == lastCallbackRequestingState && finalState == postExecutionState;
-            executeNonLifecycleItem(transaction, item, shouldExcludeLastLifecycleState);
-        }
-    }
-}
-```
-
-```java
-public final class ActivityThread extends ClientTransactionHandler implements ActivityThreadInternal {
-
-    class H extends Handler {
-
-        public void handleMessage(Message msg) {
-            if (DEBUG_MESSAGES) Slog.v(TAG, ">>> handling: " + codeToString(msg.what));
-            switch (msg.what) {
-                ...
-                case EXECUTE_TRANSACTION:
-                    final ClientTransaction transaction = (ClientTransaction) msg.obj;
-                    final ClientTransactionListenerController controller =
-                            ClientTransactionListenerController.getInstance();
-                    controller.onClientTransactionStarted();
-                    try {
-                        mTransactionExecutor.execute(transaction);
-                    } finally {
-                        controller.onClientTransactionFinished();
-                    }
-                    if (isSystem()) {
-                        // Client transactions inside system process are recycled on the client side
-                        // instead of ClientLifecycleManager to avoid being cleared before this
-                        // message is handled.
-                        transaction.recycle();
-                    }
-                    // TODO(lifecycler): Recycle locally scheduled transactions.
-                    break;
-                ...
-            }
-        }
-    }
-}
-
-```
+1. **Кто создаёт `LaunchActivityItem` и передаёт в него `Bundle`**, который как раз и переживает смерть или остановку процесса.
+2. **Кто вызывает метод `execute` у `LaunchActivityItem`** и запускает описанную выше цепочку вызовов :
+`LaunchActivityItem.execute` → `handleLaunchActivity` → `performLaunchActivity` → `callActivityOnCreate` → `performCreate` → `onCreate`.
