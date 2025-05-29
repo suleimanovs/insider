@@ -731,7 +731,6 @@ public actual class SavedStateViewModelFactory :
         ) {
             ...
             newInstance(modelClass, constructor, extras.createSavedStateHandle())
-
             ...
         } else {
             val viewModel =
@@ -740,8 +739,8 @@ public actual class SavedStateViewModelFactory :
                 } else {
                     throw IllegalStateException(
                         "SAVED_STATE_REGISTRY_OWNER_KEY and" +
-                                "VIEW_MODEL_STORE_OWNER_KEY must be provided in the creation extras to" +
-                                "successfully create a ViewModel."
+                        "VIEW_MODEL_STORE_OWNER_KEY must be provided in the creation extras to" +
+                        "successfully create a ViewModel."
                     )
                 }
             viewModel
@@ -749,7 +748,6 @@ public actual class SavedStateViewModelFactory :
         ...
     }
 }
-
 
 internal fun <T : ViewModel?> newInstance(
     modelClass: Class<T>,
@@ -763,21 +761,19 @@ internal fun <T : ViewModel?> newInstance(
 }
 ```
 
-Тут сокращена логика из исходников что бы сосредоточиться на главном, внутри метода create у фабрики проверяется имеют ли extras
-поля c ключами SAVED_STATE_REGISTRY_OWNER_KEY и VIEW_MODEL_STORE_OWNER_KEY, если имеется, до дальше происходит
-вызов метода newInstance которая через рефлексию вызывает конструктор и передает параметры одним из которых является SavedStateHandle,
-но интерусующая часть, Обратим внимание на вызов createSavedStateHandle():
+Тут сокращена логика из исходников, чтобы сосредоточиться на главном. Внутри метода `create` у фабрики проверяется, содержат ли `extras` поля с ключами `SAVED_STATE_REGISTRY_OWNER_KEY` и `VIEW_MODEL_STORE_OWNER_KEY`.
+Если содержат — вызывается метод `newInstance`, который через рефлексию вызывает конструктор и передаёт параметры, одним из которых является `SavedStateHandle`.
+
+Но нас интересует другой момент. Обратим внимание на вызов `createSavedStateHandle()`:
 
 ```kotlin
 newInstance(modelClass, constructor, extras.createSavedStateHandle())
 ```
 
-Что происходит внутри createSavedStateHandle?
+Что происходит внутри `createSavedStateHandle()`? Чтобы понять, как создаётся `SavedStateHandle`, нужно заглянуть в исходный код этого метода:
 
-Для того чтобы понять, как создаётся SavedStateHandle, необходимо заглянуть в исходный код метода:
-
+**androidx.lifecycle.SavedStateHandleSupport.kt:**
 ```kotlin
-
 @MainThread
 public fun CreationExtras.createSavedStateHandle(): SavedStateHandle {
     val savedStateRegistryOwner =
@@ -813,11 +809,10 @@ public fun CreationExtras.createSavedStateHandle(): SavedStateHandle {
 3. defaultArgs — начальные параметры, если они были переданы.
 
 Все эти зависимости передаются в другой метод `createSavedStateHandle`, который как раз и занимается созданием или восстановлением
-SavedStateHandle
-для данной ViewModel.
+SavedStateHandle для данной ViewModel.
 
+**androidx.lifecycle.SavedStateHandleSupport.kt:**
 ```kotlin
-
 private fun createSavedStateHandle(
     savedStateRegistryOwner: SavedStateRegistryOwner,
     viewModelStoreOwner: ViewModelStoreOwner,
@@ -835,29 +830,27 @@ private fun createSavedStateHandle(
 }
 ```
 
-Тут сначала ищеться нужный SavedStateHandle внутри SavedStateHandlesVM, если не найдено то происходит создание SavedStateHandle, он кладется
-в SavedStateHandlesVM для хранение, и фукнция createSavedStateHandle возвращает
-управление обратно другой фукнций CreationExtras.createSavedStateHandle() которую мы уже видели, и в конечном итоге управление возрващается
-в factory, таким образом создается SavedStateHandle для конкретной ViewModel.
+Тут сначала ищется нужный `SavedStateHandle` внутри `SavedStateHandlesVM`. Если он не найден — создаётся новый, сохраняется в `SavedStateHandlesVM`,
+а функция `createSavedStateHandle` возвращает управление обратно в `CreationExtras.createSavedStateHandle()`, которую мы уже видели.
+В конечном итоге управление возвращается в фабрику, таким образом создаётся `SavedStateHandle` для конкретной `ViewModel`.
 
-Так же в этом методе видим некие вызовы вроде `savedStateRegistryOwner.savedStateHandlesProvider` и
-` viewModelStoreOwner.savedStateHandlesVM`
+Также в этом методе видим вызовы вроде `savedStateRegistryOwner.savedStateHandlesProvider` и `viewModelStoreOwner.savedStateHandlesVM`.
 
-Переход к провайдеру: savedStateHandlesProvider
+Теперь посмотрим, как это связано с провайдером. В коде вызывается `savedStateRegistryOwner.savedStateHandlesProvider`.
+На самом деле это просто extension, который вытаскивает объект (`SavedStateProvider`) из `SavedStateRegistry`.
 
-Теперь посмотрим, как это связано с провайдером. В коде вызывается savedStateRegistryOwner.savedStateHandlesProvider.
-На самом деле это просто extension, который вытаскивает объект(SavedStateProvider) из SavedStateRegistry:
+Этот провайдер отвечает за доступ ко всем сохранённым состояниям (`SavedStateHandle`), привязанным к разным `ViewModel`.
+Перейдем к провайдеру: `savedStateHandlesProvider`
 
-Этот провайдер ответственен за доступ ко всем сохранённым состояниям(SavedStateHandle) которые привязаны к разным ViewModel-кам
-
+**androidx.lifecycle.SavedStateHandleSupport.kt:**
 ```kotlin
 internal val SavedStateRegistryOwner.savedStateHandlesProvider: SavedStateHandlesProvider
-get() =
-    savedStateRegistry.getSavedStateProvider(SAVED_STATE_KEY) as? SavedStateHandlesProvider
-        ?: throw IllegalStateException(
-            "enableSavedStateHandles() wasn't called " +
-                    "prior to createSavedStateHandle() call"
-        )
+    get() =
+        savedStateRegistry.getSavedStateProvider(SAVED_STATE_KEY) as? SavedStateHandlesProvider
+            ?: throw IllegalStateException(
+                "enableSavedStateHandles() wasn't called " +
+                        "prior to createSavedStateHandle() call"
+            )
 
 internal class SavedStateHandlesProvider(
     private val savedStateRegistry: SavedStateRegistry,
@@ -898,45 +891,46 @@ internal class SavedStateHandlesProvider(
         ...
     }
 }
-``` 
+```
 
-Взаимодействие с SavedStateHandlesVM
+### Взаимодействие с `SavedStateHandlesVM`
 
-Теперь перейдём к тому, как данные хранятся внутри ViewModel. savedStateHandlesVM — это расширение, которое создаёт или восстанавливает
-объект SavedStateHandlesVM, хранящий в себе мапу из ключей на SavedStateHandle:
+Теперь перейдём к тому, как данные хранятся внутри `ViewModel`. `savedStateHandlesVM` — это расширение, которое создаёт или восстанавливает
+объект `SavedStateHandlesVM`, хранящий в себе мапу из ключей на `SavedStateHandle`:
 
 ```kotlin
-
 internal val ViewModelStoreOwner.savedStateHandlesVM: SavedStateHandlesVM
-get() =
-    ViewModelProvider.create(
-        owner = this,
-        factory =
-            object : ViewModelProvider.Factory {
-                override fun <T : ViewModel> create(
-                    modelClass: KClass<T>,
-                    extras: CreationExtras
-                ): T {
-                    @Suppress("UNCHECKED_CAST") return SavedStateHandlesVM() as T
+    get() =
+        ViewModelProvider.create(
+            owner = this,
+            factory =
+                object : ViewModelProvider.Factory {
+                    override fun <T : ViewModel> create(
+                        modelClass: KClass<T>,
+                        extras: CreationExtras
+                    ): T {
+                        @Suppress("UNCHECKED_CAST") return SavedStateHandlesVM() as T
+                    }
                 }
-            }
-    )[VIEWMODEL_KEY, SavedStateHandlesVM::class]
+        )[VIEWMODEL_KEY, SavedStateHandlesVM::class]
 
 internal class SavedStateHandlesVM : ViewModel() {
     val handles = mutableMapOf<String, SavedStateHandle>()
 }
 ```
 
-Здесь создаётся объект SavedStateHandlesVM, внутри которого поддерживается Map, связывающая ключи с объектами SavedStateHandle.
-SavedStateHandlesVM - нужен для того что бы хранить и управлять всеми SavedStateHandle всех ViewModel-ей в рамках одного ViewModelStoreOwner
-и SavedStateRegisrtyOwner.
-SavedStateHandlesProvider - класс реализующий интерфейс SavedStateProvider, когда SavedStateController вызывает performSave,
-тогда он так же обращается к SavedStateHandlesProvider и вызывает его метод saveState, далее он кладет все существующие SavedStateHandle
-в объект SaveState(Bundle) и возвращает его, но что бы все этот процесс работал, нужно что бы регистрировали SavedStateHandlesProvider
-у SavedStateRegsitry, но пока что мы в коде не встретили блок кода который отвечал бы за регистрацию providera, то есть
-посредством вызова метода: `savedStateRegistry.registerSavedStateProvider`, на самом деле такая логика есть, и она трегириться
-в ComponentActivity/Fragment/NavbackStackEntry - то есть во всех SavedStateRegistryOwner-ов, давайте просто глянем как это вызывается
-в ComponentActivity:
+Здесь создаётся объект `SavedStateHandlesVM`, внутри которого поддерживается `Map`, связывающая ключи с объектами `SavedStateHandle`.
+`SavedStateHandlesVM` нужен для того, чтобы хранить и управлять всеми `SavedStateHandle` всех `ViewModel` в рамках одного `ViewModelStoreOwner` и `SavedStateRegistryOwner`.
+
+`SavedStateHandlesProvider` — класс, реализующий интерфейс `SavedStateProvider`. Когда `SavedStateController` вызывает `performSave`,
+он также обращается к `SavedStateHandlesProvider` и вызывает его метод `saveState`. Далее он кладёт все существующие `SavedStateHandle` в объект `SavedState` (`Bundle`) и возвращает его.
+
+Но чтобы весь этот процесс работал, необходимо зарегистрировать `SavedStateHandlesProvider` в `SavedStateRegistry`,
+однако пока что в коде мы не встретили блок, отвечающий за регистрацию провайдера, то есть вызов метода:
+`savedStateRegistry.registerSavedStateProvider(...)`
+
+На самом деле такая логика есть, и она триггерится внутри `ComponentActivity`, `Fragment` и `NavBackStackEntry`,
+то есть во всех `SavedStateRegistryOwner`. Давайте просто глянем, как это вызывается в `ComponentActivity`:
 
 ```kotlin
 open class ComponentActivity() : ..., SavedStateRegistryOwner, ... {
