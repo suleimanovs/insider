@@ -23,7 +23,7 @@ activity/fragment пересоздаваться, это именно то со�
 Если proccess приложения умирает или прырывается proccess , то в таком случае ViewModel не справится,
 по этому тут в дело входит старые добрые методы onSaveInstanceState/onRestoreInstanceState
 
-**onSaveInstanceState/onRestoreInstanceState** — это методы жизненного цикла Activity, Fragment и View(да View тоже может сохронять
+**onSaveInstanceState/onRestoreInstanceState** — это методы жизненного цикла Activity, Fragment и View(да View тоже может сохранять
 состояние)
 которые позволяют сохранять и восстанавливать временное состояние пользовательского интерфейса при изменениях конфигурации (например, при
 повороте экрана)
@@ -99,8 +99,8 @@ class RestoreActivity : AppCompatActivity() {
 восстанавливать, поэтому `onSaveInstanceState` для B не вызывается. Другой пример: если Activity B запускается поверх Activity A, но A
 остаётся в памяти, то `onSaveInstanceState` для A также не вызывается, так как его состояние остаётся неизменным.
 
-Реализация по умолчанию этого метода автоматически сохраняет большую часть состояния пользовательского интерфейса, вызывая метод
-`onSaveInstanceState()` у каждого представления (`View`) в иерархии, у которого есть ID, и сохраняя ID элемента, который был в фокусе.
+Реализация по умолчанию этого метода автоматически сохраняет большую часть состояния пользовательского интерфейса, **вызывая метод
+`onSaveInstanceState()` у каждого представления (`View`) в иерархии**, у которых есть ID, так же сохраняется ID элемента, который был в фокусе.
 Восстановление этих данных будет происходить в стандартной реализации метода `onRestoreInstanceState()`. Если метод переопределяется для
 сохранения дополнительной информации, которая не захвачена отдельными представлениями, рекомендуется вызвать реализацию по умолчанию через
 `super.onSaveInstanceState(outState)`. В противном случае разработчику придётся вручную сохранять состояние всех представлений.
@@ -1480,15 +1480,15 @@ public class TransactionExecutor {
         }
     }
 
-   private void executeLifecycleItem(@NonNull ClientTransaction transaction,
-                                     @NonNull ActivityLifecycleItem lifecycleItem) {
-      final IBinder token = lifecycleItem.getActivityToken();
-      final ActivityClientRecord r = mTransactionHandler.getActivityClient(token);
+    private void executeLifecycleItem(@NonNull ClientTransaction transaction,
+                                      @NonNull ActivityLifecycleItem lifecycleItem) {
+        final IBinder token = lifecycleItem.getActivityToken();
+        final ActivityClientRecord r = mTransactionHandler.getActivityClient(token);
         ...
-      // Execute the final transition with proper parameters.
-      lifecycleItem.execute(mTransactionHandler, mPendingActions);
-      lifecycleItem.postExecute(mTransactionHandler, mPendingActions);
-   }
+        // Execute the final transition with proper parameters.
+        lifecycleItem.execute(mTransactionHandler, mPendingActions);
+        lifecycleItem.postExecute(mTransactionHandler, mPendingActions);
+    }
 
     private void executeNonLifecycleItem(@NonNull ClientTransaction transaction,
                                          @NonNull ClientTransactionItem item, boolean shouldExcludeLastLifecycleState) {
@@ -1523,18 +1523,18 @@ public class TransactionExecutor {
 `item.execute(...)`, который, в случае `LaunchActivityItem`, инициирует полную цепочку создания: от `ActivityClientRecord` до вызова
 `onCreate`.
 
-Внутри `LaunchActivityItem` в методе executeNonLifecycleItem мы видим что у item(ClientTransactionItem) вызывается метод
-`execute` с передачей `ClientTransactionHandler` и PendingTransactionActions, фактический здесь у `LaunchActivityItem` вызывается метод
-`execute`, не забываем что `LaunchActivityItem` наследуется от класса `ClientTransactionHandler`
+Внутри `LaunchActivityItem`, в методе `executeNonLifecycleItem`, мы видим, что у `item` (экземпляр `ClientTransactionItem`) вызывается метод
+`execute`, которому передаются `ClientTransactionHandler` и `PendingTransactionActions`. Фактически в этот момент вызывается метод `execute`
+у `LaunchActivityItem`. Не забываем, что `LaunchActivityItem` наследуется от `ClientTransactionItem`.
 
-Теперь поймем кем вызывается метод `execute` у `TransactionExecutor`, этим занимается класс H который является Handler-ом:
+Теперь разберёмся, кто вызывает метод `execute` у `TransactionExecutor`. Это делает внутренний класс `H`, являющийся `Handler`-ом:
 
 ```java
 public final class ActivityThread extends ClientTransactionHandler implements ActivityThreadInternal {
 
     final H mH = new H();
     private final TransactionExecutor mTransactionExecutor = new TransactionExecutor(this);
-    
+
     class H extends Handler {
 
         public void handleMessage(Message msg) {
@@ -1556,9 +1556,406 @@ public final class ActivityThread extends ClientTransactionHandler implements Ac
     }
 }
 ```
-Вспоминаем что `ClientTransactionHandler` является родителем для ActivityThread, далее видим что создаем объект класса H,
-так же видим создание объекта TransactionExecutor, с передачей внутрь this,то есть саму ActivityThread так как TransactionExecutor требует в конструкторе
-ClientTransactionHandler, передается ActivityThread, далее обратим внимание на исходники класса H, а именно метод `handleMessage`,
-которая вызывает у `TransactionExecutor` метод `execute` c передачей транзакций, предварительно доставая из Message объект
-ClientTransaction который внутри себя хранить массив/очеред транзакций. Весь этот код вызывается когда тип сообщения `EXECUTE_TRANSACTION`
 
+Напомним, что `ClientTransactionHandler` — это абстрактный класс, от которого наследуется `ActivityThread`. Далее мы видим, что создаётся
+объект `H`, а также `TransactionExecutor`, которому в качестве аргумента передаётся `this` — то есть `ActivityThread`, реализующий
+`ClientTransactionHandler`.
+
+Теперь обратим внимание на реализацию `handleMessage` внутри класса `H`: когда приходит сообщение с типом `EXECUTE_TRANSACTION`, из объекта
+`Message` извлекается `ClientTransaction`, содержащий в себе список (`List`) транзакций. Затем вызывается метод `execute` у
+`TransactionExecutor`, что и запускает выполнение транзакции.
+
+Сам метод handleMessage у класса H вызывает методы из самого класса ActivityThread:
+
+```java
+public final class ActivityThread extends ClientTransactionHandler implements ActivityThreadInternal {
+
+    final H mH = new H();
+
+    void sendMessage(int what, Object obj) {
+        sendMessage(what, obj, 0, 0, false);
+    }
+
+    private void sendMessage(int what, Object obj, int arg1) {
+        sendMessage(what, obj, arg1, 0, false);
+    }
+
+    private void sendMessage(int what, Object obj, int arg1, int arg2) {
+        sendMessage(what, obj, arg1, arg2, false);
+    }
+
+    private void sendMessage(int what, Object obj, int arg1, int arg2, boolean async) {
+        ...
+        mH.sendMessage(msg);
+    }
+}
+```
+
+Видим что последний метод sendMessage и вызывает у класса H метод sendMessage, так как класс H наследуетсч от класса Handler, то у него есть
+метод sendMessage и вызывает метод handleMessage, надо понять кто вызывает sendMessage у ActivityThread,
+
+```java
+public final class ActivityThread extends ClientTransactionHandler implements ActivityThreadInternal {
+
+    void sendMessage(int what, Object obj) {
+        sendMessage(what, obj, 0, 0, false);
+    }
+
+    private class ApplicationThread extends IApplicationThread.Stub {
+
+        @Override
+        public void scheduleTransaction(ClientTransaction transaction) throws RemoteException {
+            ActivityThread.this.scheduleTransaction(transaction);
+        }
+    }
+}
+```
+
+Этим занимается ApplicationThread, каким образом вызов метода ActivityThread.scheduleTransaction вызывает ActivityThread.sendMessage?
+
+Дело в том что ActivityThread наследуется от ClientTransactionHandler, а ClientTransactionHandler выглядит следующим образом:
+
+```java
+public abstract class ClientTransactionHandler {
+
+    void scheduleTransaction(ClientTransaction transaction) {
+        transaction.preExecute(this);
+        sendMessage(ActivityThread.H.EXECUTE_TRANSACTION, transaction);
+    }
+
+    abstract void sendMessage(int what, Object obj);
+
+}
+```
+
+Получается у ApplicationThread вызывается метод scheduleTransaction, он вызывает у ActivityThread метод scheduleTransaction который
+он унаследовал от ClientTransactionHandler, внутри метода scheduleTransaction у ClientTransactionHandler мы видим что он
+вызывает метод sendMessage с двумя параметрами, ActivityThread как раз переопредляет этот метод, и далее вызов идет в H.sendMessage.
+
+ApplicationThread - это Proxy который реализует AIDL интерфейс, этот класс отвечает за многие планирования, например сервисы, receiver
+или binding Application. так же заметьте что он реализует IApplicationThread.Stub, то есть фактический сам AIDL интерфейс IApplicationThread
+
+Дальше поймем откуда происходит вызов метода ApplicationThread.scheduleTransaction, и вуаля, этим занимается класс:
+
+```java
+public class ClientTransaction implements Parcelable, ObjectPoolItem {
+
+    private IApplicationThread mClient;
+
+    public void schedule() throws RemoteException {
+        mClient.scheduleTransaction(this);
+    }
+}
+```
+
+Он вызывает у ApplicationThread.scheduleTransaction передавая себя, тем самым запланируя себя и свои внутренние транзакций на
+выполнение, IApplicationThread это и есть класс ActivityThread.ApplicationThread, далее отследим вызов метода ClientTransaction.schedule(),
+встречайте еще один класс,
+
+```java
+class ClientLifecycleManager {
+
+    void scheduleTransactionItems(@NonNull IApplicationThread client,
+                                  boolean shouldDispatchImmediately,
+                                  @NonNull ClientTransactionItem... items) throws RemoteException {
+        ...
+        final ClientTransaction clientTransaction = getOrCreatePendingTransaction(client);
+
+        final int size = items.length;
+        for (int i = 0; i < size; i++) {
+            clientTransaction.addTransactionItem(items[i]);
+        }
+
+        onClientTransactionItemScheduled(clientTransaction, shouldDispatchImmediately);
+    }
+
+    private void onClientTransactionItemScheduled(
+            @NonNull ClientTransaction clientTransaction,
+            boolean shouldDispatchImmediately) throws RemoteException {
+        ...
+        scheduleTransaction(clientTransaction);
+    }
+
+
+    void scheduleTransaction(@NonNull ClientTransaction transaction) throws RemoteException {
+        ...
+        transaction.schedule();
+        ...
+    }
+}
+```
+
+Внутри него определён метод `scheduleTransactionItems`, который принимает `IApplicationThread` и массив `ClientTransactionItem`. Этот метод
+создаёт или достаёт транзакцию через `getOrCreatePendingTransaction`, добавляет в неё все `ClientTransactionItem` (например,
+`LaunchActivityItem`,
+`ResumeActivityItem`, `PauseActivityItem` и т.д.), после чего передаёт её в метод `onClientTransactionItemScheduled`, где вызывается
+`scheduleTransaction`.
+
+После чего управление переходит в метод `scheduleTransaction`, внутри которого вызывается `transaction.schedule()`. А как мы уже знаем,
+метод
+`schedule` вызывает `ApplicationThread.scheduleTransaction`, то есть фактически мы возвращаемся обратно к AIDL-вызову, из которого всё и
+начинается.
+
+Таким образом, `ClientLifecycleManager` собирает транзакцию, наполняет её нужными `ClientTransactionItem`, и отправляет её в исполнение. Это
+класс, который формирует цепочку действий, и делегирует выполнение низкоуровневому слою через AIDL.
+
+<note title="Мотивация">
+Если на этом моменте вы уже устали отслеживать вызовы, и думаете когда же это закончится, то скажу что мы почти на финале
+</note>
+
+`ClientLifecycleManager.scheduleTransactionItems` - вызовом метода занимается очень важный класс `ActivityTaskSupervisor`
+
+```java
+public class ActivityTaskSupervisor implements RecentTasks.Callbacks {
+    ...
+    final ActivityTaskManagerService mService;
+    ...
+
+    boolean realStartActivityLocked(ActivityRecord r, WindowProcessController proc,
+                                    boolean andResume, boolean checkConfig) throws RemoteException {
+
+
+        // Create activity launch transaction.
+        final LaunchActivityItem launchActivityItem = new LaunchActivityItem(r.token,
+                ...,r.getSavedState(), r.getPersistentSavedState(), ...,
+       );
+        ...
+        mService.getLifecycleManager().scheduleTransactionItems(
+                proc.getThread(),
+                // Immediately dispatch the transaction, so that if it fails, the server can
+                // restart the process and retry now.
+                true /* shouldDispatchImmediately */,
+                launchActivityItem, lifecycleItem);
+        ...
+        return true;
+    }
+    ...
+}
+```
+
+Видим очень ключевые моменты:
+
+1. В методе realStartActivityLocked на вход передается объект класса ActivityRecord,
+   который в себе хранит значения - r.getSavedState()(Bundle) и r.getPersistentSavedState(PersistentBundle) и прочие важные
+   значения и информацию об активити
+2. Наконецто видим создание транзакций `LaunchActivityItem` c передачей всех нужных аргументов, в числе и Bundle
+3. Видим что у класса ActivityTaskManagerService вызывается метод `getLifecycleManager()` который возвращает объект каласса
+   `ClientLifecycleManager`
+   и вызывает у него метод scheduleTransactionItems который мы уже видели, с передачей `LaunchActivityItem`
+
+Давай убедимся что метод getLifecycleManager у ActivityTaskManagerService действительно вовзращает ClientLifecycleManager:
+
+```java
+public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
+
+    ClientLifecycleManager getLifecycleManager() {
+        return mLifecycleManager;
+    }
+}
+```
+
+Убедились, прекрасно, идем дальше, отследим вызов метода `realStartActivityLocked` класса `ActivityTaskSupervisor`
+
+```java
+class RootWindowContainer extends WindowContainer<DisplayContent> implements DisplayManager.DisplayListener {
+
+    ActivityTaskSupervisor mTaskSupervisor;
+    ActivityTaskManagerService mService;
+
+    boolean attachApplication(WindowProcessController app) throws RemoteException {
+        final ArrayList<ActivityRecord> activities = mService.mStartingProcessActivities;
+        for (int i = activities.size() - 1; i >= 0; i--) {
+            final ActivityRecord r = activities.get(i);
+            ...
+            if (mTaskSupervisor.realStartActivityLocked(r, app, canResume,
+                    true /* checkConfig */)) {
+                hasActivityStarted = true;
+            }
+            ...
+            return hasActivityStarted;
+        }
+    }
+}
+```
+
+<tip title="RootWindowContainer...">
+
+`RootWindowContainer` — это центральный компонент в системе управления окнами Android,
+который содержит в себе всю иерархию окон на всех дисплеях.
+Он управляет экземплярами `DisplayContent`, координирует layout, input, фокус, анимации, транзишены, split-screen,
+picture-in-picture и любые изменения, связанные с конфигурацией экрана.
+Всё, что должно появиться, исчезнуть, пересчитаться или анимироваться — сначала проходит через него.
+Это точка входа для всех транзакций окон, включая запуск и завершение активностей.
+
+Он настолько крут, что может остановить перезапуск activity, если чувствует, что layout всё ещё "в пути".
+Ему не нужно подтверждение от `WindowManagerService` для показа Window и работы с контентом.
+
+`RootWindowContainer` раньше назывался `RootActivityContainer`
+</tip>
+
+Видим вызов метода `ActivityTaskSupervisor.realStartActivityLocked` происходит в классе RootWindowContainer, который в методе
+`attachApplication`, получает список ActivityRecord у ActivityTaskManagerService, и в цикле для всех вызывает метод
+`ActivityTaskSupervisor.realStartActivityLocked`.
+
+Далее мы снова возвращаемся к `ActivityTaskManagerService`, потому что именно он вызывает у RootWindowContainer и передает
+ему
+
+```java
+public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
+   ...
+
+    /** The starting activities which are waiting for their processes to attach. */
+    final ArrayList<ActivityRecord> mStartingProcessActivities = new ArrayList<>();
+    RootWindowContainer mRootWindowContainer;
+
+    @HotPath(caller = HotPath.PROCESS_CHANGE)
+    @Override
+    public boolean attachApplication(WindowProcessController wpc) throws RemoteException {
+        ...
+        return mRootWindowContainer.attachApplication(wpc);
+    }
+
+    void startProcessAsync(ActivityRecord activity, boolean knownToBeDead, boolean isTop,
+                           String hostingType) {
+         ...
+        mStartingProcessActivities.add(activity);
+         ...
+    }
+
+
+    ClientLifecycleManager getLifecycleManager() {
+        return mLifecycleManager;
+    }
+   ...
+}
+```
+
+Видим что он хранит в себе список ActivityRecord в поле mStartingProcessActivities - вызов которого мы уже видели мы в
+RootWindowContainer.attachApplication,
+
+Далее видим что у него так же есть ссылка на RootWindowContainer, и в методе ActivityTaskManagerService.attachApplication
+происходит вызов метода RootWindowContainer.attachApplication,
+startProcessAsync -  Так же очень важный метод, который в список ActivityRecord добавляет новые ActivityRecord внутри
+которых храниться Bundle, 
+
+```java
+public class ActivityTaskSupervisor implements RecentTasks.Callbacks {
+    ...
+    final ActivityTaskManagerService mService;
+
+
+   void startSpecificActivity(ActivityRecord r, boolean andResume, boolean checkConfig) {
+      ...
+      mService.startProcessAsync(r, knownToBeDead, isTop,
+              isTop ? HostingRecord.HOSTING_TYPE_TOP_ACTIVITY
+                      : HostingRecord.HOSTING_TYPE_ACTIVITY);
+   }
+}
+```
+
+Так же видим метод getLifecycleManager который мы уже ранее встречали, и вот мы на финале,
+
+```java
+class TaskFragment extends WindowContainer<WindowContainer> {
+
+    final boolean resumeTopActivity(ActivityRecord prev, ActivityOptions options,
+                                    boolean skipPause) {
+        ActivityRecord next = topRunningActivity(true /* focusableOnly */);
+        mTaskSupervisor.startSpecificActivity(next, true, false);
+        return true;
+        ..
+    }
+}
+```
+
+```java
+class Task extends TaskFragment {
+
+   @GuardedBy("mService")
+   boolean resumeTopActivityUncheckedLocked(ActivityRecord prev, ActivityOptions options,
+                                            boolean deferPause) {
+       someActivityResumed = resumeTopActivityInnerLocked(prev, options, deferPause);
+   }
+   
+    @GuardedBy("mService")
+    private boolean resumeTopActivityInnerLocked(ActivityRecord prev, ActivityOptions options,
+                                                 boolean deferPause) {
+        final TaskFragment topFragment = topActivity.getTaskFragment();
+        resumed[0] = topFragment.resumeTopActivity(prev, options, deferPause);
+    }
+}
+```
+
+```java
+/** Root {@link WindowContainer} for the device. */
+class RootWindowContainer extends WindowContainer<DisplayContent>
+        implements DisplayManager.DisplayListener {
+    boolean resumeFocusedTasksTopActivities(
+            Task targetRootTask, ActivityRecord target, ActivityOptions targetOptions,
+            boolean deferPause) {
+        ...
+        result = targetRootTask.resumeTopActivityUncheckedLocked(target, targetOptions,
+                deferPause);
+        ...
+    }
+}
+```
+
+```java
+public class ActivityManagerService extends IActivityManager.Stub {
+
+    public ActivityTaskManagerInternal mAtmInternal;
+    final PidMap mPidsSelfLocked = new PidMap();
+
+    @GuardedBy("this")
+    private void attachApplicationLocked(@NonNull IApplicationThread thread,
+                                         int pid, int callingUid, long startSeq) {
+        ...
+        finishAttachApplicationInner(startSeq, callingUid, pid);
+        ...
+    }
+
+    private void finishAttachApplicationInner(long startSeq, int uid, int pid) {
+        ...
+        final ProcessRecord app;
+        app = mPidsSelfLocked.get(pid);
+        ...
+
+        didSomething = mAtmInternal.attachApplication(app.getWindowProcessController());
+        ...
+    }
+}
+```
+
+Видим в методе finishAttachApplicationInner - вызов метода attachApplication у mAtmInternal, ActivityTaskManagerInternal который является
+абстакрным AIDl для ActivityTaskManagerService,
+по этому фактический здесь вызваеется ActivityTaskManagerService.attachApplication()
+
+сам метод finishAttachApplicationInner вызывается из attachApplicationLocked,
+
+Сам ActivityManagerService - является Singleton-ом в рамках всей системы Android, у него внутри есть своя структура PidMap
+которая хранит в себе ProcessRecord, по ключу pid(то есть process id), то есть вызов mPidsSelfLocked.get(pid), mPidsSelfLocked:
+
+```java
+public class ActivityManagerService extends IActivityManager.Stub {
+
+...
+static final class PidMap {
+    private final SparseArray<ProcessRecord> mPidMap = new SparseArray<>();
+
+    ProcessRecord get(int pid) {
+        return mPidMap.get(pid);
+    }
+    ...
+    void doAddInternal(int pid, ProcessRecord app) {
+        mPidMap.put(pid, app);
+    }
+   ...
+}
+}
+```
+
+
+как вы наверное догадались, ProcessRecord хранит в себе
+все всю информацию о процессе, в том числе массив ActivityRecord, давайте глянем на исходники ProcessRecord 
+и метода getWindowProcessController()
