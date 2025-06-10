@@ -176,11 +176,7 @@ class RestoreActivity : AppCompatActivity() {
  * That means, the OS will give the chance for the process to keep the state of the application
  * (normally using a serialization mechanism), and allow the app to restore its state later. That is
  * commonly referred to as "state restoration".
- *
- * required to act as a source input for a [SavedStateReader] or [SavedStateWriter].
- *
- * This class represents a container for persistable state data. It is designed to be
- * platform-agnostic, allowing seamless state saving and restoration across different environments.
+ * ...
  */
 public expect class SavedState
 ```
@@ -1052,13 +1048,9 @@ open class ComponentActivity() : ..., SavedStateRegistryOwner, ... {
 public class Activity extends ContextThemeWrapper ...{
 
 final void performSaveInstanceState(@NonNull Bundle outState) {
-    dispatchActivityPreSaveInstanceState(outState);
+   ...
     onSaveInstanceState(outState);
-    saveManagedDialogs(outState);
-    mActivityTransitionState.saveState(outState);
-    storeHasCurrentPermissionRequest(outState);
-    if (DEBUG_LIFECYCLE) Slog.v(TAG, "onSaveInstanceState " + this + ": " + outState);
-    dispatchActivityPostSaveInstanceState(outState);
+   ...
 }
 
 protected void onSaveInstanceState(@NonNull Bundle outState) {
@@ -1078,6 +1070,7 @@ protected void onSaveInstanceState(@NonNull Bundle outState) {
 `performSaveInstanceState`.
 
 Теперь давайте поймём, кто вызывает `performSaveInstanceState`. Этот вызов инициируется классом `Instrumentation`:
+
 **android.app.Instrumentation.java:**
 
 ```java
@@ -1101,7 +1094,7 @@ public class Instrumentation {
 Base class for implementing application instrumentation code.  
 When running with instrumentation turned on, this class will be instantiated for you before any of the application code,  
 allowing you to monitor all of the interaction the system has with the application.  
-An Instrumentation implementation is described to the system through an AndroidManifest.xml's `<instrumentation/>` tag.
+An Instrumentation implementation is described to the system through an AndroidManifest.xml's <instrumentation/> tag.
 </note>
 
 Теперь нужно понять, кто же вызывает `Instrumentation.callActivityOnSaveInstanceState`? И тут мы встречаем `ActivityThread`:
@@ -1187,12 +1180,7 @@ public final class ActivityThread extends ClientTransactionHandler implements Ac
         callActivityOnStop(r, saveState, reason);
     }
 
-    private void handleRelaunchActivityInner(@NonNull ActivityClientRecord r,
-                                             @Nullable List<ResultInfo> pendingResults,
-                                             @Nullable List<ReferrerIntent> pendingIntents,
-                                             @NonNull PendingTransactionActions pendingActions, boolean startsNotResumed,
-                                             @NonNull Configuration overrideConfig, @NonNull ActivityWindowInfo activityWindowInfo,
-                                             @NonNull String reason) {
+    private void handleRelaunchActivityInner(@NonNull ActivityClientRecord r,...) {
        ...
         if (!r.stopped) {
             callActivityOnStop(r, true /* saveState */, reason);
@@ -1264,30 +1252,30 @@ public final class ActivityThread extends ClientTransactionHandler implements Ac
 ```java
 public class Activity extends ContextThemeWrapper ...{
 
-public void onCreate(@Nullable Bundle savedInstanceState, @Nullable PersistableBundle persistentState) {
-    onCreate(savedInstanceState);
-}
-
-@MainThread
-@CallSuper
-protected void onCreate(@Nullable Bundle savedInstanceState) {
-        ...
-}
-
-final void performCreate(Bundle icicle) {
-    performCreate(icicle, null);
-}
-
-@UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
-final void performCreate(Bundle icicle, PersistableBundle persistentState) {
-        ...
-    if (persistentState != null) {
-        onCreate(icicle, persistentState);
-    } else {
-        onCreate(icicle);
+    public void onCreate(@Nullable Bundle savedInstanceState, @Nullable PersistableBundle persistentState) {
+        onCreate(savedInstanceState);
     }
-        ...
-}
+    
+    @MainThread
+    @CallSuper
+    protected void onCreate(@Nullable Bundle savedInstanceState) {
+            ...
+    }
+    
+    final void performCreate(Bundle icicle) {
+        performCreate(icicle, null);
+    }
+    
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
+    final void performCreate(Bundle icicle, PersistableBundle persistentState) {
+            ...
+        if (persistentState != null) {
+            onCreate(icicle, persistentState);
+        } else {
+            onCreate(icicle);
+        }
+            ...
+    }
 }
 ```
 
@@ -1335,8 +1323,7 @@ public final class ActivityThread extends ClientTransactionHandler implements Ac
 public final class ActivityThread extends ClientTransactionHandler implements ActivityThreadInternal {
 
     @Override
-    public Activity handleLaunchActivity(ActivityClientRecord r,
-                                         PendingTransactionActions pendingActions, int deviceId, Intent customIntent) {
+    public Activity handleLaunchActivity(ActivityClientRecord r, ...) {
     ...
         final Activity a = performLaunchActivity(r, customIntent);
     ...
@@ -1367,9 +1354,8 @@ public final class ActivityThread extends ClientTransactionHandler implements Ac
 }
 ```
 
-Вызов метода handleRelaunchActivity иницирует класс команда/транзакция `ActivityRelaunchItem`, которая действует как маркер для того, чтобы
-выполнить
-перезапуск с сохранением состояния:
+Вызов метода handleRelaunchActivity иницирует класс команда/транзакция `ActivityRelaunchItem`, которая действует как маркер для того, 
+чтобы выполнить перезапуск с сохранением состояния:
 
 ```java
 public class ActivityRelaunchItem extends ActivityTransactionItem {
@@ -1633,7 +1619,7 @@ public abstract class ClientTransactionHandler {
 вызывает метод sendMessage с двумя параметрами, ActivityThread как раз переопредляет этот метод, и далее вызов идет в H.sendMessage.
 
 ApplicationThread - это Proxy который реализует AIDL интерфейс, этот класс отвечает за многие планирования, например сервисы, receiver
-или binding Application. так же заметьте что он реализует IApplicationThread.Stub, то есть фактический сам AIDL интерфейс IApplicationThread
+или binding Application. Так же заметьте что он реализует IApplicationThread.Stub, то есть фактический сам AIDL интерфейс IApplicationThread
 
 Дальше поймем откуда происходит вызов метода ApplicationThread.scheduleTransaction, и вуаля, этим занимается класс:
 
@@ -1739,9 +1725,8 @@ public class ActivityTaskSupervisor implements RecentTasks.Callbacks {
    который в себе хранит значения - r.getSavedState()(Bundle) и r.getPersistentSavedState(PersistentBundle) и прочие важные
    значения и информацию об активити
 2. Наконецто видим создание транзакций `LaunchActivityItem` c передачей всех нужных аргументов, в числе и Bundle
-3. Видим что у класса ActivityTaskManagerService вызывается метод `getLifecycleManager()` который возвращает объект каласса
-   `ClientLifecycleManager`
-   и вызывает у него метод scheduleTransactionItems который мы уже видели, с передачей `LaunchActivityItem`
+3. Видим что у класса ActivityTaskManagerService вызывается метод `getLifecycleManager()` который возвращает объект класса
+   `ClientLifecycleManager` и вызывает у него метод scheduleTransactionItems который мы уже видели, с передачей `LaunchActivityItem`
 
 Давай убедимся что метод getLifecycleManager у ActivityTaskManagerService действительно вовзращает ClientLifecycleManager:
 
@@ -1797,8 +1782,8 @@ picture-in-picture и любые изменения, связанные с ко�
 `attachApplication`, получает список ActivityRecord у ActivityTaskManagerService, и в цикле для всех вызывает метод
 `ActivityTaskSupervisor.realStartActivityLocked`.
 
-Далее мы снова возвращаемся к `ActivityTaskManagerService`, потому что именно он вызывает у RootWindowContainer и передает
-ему
+Далее мы снова возвращаемся к `ActivityTaskManagerService`, потому что именно он вызывает метод attachApplication у RootWindowContainer 
+и передает ему
 
 ```java
 public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
@@ -1836,7 +1821,214 @@ RootWindowContainer.attachApplication,
 Далее видим что у него так же есть ссылка на RootWindowContainer, и в методе ActivityTaskManagerService.attachApplication
 происходит вызов метода RootWindowContainer.attachApplication,
 startProcessAsync -  Так же очень важный метод, который в список ActivityRecord добавляет новые ActivityRecord внутри
-которых храниться Bundle, 
+которых храниться Bundle,  позже его разберем тоже.
+
+Выше ActivityTaskManagerService стоит класс ActivityManagerService, он и вызывает  attachApplication у ActivityTaskManagerService:
+```java
+public class ActivityManagerService extends IActivityManager.Stub {
+
+    public ActivityTaskManagerInternal mAtmInternal;
+    final PidMap mPidsSelfLocked = new PidMap();
+
+    @GuardedBy("this")
+    private void attachApplicationLocked(@NonNull IApplicationThread thread,
+                                         int pid, int callingUid, long startSeq) {
+        ...
+        finishAttachApplicationInner(startSeq, callingUid, pid);
+        ...
+    }
+
+    private void finishAttachApplicationInner(long startSeq, int uid, int pid) {
+        ...
+        final ProcessRecord app;
+        app = mPidsSelfLocked.get(pid);
+        ...
+
+        didSomething = mAtmInternal.attachApplication(app.getWindowProcessController());
+        ...
+    }
+}
+```
+Видим в методе finishAttachApplicationInner - вызов метода attachApplication у mAtmInternal, ActivityTaskManagerInternal который является
+абстакрным AIDl для ActivityTaskManagerService,
+по этому фактический здесь вызваеется ActivityTaskManagerService.attachApplication()
+
+сам метод finishAttachApplicationInner вызывается из attachApplicationLocked, так же получает процесс из mPidsSelfLocked по ключу pid(то есть process id)
+
+Сам ActivityManagerService - является Singleton-ом в рамках всей системы Android, у него внутри есть своя структура PidMap
+которая хранит в себе ProcessRecord, по ключу pid(то есть process id), то есть вызов mPidsSelfLocked.get(pid), mPidsSelfLocked:
+
+
+Сам класс PidMap выглядит следующим образом:
+```java
+public class ActivityManagerService extends IActivityManager.Stub {
+
+   final PidMap mPidsSelfLocked = new PidMap();
+
+    ...
+    static final class PidMap {
+        private final SparseArray<ProcessRecord> mPidMap = new SparseArray<>();
+    
+        ProcessRecord get(int pid) {
+            return mPidMap.get(pid);
+        }
+        ...
+        void doAddInternal(int pid, ProcessRecord app) {
+            mPidMap.put(pid, app);
+        }
+       ...
+    }
+
+   public void setSystemProcess() {
+      ...
+            ProcessRecord app = mProcessList.newProcessRecordLocked(info, info.processName,
+                    false,
+                    0,
+                    false,
+                    0,
+                    null,
+                    new HostingRecord(HostingRecord.HOSTING_TYPE_SYSTEM));
+            ...
+            addPidLocked(app);
+            ...
+   }
+
+   void addPidLocked(ProcessRecord app) {
+      final int pid = app.getPid();
+      synchronized (mPidsSelfLocked) {
+         mPidsSelfLocked.doAddInternal(pid, app);
+      }
+      ...
+   }
+}
+```
+
+Видим Структуру PidMap которая внутри себя хранит список записей для процессов приложения
+
+Так же видим две методы, setSystemProcess создаем новый proccessRecord и вызывает метод addPidLocked, addPidLocked кладет
+в mPidsSelfLocked ProcessRecord, setSystemProcess  вызывается из SystemServer(он же system_service), ниже краткий стэк вызовов:
+
+
+```
+1. Загрузчик (Bootloader) → Ядро (Linux Kernel)  
+2. Процесс init (первый userspace-процесс)  
+   ├─ Запуск zygote (через app_process)  
+   │   ├─ ZygoteInit (singleton, подготавливает среду для Java-процессов)  
+   │   │   ├─ fork() → Создаёт SystemServer  
+   │   │   └─ fork() → Создаёт приложения  
+   └─ SystemServer (singleton, запускает все системные сервисы)  
+       ├─ RuntimeInit (инициализирует среду для SystemServer)  
+       └─ ActivityManagerService (singleton, включая setSystemProcess())
+```
+
+Выше ActivityManagerService подниматься не будем, да и нет смысла, так как там нечего о Bundle не хранится, многие из них
+singleton-ы в рамках все системы и никакого отнощения к конкретному приложению не имеют.
+
+На этом моменте по идее уже многое стало ясно, расмотрели очень длинный флоу вызовов, момент который мы немного пропустили, это
+то где создаются ActivityRecord, ранее мы уже видели xnj список ActivityRecord получаем из поля mStartingProcessActivities у ActivityTaskManagerService:
+
+```java
+class RootWindowContainer extends WindowContainer<DisplayContent> implements DisplayManager.DisplayListener {
+
+    ActivityTaskSupervisor mTaskSupervisor;
+    ActivityTaskManagerService mService;
+
+    boolean attachApplication(WindowProcessController app) throws RemoteException {
+        final ArrayList<ActivityRecord> activities = mService.mStartingProcessActivities;
+        for (int i = activities.size() - 1; i >= 0; i--) {
+            final ActivityRecord r = activities.get(i);
+            ...
+            if (mTaskSupervisor.realStartActivityLocked(r, app, canResume,
+                    true /* checkConfig */)) {
+                hasActivityStarted = true;
+            }
+            ...
+        }
+    }
+}
+```
+
+а в ActivityTaskManagerService это выглядит следующим образом как мы уже видели, поле mStartingProcessActivities явлыяется
+коллекцией которая хранит ActivityRecord и есть один метод который в него добавляет ActivityRecord - это метод startProcessAsync
+```java
+public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
+...
+
+    /** The starting activities which are waiting for their processes to attach. */
+    final ArrayList<ActivityRecord> mStartingProcessActivities = new ArrayList<>();
+    RootWindowContainer mRootWindowContainer;
+    
+    void startProcessAsync(ActivityRecord activity, boolean knownToBeDead, boolean isTop,
+                           String hostingType) {
+         ...
+        mStartingProcessActivities.add(activity);
+         ...
+    }
+    ...
+}
+```
+Следующая глава статьи будет раскрывать этот момент, где создается ActivityRecord и кто его кладет в ActivityTaskManagerService
+в поле mStartingProcessActivities
+
+### Создание ActivityRecord или получение
+```
+ActivityManagerService.startActivity()
+  → ActivityTaskManagerService.startActivityAsUser()
+    → ActivityStartController.obtainStarter()
+      → ActivityStarter.execute()
+        → executeRequest():
+          1. Создание ActivityRecord (новый объект)
+          2. startActivityUnchecked()
+             → startActivityInner()
+               → setInitialState(r) // сохраняем ActivityRecord в mStartActivity
+               → RootWindowContainer.resumeFocusedTasksTopActivities(mStartActivity)
+                 → Task.resumeTopActivityUncheckedLocked()
+                   → ActivityTaskSupervisor.startSpecificActivity(r)
+                     → (если процесс не запущен)
+                        → ActivityTaskManagerService.startProcessAsync(r)
+                          → mStartingProcessActivities.add(r) // финальная точка
+```
+
+```java
+class RootWindowContainer extends WindowContainer<DisplayContent> implements DisplayManager.DisplayListener {
+
+    ActivityTaskSupervisor mTaskSupervisor;
+    ActivityTaskManagerService mService;
+
+    boolean attachApplication(WindowProcessController app) throws RemoteException {
+        final ArrayList<ActivityRecord> activities = mService.mStartingProcessActivities;
+        for (int i = activities.size() - 1; i >= 0; i--) {
+            final ActivityRecord r = activities.get(i);
+            ...
+            if (mTaskSupervisor.realStartActivityLocked(r, app, canResume,
+                    true /* checkConfig */)) {
+                hasActivityStarted = true;
+            }
+            ...
+        }
+    }
+}
+```
+
+а в ActivityTaskManagerService это выглядит следующим образом как мы уже видели, поле mStartingProcessActivities явлыяется
+коллекцией которая хранит ActivityRecord и есть один метод который в него добавляет ActivityRecord - это метод startProcessAsync
+```java
+public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
+...
+
+   /** The starting activities which are waiting for their processes to attach. */
+   final ArrayList<ActivityRecord> mStartingProcessActivities = new ArrayList<>();
+   RootWindowContainer mRootWindowContainer;
+
+   void startProcessAsync(ActivityRecord activity, boolean knownToBeDead, boolean isTop,
+                          String hostingType) {
+         ...
+      mStartingProcessActivities.add(activity);
+         ...
+   }
+    ...
+}
+```
 
 ```java
 public class ActivityTaskSupervisor implements RecentTasks.Callbacks {
@@ -1902,58 +2094,120 @@ class RootWindowContainer extends WindowContainer<DisplayContent>
 ```
 
 ```java
-public class ActivityManagerService extends IActivityManager.Stub {
 
-    public ActivityTaskManagerInternal mAtmInternal;
-    final PidMap mPidsSelfLocked = new PidMap();
 
-    @GuardedBy("this")
-    private void attachApplicationLocked(@NonNull IApplicationThread thread,
-                                         int pid, int callingUid, long startSeq) {
-        ...
-        finishAttachApplicationInner(startSeq, callingUid, pid);
-        ...
-    }
+class TaskFragment extends WindowContainer<WindowContainer> {
+ @VisibleForTesting
+    void completePause(boolean resumeNext, ActivityRecord resuming) {
+        // Complete the pausing process of a pausing activity, so it doesn't make sense to
+        // operate on non-leaf tasks.
+        // warnForNonLeafTask("completePauseLocked");
 
-    private void finishAttachApplicationInner(long startSeq, int uid, int pid) {
-        ...
-        final ProcessRecord app;
-        app = mPidsSelfLocked.get(pid);
-        ...
+        ActivityRecord prev = mPausingActivity;
+        ProtoLog.v(WM_DEBUG_STATES, "Complete pause: %s", prev);
 
-        didSomething = mAtmInternal.attachApplication(app.getWindowProcessController());
-        ...
+        if (prev != null) {
+            prev.setWillCloseOrEnterPip(false);
+            final boolean wasStopping = prev.isState(STOPPING);
+            prev.setState(PAUSED, "completePausedLocked");
+            mPausingActivity = null;
+            if (prev.finishing) {
+                // We will update the activity visibility later, no need to do in
+                // completeFinishing(). Updating visibility here might also making the next
+                // activities to be resumed, and could result in wrong app transition due to
+                // lack of previous activity information.
+                ProtoLog.v(WM_DEBUG_STATES, "Executing finish of activity: %s", prev);
+                prev = prev.completeFinishing(false /* updateVisibility */,
+                        "completePausedLocked");
+            } else if (prev.attachedToProcess()) {
+                ProtoLog.v(WM_DEBUG_STATES, "Enqueue pending stop if needed: %s "
+                                + "wasStopping=%b visibleRequested=%b",  prev,  wasStopping,
+                        prev.isVisibleRequested());
+                if (wasStopping) {
+                    // We are also stopping, the stop request must have gone soon after the pause.
+                    // We can't clobber it, because the stop confirmation will not be handled.
+                    // We don't need to schedule another stop, we only need to let it happen.
+                    prev.setState(STOPPING, "completePausedLocked");
+                } else if (!prev.isVisibleRequested() || shouldSleepOrShutDownActivities()) {
+                    // Clear out any deferred client hide we might currently have.
+                    prev.clearDeferHidingClient();
+                    // If we were visible then resumeTopActivities will release resources before
+                    // stopping.
+                    prev.addToStopping(true /* scheduleIdle */, false /* idleDelayed */,
+                            "completePauseLocked");
+                }
+            } else {
+                ProtoLog.v(WM_DEBUG_STATES, "App died during pause, not stopping: %s", prev);
+                prev = null;
+            }
+            // It is possible the activity was freezing the screen before it was paused.
+            // In that case go ahead and remove the freeze this activity has on the screen
+            // since it is no longer visible.
+            if (prev != null) {
+                prev.stopFreezingScreen(true /* unfreezeNow */, true /* force */);
+            }
+        }
+
+        if (resumeNext) {
+            final Task topRootTask = mRootWindowContainer.getTopDisplayFocusedRootTask();
+            if (topRootTask != null && !topRootTask.shouldSleepOrShutDownActivities()) {
+                mRootWindowContainer.resumeFocusedTasksTopActivities(topRootTask, prev);
+            } else {
+                // checkReadyForSleep();
+                final ActivityRecord top =
+                        topRootTask != null ? topRootTask.topRunningActivity() : null;
+                if (top == null || (prev != null && top != prev)) {
+                    // If there are no more activities available to run, do resume anyway to start
+                    // something. Also if the top activity on the root task is not the just paused
+                    // activity, we need to go ahead and resume it to ensure we complete an
+                    // in-flight app switch.
+                    mRootWindowContainer.resumeFocusedTasksTopActivities();
+                }
+            }
+        }
+
+        if (prev != null) {
+            prev.resumeKeyDispatchingLocked();
+        }
+
+        mRootWindowContainer.ensureActivitiesVisible(resuming);
+
+        // Notify when the task stack has changed, but only if visibilities changed (not just
+        // focus). Also if there is an active root pinned task - we always want to notify it about
+        // task stack changes, because its positioning may depend on it.
+        if (mTaskSupervisor.mAppVisibilitiesChangedSinceLastPause
+                || (getDisplayArea() != null && getDisplayArea().hasPinnedTask())) {
+            mAtmService.getTaskChangeNotificationController().notifyTaskStackChanged();
+            mTaskSupervisor.mAppVisibilitiesChangedSinceLastPause = false;
+        }
     }
 }
 ```
-
-Видим в методе finishAttachApplicationInner - вызов метода attachApplication у mAtmInternal, ActivityTaskManagerInternal который является
-абстакрным AIDl для ActivityTaskManagerService,
-по этому фактический здесь вызваеется ActivityTaskManagerService.attachApplication()
-
-сам метод finishAttachApplicationInner вызывается из attachApplicationLocked,
-
-Сам ActivityManagerService - является Singleton-ом в рамках всей системы Android, у него внутри есть своя структура PidMap
-которая хранит в себе ProcessRecord, по ключу pid(то есть process id), то есть вызов mPidsSelfLocked.get(pid), mPidsSelfLocked:
-
 ```java
-public class ActivityManagerService extends IActivityManager.Stub {
+class ActivityStarter {
 
-...
-static final class PidMap {
-    private final SparseArray<ProcessRecord> mPidMap = new SparseArray<>();
+    private void resumeTargetRootTaskIfNeeded() {
+        if (mDoResume) {
+            final ActivityRecord next = mTargetRootTask.topRunningActivity(
+                    true /* focusableOnly */);
+            if (next != null) {
+                next.setCurrentLaunchCanTurnScreenOn(true);
+            }
+            if (mTargetRootTask.isFocusable()) {
+                mRootWindowContainer.resumeFocusedTasksTopActivities(mTargetRootTask, null,
+                        mOptions, mTransientLaunch);
+            } else {
+                mRootWindowContainer.ensureActivitiesVisible();
+            }
+        } else {
+            ActivityOptions.abort(mOptions);
+        }
+        mRootWindowContainer.updateUserRootTask(mStartActivity.mUserId, mTargetRootTask);
+    }
+}
 
-    ProcessRecord get(int pid) {
-        return mPidMap.get(pid);
-    }
-    ...
-    void doAddInternal(int pid, ProcessRecord app) {
-        mPidMap.put(pid, app);
-    }
-   ...
-}
-}
 ```
+
 
 
 как вы наверное догадались, ProcessRecord хранит в себе
