@@ -733,6 +733,8 @@ class DefaultCounterComponent(
 
 Теперь давайте посмотрим, как эта конструкция работает под капотом.
 
+Для начала определим, кто вообще отвечает за хранение `InstanceKeeper`. В Essenty/Decompose это интерфейс:
+
 ```kotlin
 /**
  * Represents a holder of [InstanceKeeper].
@@ -741,13 +743,11 @@ interface InstanceKeeperOwner {
 
     val instanceKeeper: InstanceKeeper
 }
+```
 
+Он реализуется в `GenericComponentContext`, а значит, и в `ComponentContext`, который используется в каждом компоненте:
 
-/**
- * A generic component context that extends [LifecycleOwner], [StateKeeperOwner],
- * [InstanceKeeperOwner] and [BackHandlerOwner] interfaces, and also able to create
- * new instances of itself via [ComponentContextFactory].
- */
+```kotlin
 interface GenericComponentContext<out T : Any> :
     LifecycleOwner,
     StateKeeperOwner,
@@ -755,21 +755,19 @@ interface GenericComponentContext<out T : Any> :
     BackHandlerOwner,
     ComponentContextFactoryOwner<T>
 
-
 interface ComponentContext : GenericComponentContext<ComponentContext>
 ```
 
 Таким образом, цепочка наследования выглядит так:
 `InstanceKeeperOwner` ← `GenericComponentContext` ← `ComponentContext`.
 
-Давайте начнем с того как создается InstanceKeeper
+Теперь разберёмся, **откуда приходит реализация**.
 
-А в `MainActivity` создаём `ComponentContext`, используя готовую extension-функцию `defaultComponentContext`,
-которая за нас уже создаёт `ComponentContext` со всеми нужными компонентами, вроде `InstanceKeeper`:
+В `MainActivity` мы создаём компонент верхнего уровня через функцию `defaultComponentContext()`. 
+Именно она формирует `ComponentContext`, внедряя внутрь все нужные зависимости: `Lifecycle`, `StateKeeper`, `InstanceKeeper`, `BackHandler`.
 
 ```kotlin
 class MainActivity : ComponentActivity() {
-
     override fun onCreate(savedInstanceState: Bundle?) {
         ...
         val counterComponent = DefaultCounterComponent(defaultComponentContext())
@@ -777,8 +775,21 @@ class MainActivity : ComponentActivity() {
     }
 }
 ```
-
-Пропустим промежуточные методы которых мы уже встретили при разборе StateKeeper статье, и сразу к сути:
+Глянем еще раз в исходники фукнцйи defaultComponentContext:
+```kotlin
+fun <T> T.defaultComponentContext(
+    discardSavedState: Boolean = false,
+    isStateSavingAllowed: () -> Boolean = { true },
+): DefaultComponentContext where
+        T : SavedStateRegistryOwner, T : OnBackPressedDispatcherOwner, T : ViewModelStoreOwner, T : LifecycleOwner =
+    defaultComponentContext(
+        backHandler = BackHandler(onBackPressedDispatcher),
+        discardSavedState = discardSavedState,
+        isStateSavingAllowed = isStateSavingAllowed,
+    )
+```
+Внутри по сути просто собираются все нужные зависимости и прокидываются чуть дальше — в ещё одну функцию-обёртку, где уже инициализируется
+всё, что нужно для хранения состояния:
 
 ```kotlin
 private fun <T> T.defaultComponentContext(
@@ -796,6 +807,9 @@ private fun <T> T.defaultComponentContext(
     )
 }
 ```
+
+Ключевая строка здесь — `instanceKeeper = instanceKeeper(...)`. Давайте теперь посмотрим, что это за функция `instanceKeeper(...)`, 
+откуда она берёт значение и как реализована сама логика хранения.
 
 Видим что для создания InstanceKeeper вызывается функция `instanceKeeper`:
 ```kotlin
