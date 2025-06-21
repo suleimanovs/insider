@@ -338,7 +338,7 @@ fun StateKeeper(
 }
 ```
 
-Вот он — наш главный гейтвей между миром Android и системой сохранения состояния в Decompose. Давайте по строчкам:
+Вот он — наш главный гейтвей между миром Android и системой сохранения состояния в Essenty/Decompose. Давайте по строчкам:
 
 * Извлекается ранее сохранённое состояние из `SavedStateRegistry` по ключу — по сути, из стандартного `Bundle`, в который Android сохраняет
   данные при onPause/onStop
@@ -416,7 +416,7 @@ class SerializableContainer private constructor(
 
 Это даёт контроль над моментом сериализации и возможность отложенной обработки.
 
-Теперь о том, как это всё оказывается внутри `Bundle`. Ниже — вспомогательные функции, которые используются внутри библиотеки Decompose для
+Теперь о том, как это всё оказывается внутри `Bundle`. Ниже — вспомогательные функции, которые используются внутри библиотеки Essenty/Decompose для
 сериализации и десериализации `SerializableContainer` и произвольных объектов, вызовы которых мы уже встречали в фукнций StateKeeper:
 
 ```kotlin
@@ -482,7 +482,7 @@ private class ValueHolder<out T : Any>(
 
 ### К чему это всё ведёт
 
-То есть, по факту, `StateKeeper` — это просто адаптер между внутренней системой хранения состояния в Decompose и системным
+То есть, по факту, `StateKeeper` — это просто адаптер между внутренней системой хранения состояния в Essenty/Decompose и системным
 `SavedStateRegistry`
 (а значит — тем самым `onSaveInstanceState` в `Activity`/`Fragment`, только более удобно и декларативно, и с поддержкой сериализации через
 `kotlinx.serialization`).
@@ -647,14 +647,7 @@ internal class DefaultStateKeeperDispatcher(
 Она позволяет сохранять произвольные значения через `kotlinx.serialization`, без использования `Parcelable`, `Bundle.putX`, reflection и
 других низкоуровневых деталей.
 
-Давайте визуально глянем на цепочку вызовов что бы понять работу StateKeeper
-
-Отличное замечание — да, ты прав. `registerSavedStateProvider(...)` вызывается у `SavedStateRegistry`, и это важно показать, потому что
-именно здесь `StateKeeper` подвязывается к системной механике `onSaveInstanceState`.
-
-Вот диаграмма в твоём формате, уже отредактированная с учётом точности и согласованности ключей:
-
----
+Давайте визуально глянем на цепочку вызовов что бы понять работу StateKeeper:
 
 **`StateKeeper.register(...)`**:
 
@@ -686,6 +679,10 @@ defaultComponentContext()
                                 └── SerializableContainer.consume(strategy)  
                                       └── kotlinx.serialization.decodeFromByteArray(...)
 ```
+
+Далее рассмотрим другой механизм сохронения состояние в Decompose, а если быть точнее в Essenty
+
+## InstanceKeeper
 
 Далее рассмотрим компонент InstanceKeeper, один из всадников ComponentContext, давайте узнаем его определение:
 InstanceKeeper в Decompose — это механизм для хранения произвольных объектов (обычно — долгоживущих), которые не должны уничтожаться при
