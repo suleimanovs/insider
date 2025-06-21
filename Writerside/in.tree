@@ -14,8 +14,9 @@
         <toc-element topic="fragment-viewmodelstore-and-retain-fragment.md"/>
         <toc-element topic="view-model-under-the-hood-state-handle.md" in="in"/>
     </toc-element>
+    <toc-element topic="decompose-save-state-internal.md"/>
 
-<!--    <toc-element toc-title="Kotlin">-->
+    <!--    <toc-element toc-title="Kotlin">-->
 <!--    </toc-element>-->
 
 <!--    <toc-element toc-title="Java">-->
