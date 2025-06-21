@@ -711,26 +711,24 @@ ViewRootImpl
             └── ComposeView
                 └── AndroidComposeView -> имеет слабую ссылку на ViewModelStoreOwner (то есть активити)
 ```
+<note title="Интересный факт">
 
+`ViewRootImpl` — это корневой элемент всей иерархии `View`. На практике каждый Android-разработчик хотя бы раз сталкивался с ошибкой:
 
-<note title="Интересный факт" >
+> "Only the original thread that created a view hierarchy can touch its views."
 
-ViewRootImpl - самый коренной контейнер в ииерахий View, на практике каждый хоть раз сталкаивался с ошибкой:
-"Only the original thread that created a view hierarchy can touch its views." - при вызове методов View вне главного потока, так
-вот эту ошибку выбрасывает ViewRootImpl
+Эта ошибка возникает, если попытаться обратиться к `View` из не-UI потока. А выбрасывает её как раз `ViewRootImpl` внутри метода `checkThread()`:
 
 ```java
+public final class ViewRootImpl implements ViewParent, ... {
 
-public final class ViewRootImpl implements ViewParent, ...{
-    
-        }
     void checkThread() {
         Thread current = Thread.currentThread();
         if (mThread != current) {
             throw new CalledFromWrongThreadException(
-                    "Only the original thread that created a view hierarchy can touch its views."
-                            + " Expected: " + mThread.getName()
-                            + " Calling: " + current.getName());
+                "Only the original thread that created a view hierarchy can touch its views."
+                + " Expected: " + mThread.getName()
+                + " Calling: " + current.getName());
         }
     }
 }
