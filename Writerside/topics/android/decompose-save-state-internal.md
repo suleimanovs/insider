@@ -9,7 +9,7 @@
 3. В третьей — где хранятся `ViewModel`-и, когда мы используем **Compose** (или даже просто `View`).
 4. В четвёртой — как работают методы `onSaveInstanceState`/`onRestoreInstanceState`, Saved State API и где хранится `Bundle`.
 
-В этой статье разберёмся, как нашумевшая библиотека **Decompose** справляется без `ViewModel` и методов `onSaveInstanceState`,
+В этой статье разберёмся, как широко используемая в KMP библиотека **Decompose** справляется без `ViewModel` и методов `onSaveInstanceState`,
 ведь она является кроссплатформенной (KMP) библиотекой.
 
 Статья не о том, *как* использовать эти API, а о том, *как* они работают изнутри. Поэтому я буду полагаться на то,
@@ -123,13 +123,14 @@ class MainActivity : ComponentActivity() {
 }
 ```
 
-Давай те визуально проверим:
-1. Как будет ввести себя счетчик при изменений конфигураций( именно orientation)
-2. Как будет ввести себя счетчик при уничтожений процесса пока приложение в фоне
+Давайте визуально проверим:
+
+1. Как будет вести себя счётчик при изменении конфигурации (именно повороте экрана).
+2. Как будет вести себя счётчик при уничтожении процесса, когда приложение находится в фоне.
+
 ![Screenshot](output.gif)
 
-Как видим все работает ровно так как ожидалось, при этом мы тут не видим не методы onSaveInstanceState, и ни ViewModel, давайте
-снова глянем на компонент счетчика:
+Как видим, всё работает ровно так, как ожидалось. При этом мы не видим здесь ни методов `onSaveInstanceState`, ни `ViewModel`. Давайте снова взглянем на компонент счётчика:
 
 ```kotlin
 class DefaultCounterComponent(
@@ -149,24 +150,22 @@ class DefaultCounterComponent(
 }
 ```
 
-При пересозданий активности после изменений конфигураций или смерти процесса DefaultCounterComponent будет создаваться каждый
-раз, и в том числе поле model тоже, в таком кейсе мы обращаемся к stateKeeper и вызывая у него метод consume получаем по ключу сохроненное значение
-если там нечего нет, в качестве значения по умолчанию используем 0, а в init блоке мы видим регистрацию каллбэка с использованием 
-метрда StateKeeper.register передавая ему коюч, стратегию сериализаций из kotlinx.serialization и лямюду которая возвращает значение model.
+При пересоздании активности — как из-за изменения конфигурации, так и после смерти процесса — `DefaultCounterComponent` будет создаваться 
+заново, и вместе с ним создаётся и поле `model`. В таком случае мы обращаемся к `stateKeeper` и, вызывая у него метод `consume`, 
+получаем по ключу сохранённое значение. Если сохранённого значения нет, используем значение по умолчанию — `0`.
 
-Глянем на исходники откуда береться поле stateKeeper что бы понять его работу, 
-наш DefaultCounterComponent реализует интерфейс ComponentContext, а поле stateKeeper береться у StateKeeperOwner, полная цепочка насоедования
-такая
+В `init`-блоке мы регистрируем коллбэк через метод `stateKeeper.register`, передавая ему ключ, стратегию сериализации из `kotlinx.serialization` и лямбду, возвращающую текущее значение `model`.
+
+Посмотрим на исходники, чтобы понять, откуда берётся поле `stateKeeper`. Наш `DefaultCounterComponent` реализует интерфейс `ComponentContext`, а поле `stateKeeper` приходит из `StateKeeperOwner`. Полная цепочка наследования следующая:
 
 ```kotlin
 /**
- * Represents a holder of [StateKeeper].
+ * Представляет собой держатель [StateKeeper].
  */
 interface StateKeeperOwner {
 
     val stateKeeper: StateKeeper
 }
-
 
 /**
  * A generic component context that extends [LifecycleOwner], [StateKeeperOwner],
@@ -182,22 +181,23 @@ interface GenericComponentContext<out T : Any> :
 
 
 interface ComponentContext : GenericComponentContext<ComponentContext>
-
 ```
 
-То есть цепочка наследования такая:
-StateKeeperOwner <- GenericComponentContext <- ComponentContext - мы реализуем ComponentContext но делегируем ее параметру в конструкторе:
+Таким образом, цепочка наследования выглядит так:
+`StateKeeperOwner` ← `GenericComponentContext` ← `ComponentContext`.
+Мы реализуем `ComponentContext`, делегируя его переданному в конструктор параметру `componentContext`.
 
 ```kotlin
 class DefaultCounterComponent(
-componentContext: ComponentContext
+    componentContext: ComponentContext
 ) : ComponentContext by componentContext {
-    ....
+    ...
 }
 ```
 
-А в MainActivity создаем ComponentContext используя готовую extension фукнцию defaultComponentContext, которая за нас 
-уже создает ComponentContext со всеми нужными компонентами вроде StateKeeper
+А в `MainActivity` создаём `ComponentContext`, используя готовую extension-функцию `defaultComponentContext`, 
+которая за нас уже создаёт `ComponentContext` со всеми нужными компонентами, вроде `StateKeeper`:
+
 ```kotlin
 class MainActivity : ComponentActivity() {
 
@@ -208,16 +208,17 @@ class MainActivity : ComponentActivity() {
     }
 }
 ```
+
 ## Продолжаем разбор: цепочка до настоящего хранилища
 
-Итак, мы уже увидели, как в компоненте вызывается `stateKeeper.consume()` и `stateKeeper.register()`, и знаем, что сам компонент получает 
-`stateKeeper` через свой `ComponentContext`. 
-Но что именно происходит между вызовом в Activity/Fragment и конечным хранилищем? 
-Пройдемся по цепочке, которую мы только что вывели из исходников.
+Итак, мы уже увидели, как в компоненте вызываются `stateKeeper.consume()` и `stateKeeper.register()`, и знаем, что сам компонент получает
+`stateKeeper` через свой `ComponentContext`.
+Но что именно происходит между вызовом в `Activity`/`Fragment` и конечным хранилищем?
+Пройдёмся по цепочке, которую мы только что вывели из исходников.
 
-### Как создаётся StateKeeper
+### Как создаётся `StateKeeper`
 
-В Activity (или Fragment) создаётся `DefaultComponentContext`, и ему передается результат вызова `defaultComponentContext()`. Заглянем внутрь:
+В `Activity` (или `Fragment`) создаётся `DefaultComponentContext`, и ему передаётся результат вызова `defaultComponentContext()`. Заглянем внутрь:
 
 ```kotlin
 fun <T> T.defaultComponentContext(
@@ -231,10 +232,12 @@ fun <T> T.defaultComponentContext(
         isStateSavingAllowed = isStateSavingAllowed,
     )
 ```
-Обратите внимание что функция является разширением для T, где T должен быть объект реализующий интерфейс SavedStateRegistryOwner,
-OnBackPressedDispatcherOwner, ViewModelStoreOwner, LifecycleOwner, классы (ComponentActivity, FragmentActivity, AppCompatActivity)
-идеально подходят,
-Внутри по сути просто собираются все нужные зависимости и прокидываются чуть дальше в ещё одну функцию обёртку, где уже инициализируется всё, 
+
+Обратите внимание, что функция является расширением для `T`, где `T` должен быть объектом, реализующим интерфейсы `SavedStateRegistryOwner`,
+`OnBackPressedDispatcherOwner`, `ViewModelStoreOwner`, `LifecycleOwner`. Классы `ComponentActivity`, `FragmentActivity`, `AppCompatActivity`
+идеально подходят под эти требования.
+
+Внутри по сути просто собираются все нужные зависимости и прокидываются чуть дальше — в ещё одну функцию-обёртку, где уже инициализируется всё,
 что нужно для хранения состояния:
 
 ```kotlin
@@ -255,15 +258,14 @@ private fun <T> T.defaultComponentContext(
 }
 ```
 
-Вот тут и начинается самое интересное, создается объект StateKeeper вызовом фукнций stateKeeper, и пробрасывается дальше.
+Вот тут и начинается самое интересное — создаётся объект `StateKeeper` вызовом функции `stateKeeper` и пробрасывается дальше.
 
-### Как создаётся сам stateKeeper
+### Как создаётся сам `StateKeeper`
 
-Теперь посмотрим, откуда взялся этот объект. Всё упирается в extension-функцию stateKeeper 
-которая является расширением для SavedStateRegistryOwner:
+Теперь посмотрим, откуда взялся этот объект. Всё упирается в extension-функцию `stateKeeper`,
+которая является расширением для `SavedStateRegistryOwner`:
 
 ```kotlin
-
 private const val KEY_STATE = "STATE_KEEPER_STATE"
 
 fun SavedStateRegistryOwner.stateKeeper(
@@ -277,7 +279,7 @@ fun SavedStateRegistryOwner.stateKeeper(
     )
 ```
 
-Здесь просто прокидывается ключ (по умолчанию `"STATE_KEEPER_STATE"`), и происходит вызов другугов метода stateKeeper:
+Здесь просто прокидывается ключ (по умолчанию `"STATE_KEEPER_STATE"`), и происходит вызов другого метода `stateKeeper`:
 
 ```kotlin
 fun SavedStateRegistryOwner.stateKeeper(
@@ -293,12 +295,13 @@ fun SavedStateRegistryOwner.stateKeeper(
     )
 ```
 
-Тут мы уже явно вызываем конструктор `StateKeeper` (на самом деле это функция так же, не класс).
-Сюда подаётся главный объект — `savedStateRegistry`. Да-да, тот самый, что из AndroidX, который лежит внутри Activity и Fragment и используется для всех системных onSaveInstanceState.
+Тут мы уже явно вызываем конструктор `StateKeeper` (на самом деле это функция, а не класс).
+Сюда подаётся главный объект — `savedStateRegistry`. Да-да, тот самый из AndroidX,
+который находится внутри `Activity` и `Fragment` и используется системой для всех вызовов `onSaveInstanceState`.
 
-### Что реально происходит внутри StateKeeper
+### Что реально происходит внутри `StateKeeper`
 
-Вот теперь мы приблизились к сути, StateKeeper это фукнция которая создает реальный объект интерфейса StateKeeper:
+Вот теперь мы приблизились к сути. `StateKeeper` — это функция, которая создаёт реальный объект интерфейса `StateKeeper`:
 
 ```kotlin
 fun StateKeeper(
@@ -327,35 +330,120 @@ fun StateKeeper(
 }
 ```
 
-Вот он — наш главный гейтвей между миром Android и системой сохранения состояния в Decompose. Давай по строчкам:
+Вот он — наш главный гейтвей между миром Android и системой сохранения состояния в Decompose. Давайте по строчкам:
 
-* Извлекается ранее сохранённое состояние из `SavedStateRegistry` по ключу (по сути — из стандартного хранилища состояния для instance state).
-* Создаётся объект `StateKeeperDispatcher` (имплементация интерфейса StateKeeper), который умеет хранить сериализованные значения и потом возвращать их через consume.
-* Регистрируется новый провайдер для сохранения состояния — функция, которая будет вызвана при необходимости сохранить состояние активности/фрагмента, и она сериализует текущее состояние через `dispatcher.save()`.
+* Извлекается ранее сохранённое состояние из `SavedStateRegistry` по ключу (по сути — из стандартного хранилища состояния Bundle).
+* Создаётся объект `StateKeeperDispatcher` (имплементация интерфейса `StateKeeper`), который умеет хранить сериализованные значения и потом возвращать их через `consume`.
+* Регистрируется новый провайдер для сохранения состояния — функция, которая будет вызвана при необходимости сохранить состояние активности или фрагмента, и она сериализует текущее состояние через `dispatcher.save()`.
 
-registerSavedStateProvider здесь вызывается для того что бы хранить сам StateKeeperDispatcher, то есть в конечном итоге
-будет сохраняться только сам StateKeeperDispatcher(он же наследник интерфейса StateKeeper), в итоге
-получается что значения которые мы будем положить в StateKeeper будут храниться внутри StateKeeperDispatcher, а сам StateKeeperDispatcher
-будет храниться внутри Bundle, с помощью нового SavedStateRegistry, и SavedStateProvider
+`registerSavedStateProvider` здесь вызывается для того, чтобы сохранить сам `StateKeeperDispatcher`. То есть в конечном итоге
+будет сохраняться именно он (а он реализует `StateKeeper`). Таким образом, значения, которые мы положим в `StateKeeper`,
+будут храниться внутри `StateKeeperDispatcher`, а сам `StateKeeperDispatcher` будет сохраняться внутри `Bundle` —
+с использованием `SavedStateRegistry` и `SavedStateProvider`.
+
+И вот тут вступает в игру `SerializableContainer`.
+
+Когда вызывается `dispatcher.save()`, значения, зарегистрированные через `stateKeeper.register(...)`, превращаются в `SerializableContainer`.
+Это универсальная обёртка, которая хранит сериализованные данные в виде `ByteArray`, кодирует их в строку (через `Base64`) и позволяет положить всё это в `Bundle` без `Parcelable`.
+В момент восстановления, всё это снова превращается в объект: строка → байты → десериализация через `kotlinx.serialization`.
+
+Вот как можно **естественно и по стилю статьи** встроить объяснение `SerializableContainer` в конец блока *"Что реально происходит внутри `StateKeeper`"* — **без AI-интонации**, но сохраняя техническую точность и логику:
 
 ---
 
-### К чему это всё ведёт
+Таким образом, при сохранении состояния через `dispatcher.save()` создаётся сериализуемый объект, который кладётся в `Bundle`.
+Самое интересное — это не то, как сериализуются данные, а во что они оборачиваются. Это не Parcelable, и не Serializable, а SerializableContainer.
 
-То есть, по факту, StateKeeper — это просто адаптер между внутренней системой хранения состояния в Decompose и системным `SavedStateRegistry` (а значит — тем самым `onSaveInstanceState` в Activity/Fragment, только более удобно и декларативно, и с поддержкой сериализации через kotlinx.serialization).
-Кратко по цепочке:
+Это `SerializableContainer` — обёртка над `ByteArray`, которая знает, как сериализовать и десериализовать произвольные данные через `kotlinx.serialization`.
+Она сама сериализуема и может быть положена в `Bundle` без дополнительных усилий.
 
-1. В компоненте DefaultCounterComponent мы вызываем consume/register через интерфейс StateKeeper.
-2. StateKeeper реализован как StateKeeperDispatcher.
-3. StateKeeperDispatcher внутри себя хранит значения, сериализует их и регистрирует функцию для сохранения в системный Bundle через SavedStateRegistry.
-Важно понять что значения которые мы регистрируем в StateKeeper не будут вызывать напрямую  savedStateRegistry.registerSavedStateProvider и регистрировать SavedStateProvider, 
-Они будут храниться внутри StateKeeperDispatcher(StateKeeper), а сам StateKeeperDispatcher это единственный контейнерный объект который будет хранится
-в SavedStateRegistry, и только для него будет вызыван SavedStateRegistry#registerSavedStateProvider
-4. Все сериализуется/десериализуется через kotlinx.serialization (удобно, не надо возиться с Parcelable и прочей болью).
+Вот как она устроена под капотом:
 
-Осталось увидеть сам StateKeeper и его прямого наследника StateKeeperDispatcher:
+```kotlin
+@Serializable(with = SerializableContainer.Serializer::class)
+class SerializableContainer private constructor(
+    private var data: ByteArray?,
+) {
+    constructor() : this(data = null)
+
+    private var holder: Holder<*>? = null
+
+    fun <T : Any> consume(strategy: DeserializationStrategy<T>): T? {
+        val consumedValue: Any? = holder?.value ?: data?.deserialize(strategy)
+        holder = null
+        data = null
+        @Suppress("UNCHECKED_CAST") return consumedValue as T?
+    }
+
+    fun <T : Any> set(value: T?, strategy: SerializationStrategy<T>) {
+        holder = Holder(value = value, strategy = strategy)
+        data = null
+    }
+
+    private class Holder<T : Any>(
+        val value: T?,
+        val strategy: SerializationStrategy<T>,
+    )
+
+    internal object Serializer : KSerializer<SerializableContainer> {
+        private const val NULL_MARKER = "."
+        override val descriptor = PrimitiveSerialDescriptor("SerializableContainer", PrimitiveKind.STRING)
+
+        override fun serialize(encoder: Encoder, value: SerializableContainer) {
+            val bytes = value.holder?.serialize() ?: value.data
+            encoder.encodeString(bytes?.toBase64() ?: NULL_MARKER)
+        }
+
+        override fun deserialize(decoder: Decoder): SerializableContainer =
+            SerializableContainer(data = decoder.decodeString().takeUnless { it == NULL_MARKER }?.base64ToByteArray())
+    }
+}
+```
+
+На практике это значит следующее:
+
+* Cохраняеncz объект через `set(value, strategy)`
+* При сериализации объект превращается в `ByteArray`, потом в `Base64`, и кодируется в строку (это и кладётся в `Bundle`)
+* При восстановлении — строка обратно в байты, байты обратно в объект через `deserialize`
+
+Всё это работает без Parcelable, без putSerializable(), без reflection. Только kotlinx.serialization и понятная механика на Kotlin.
+
+Ниже — вспомогательные функции из библиотеки, которые использовались внутри функций StateKeeper(...) для сохранения и восстановления SerializableContainer через обычный Bundle:
 ```kotlin
 
+fun <T : Any> PersistableBundle.putSerializable(key: String?, value: T?, strategy: SerializationStrategy<T>) {
+    putString(key, value?.serialize(strategy)?.toBase64())
+}
+
+fun <T : Any> PersistableBundle.getSerializable(key: String?, strategy: DeserializationStrategy<T>): T? =
+    getString(key)?.base64ToByteArray()?.deserialize(strategy)
+
+fun PersistableBundle.putSerializableContainer(key: String?, value: SerializableContainer?) {
+    putSerializable(key = key, value = value, strategy = SerializableContainer.serializer())
+}
+
+fun PersistableBundle.getSerializableContainer(key: String?): SerializableContainer? =
+    getSerializable(key = key, strategy = SerializableContainer.serializer())
+
+```
+### К чему это всё ведёт
+
+То есть, по факту, `StateKeeper` — это просто адаптер между внутренней системой хранения состояния в Decompose и системным `SavedStateRegistry`
+(а значит — тем самым `onSaveInstanceState` в `Activity`/`Fragment`, только более удобно и декларативно, и с поддержкой сериализации через `kotlinx.serialization`).
+
+Кратко по цепочке:
+
+1. В компоненте `DefaultCounterComponent` мы вызываем `consume`/`register` через интерфейс `StateKeeper`.
+2. `StateKeeper` реализован как `StateKeeperDispatcher`.
+3. `StateKeeperDispatcher` внутри себя хранит значения, сериализует их и регистрирует функцию для сохранения в системный `Bundle` через `SavedStateRegistry`.
+   Важно понять, что значения, которые мы регистрируем в `StateKeeper`, не вызывают напрямую `savedStateRegistry.registerSavedStateProvider` и не создают отдельные `SavedStateProvider`'ы.
+   Всё сохраняется централизованно — в одном объекте `StateKeeperDispatcher`, и только он регистрируется в `SavedStateRegistry`.
+4. Всё сериализуется и десериализуется через `kotlinx.serialization`, без `Parcelable`, `Bundle.putXXX()` и прочего boilerplate.
+
+Посмотрим интерфейс `StateKeeper` и его прямого наследника `StateKeeperDispatcher`:
+
+**com.arkivanov.essenty.statekeeper.StateKeeper.kt:**
+```kotlin
 /**
  * A key-value storage, typically used to persist data after process death or Android configuration changes.
  */
@@ -390,8 +478,7 @@ interface StateKeeper {
     fun isRegistered(key: String): Boolean
 }
 ```
-
-От него наследуется StateKeeperDispatcher:
+**com.arkivanov.essenty.statekeeper.StateKeeperDispatcher.kt:**
 ```kotlin
 /**
  * Represents a savable [StateKeeper].
@@ -412,10 +499,12 @@ fun StateKeeperDispatcher(savedState: SerializableContainer? = null): StateKeepe
     DefaultStateKeeperDispatcher(savedState)
 ```
 
-Тут так же видим метод StateKeeperDispatcher, который мы ранее уже видели, это был не класс, а фукнция StateKeeperDispatcher которая
-создает DefaultStateKeeperDispatcher:
-```kotlin
+Метод `save()` в `StateKeeperDispatcher` — это тот самый метод, который мы уже встречали ранее: `dispatcher.save()`. 
+Именно он вызывается в момент, когда Android собирается сохранить состояние активности или фрагмента, и через него сериализуются все зарегистрированные значения.
+Тут мы снова видим функцию `StateKeeperDispatcher`, которую уже встречали ранее. Напомню — это не класс, а фабричная функция,
+которая создаёт экземпляр `DefaultStateKeeperDispatcher` — единственную реализацию интерфейса `StateKeeperDispatcher`:
 
+```kotlin
 internal class DefaultStateKeeperDispatcher(
     savedState: SerializableContainer?,
 ) : StateKeeperDispatcher {
@@ -468,3 +557,56 @@ internal class DefaultStateKeeperDispatcher(
     )
 }
 ```
+
+Эта реализация управляет двумя основными структурами:
+
+* `savedState` — карта уже восстановленных значений из `SavedStateRegistry`, если они были сохранены ранее;
+* `suppliers` — все зарегистрированные поставщики значений, которые должны быть сериализованы при следующем сохранении состояния.
+
+Когда вызывается метод `save()`, он собирает все текущие значения из `suppliers`, сериализует их и упаковывает в `SerializableContainer`,
+который затем сохраняется системой. Восстановление происходит через метод `consume()`, где по ключу извлекается значение из `savedState` и десериализуется с помощью переданной стратегии.
+
+### Вывод
+
+Мы прошли весь путь — от компонента, использующего `stateKeeper.consume()` и `register()`, до конечного объекта, сериализуемого в `Bundle`.
+Разобрали, как `StateKeeper` цепляется к `SavedStateRegistry`, как значения хранятся внутри `StateKeeperDispatcher`, и как именно они сохраняются и восстанавливаются через сериализацию.
+
+`StateKeeper` — в android это обёртка над Android Saved State API, которая пришла на замену `onSaveInstanceState`, но реализована декларативно и кроссплатформенно.
+Она позволяет сохранять произвольные значения через `kotlinx.serialization`, без использования `Parcelable`, `Bundle.putX`, reflection и других низкоуровневых деталей.
+
+Давайте визуально глянем на цепочку вызовов что бы понять работу StateKeeper
+
+Отличное замечание — да, ты прав. `registerSavedStateProvider(...)` вызывается у `SavedStateRegistry`, и это важно показать, потому что именно здесь `StateKeeper` подвязывается к системной механике `onSaveInstanceState`.
+
+**`StateKeeper.register(...)`**:
+
+```
+DefaultCounterComponent  
+  └── stateKeeper.register(...)  
+        └── StateKeeper (интерфейс)  
+              └── StateKeeperDispatcher (интерфейс)  
+                    └── DefaultStateKeeperDispatcher.register(...)  
+                          ├── suppliers[key] = Supplier(...)
+
+StateKeeper(...) (создание при инициализации)  
+  └── SavedStateRegistry.registerSavedStateProvider(KEY_STATE)  
+        └── dispatcher.save()  
+              └── сериализация значений через kotlinx.serialization  
+                    └── SerializableContainer(...)  
+                          └── Bundle.putSerializable(KEY_STATE, ...)  
+```
+
+**`StateKeeper.consume(...)`**:
+
+```
+defaultComponentContext()  
+  └── stateKeeper(...)  
+        └── StateKeeper(...)  
+              └── StateKeeperDispatcher(savedState = ...)  
+                    └── DefaultStateKeeperDispatcher  
+                          └── consume(key, strategy)  
+                                └── SerializableContainer.remove(key)  
+                                      └── SerializableContainer.consume(strategy)  
+                                            └── kotlinx.serialization.decodeFromByteArray(...)  
+```
+
