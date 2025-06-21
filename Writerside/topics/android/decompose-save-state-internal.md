@@ -733,7 +733,7 @@ class DefaultCounterComponent(
 
 Теперь давайте посмотрим, как эта конструкция работает под капотом.
 
-Для начала определим, кто вообще отвечает за хранение `InstanceKeeper`. В Essenty/Decompose это интерфейс:
+Для начала определим, кто вообще отвечает за хранение `InstanceKeeper`. В Essenty (и, соответственно, в Decompose) это интерфейс:
 
 ```kotlin
 /**
@@ -775,7 +775,9 @@ class MainActivity : ComponentActivity() {
     }
 }
 ```
-Глянем еще раз в исходники фукнцйи defaultComponentContext:
+
+Посмотрим ещё раз на исходники `defaultComponentContext()`:
+
 ```kotlin
 fun <T> T.defaultComponentContext(
     discardSavedState: Boolean = false,
@@ -788,8 +790,8 @@ fun <T> T.defaultComponentContext(
         isStateSavingAllowed = isStateSavingAllowed,
     )
 ```
-Внутри по сути просто собираются все нужные зависимости и прокидываются чуть дальше — в ещё одну функцию-обёртку, где уже инициализируется
-всё, что нужно для хранения состояния:
+
+На этом уровне происходит лишь проксирование вызова — все зависимости собираются и передаются дальше, в приватную функцию:
 
 ```kotlin
 private fun <T> T.defaultComponentContext(
@@ -808,8 +810,10 @@ private fun <T> T.defaultComponentContext(
 }
 ```
 
-Ключевая строка здесь — `instanceKeeper = instanceKeeper(...)`. Давайте теперь посмотрим, что это за функция `instanceKeeper(...)`, 
-откуда она берёт значение и как реализована сама логика хранения.
+Ключевая строка здесь — `instanceKeeper = instanceKeeper(...)`.
+
+Вот она и есть точка, где создаётся (или восстанавливается) `InstanceKeeper`, и теперь наша задача — посмотреть, что за функция `instanceKeeper(...)`,
+как она устроена и как реализована логика хранения внутри.
 
 Видим что для создания InstanceKeeper вызывается функция `instanceKeeper`:
 ```kotlin
