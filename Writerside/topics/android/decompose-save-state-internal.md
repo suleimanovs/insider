@@ -705,7 +705,7 @@ class DefaultCounterComponent(
             }
         }
     ).state
-    
+
     fun increase() {
         model.value++
     }
@@ -723,6 +723,7 @@ class DefaultCounterComponent(
 <tip> Обратите внимание: блок `init` был удалён, а изменена только переменная `model`. Всё остальное осталось без изменений.</tip>
 
 Теперь давайте проверим поведение визуально:
+
 1. Как будет вести себя счётчик при изменении конфигурации (именно повороте экрана).
 2. Как будет вести себя счётчик при уничтожении процесса, когда приложение находится в фоне.
 
@@ -763,7 +764,7 @@ interface ComponentContext : GenericComponentContext<ComponentContext>
 
 Теперь разберёмся, **откуда приходит реализация**.
 
-В `MainActivity` мы создаём компонент верхнего уровня через функцию `defaultComponentContext()`. 
+В `MainActivity` мы создаём компонент верхнего уровня через функцию `defaultComponentContext()`.
 Именно она формирует `ComponentContext`, внедряя внутрь все нужные зависимости: `Lifecycle`, `StateKeeper`, `InstanceKeeper`, `BackHandler`.
 
 ```kotlin
@@ -812,10 +813,14 @@ private fun <T> T.defaultComponentContext(
 
 Ключевая строка здесь — `instanceKeeper = instanceKeeper(...)`.
 
-Вот она и есть точка, где создаётся (или восстанавливается) `InstanceKeeper`, и теперь наша задача — посмотреть, что за функция `instanceKeeper(...)`,
-как она устроена и как реализована логика хранения внутри.
+Это и есть та самая точка, где создаётся (или восстанавливается) `InstanceKeeper`. Теперь наша задача — разобраться, что это за функция
+`instanceKeeper(...)`, как она устроена и как реализована логика хранения внутри.
 
-Видим что для создания InstanceKeeper вызывается функция `instanceKeeper`:
+Начнём с того, что `instanceKeeper` — это функция-расширение для `ViewModelStoreOwner`.
+Она становится доступной внутри `defaultComponentContext`, потому что его дженерик явно требует, чтобы вызывающий объект реализовывал
+интерфейс `ViewModelStoreOwner`.
+Это условие обеспечивает доступ к `ViewModelStore`, который и передаётся внутрь `InstanceKeeper(...)`. Вот сигнатура этой функции:
+
 ```kotlin
 /**
  * Creates a new instance of [InstanceKeeper] and attaches it to the AndroidX [ViewModelStore].
@@ -827,9 +832,8 @@ fun ViewModelStoreOwner.instanceKeeper(discardRetainedInstances: Boolean = false
     InstanceKeeper(viewModelStore = viewModelStore, discardRetainedInstances = discardRetainedInstances)
 ```
 
-Видим что функция instanceKeeper является расширением для ViewModelStoreOwner, этот вызов внутри defaultComponentContext возможен
-потому что дженнерик у фукнций defaultComponentContext явно требует что бы дженнерик был наследников интерфейса ViewModelStoreOwner,
-видим что идет обращение к InstanceKeeper, хоть и выглядит как класс, на самом деле это фукнция:
+На первый взгляд кажется, что `InstanceKeeper` — это класс, но в данном случае это вовсе не конструктор, а функция,
+возвращающая реализацию интерфейса `InstanceKeeper`. Вот как она устроена:
 
 ```kotlin
 /**
@@ -858,12 +862,17 @@ fun InstanceKeeper(
         .instanceKeeperDispatcher
 ```
 
-И тут все то очевидно, InstanceKeeper сущность для Android полагается на саму ViewModel которую использует внутри неявно, на уровне
-самого апи даже нет намека на это, видим инициализацию и создание ViewModel-и, а именно InstanceKeeperViewModel,
-далее у этой ViewModel идет обращение к instanceKeeperDispatcher, далее тело самого InstanceKeeperViewModel:
+Теперь становится понятно: реализация `InstanceKeeper` на Android напрямую завязана на `ViewModelStore`. Концепция долгоживущих объектов
+реализована здесь через обёртку вокруг обычной `ViewModel`.
+
+Создаётся `InstanceKeeperViewModel`, и далее из неё извлекается `instanceKeeperDispatcher`, который и возвращается как `InstanceKeeper`.
+
+Само API на первый взгляд кажется абстрактным и независимым от Android, но под капотом — чистый `ViewModel`. Причём внутри всей этой логики
+нет даже намёка на то, что используется Android ViewModel — всё скрыто за интерфейсом `InstanceKeeper`.
+
+Вот как устроена InstanceKeeperViewModel:
 
 ```kotlin
-
 internal class InstanceKeeperViewModel : ViewModel() {
     var instanceKeeperDispatcher: InstanceKeeperDispatcher = InstanceKeeperDispatcher()
         private set
@@ -879,10 +888,14 @@ internal class InstanceKeeperViewModel : ViewModel() {
 }
 ```
 
-//TODO для chatgpt: тут нужно просто пару слов с обьяснением внутренности этой ViewModel и полей
+Что здесь важно:
+* `instanceKeeperDispatcher` — это и есть хранилище всех зарегистрированных экземпляров (`InstanceKeeper.Instance`).
+* Метод `onCleared()` вызывается, когда ViewModel удаляется из `ViewModelStore`. Он вызывает `destroy()` у `dispatcher`, уничтожая все зарегистрированные экземпляры.
+* Метод `recreate()` позволяет вручную сбросить все ранее сохранённые экземпляры — полезно, если нужно очистить состояние при пересоздании компонента.
+
+После того как мы поняли, что `InstanceKeeperViewModel` возвращает `instanceKeeperDispatcher`, возникает логичный вопрос — что он из себя представляет.
 
 ```kotlin
-
 /**
  * Represents a destroyable [InstanceKeeper].
  */
@@ -894,7 +907,18 @@ interface InstanceKeeperDispatcher : InstanceKeeper {
      */
     fun destroy()
 }
+```
 
+`InstanceKeeperDispatcher` — это интерфейс, расширяющий `InstanceKeeper` и добавляющий к нему жизненно важную функцию `destroy()`.
+Она уничтожает все текущие экземпляры `Instance`, но не очищает их из внутреннего хранилища — к ним всё ещё можно обращаться при необходимости.
+Однако любые новые экземпляры, созданные после вызова `destroy()`, уничтожаются сразу.
+
+Метод `destroy()` вызывается системой тогда, когда жизненный цикл компонента подходит к концу — например, при полном удалении из back stack.
+Это позволяет вовремя освободить ресурсы и завершить фоновые задачи.
+
+Реализация создаётся через фабричную функцию:
+
+```kotlin
 /**
  * Creates a default implementation of [InstanceKeeperDispatcher].
  */
@@ -902,11 +926,9 @@ interface InstanceKeeperDispatcher : InstanceKeeper {
 fun InstanceKeeperDispatcher(): InstanceKeeperDispatcher = DefaultInstanceKeeperDispatcher()
 ```
 
-//TODO для chatgpt: тут тоже
+Теперь разберём, что собой представляет сам `InstanceKeeper`.
 
 ```kotlin
-
-
 /**
  * A generic keyed store of [Instance] objects. Instances are destroyed at the end of the
  * [InstanceKeeper]'s scope, which is typically tied to the scope of a back stack entry.
@@ -915,41 +937,30 @@ fun InstanceKeeperDispatcher(): InstanceKeeperDispatcher = DefaultInstanceKeeper
  */
 interface InstanceKeeper {
 
-    /**
-     * Returns an instance with the given [key], or `null` if no instance with the given key exists.
-     */
     fun get(key: Any): Instance?
 
-    /**
-     * Stores the given [instance] with the given [key]. Throws [IllegalStateException] if another
-     * instance is already registered with the given [key].
-     */
     fun put(key: Any, instance: Instance)
 
-    /**
-     * Removes an instance with the given [key]. This does not destroy the instance.
-     */
     fun remove(key: Any): Instance?
 
-    /**
-     * Represents a destroyable instance.
-     */
     interface Instance {
-
-        /**
-         * Called at the end of the [InstanceKeeper]'s scope.
-         */
         fun onDestroy() {}
     }
 
-    /**
-     * Are simple [Instance] wrapper for cases when destroying is not required.
-     */
     class SimpleInstance<out T>(val instance: T) : Instance
 }
 ```
 
-//TODO для chatgpt: тут тоже, немного про интерфейс Instance тоже
+`InstanceKeeper` — это ключевое хранилище долгоживущих объектов, которые переживают конфигурационные изменения,
+но уничтожаются при окончательном завершении жизненного цикла компонента. Типичный пример — удаление элемента из back stack.
+
+Хранилище работает по принципу `key -> Instance` и предоставляет методы для получения, сохранения и удаления объектов.
+
+Сам интерфейс `Instance` минимален: чтобы объект стал управляемым, нужно реализовать единственный метод `onDestroy()`.
+Он будет вызван системой при уничтожении компонента — это аналог `onCleared()` у `ViewModel`, но с более гибким контролем.
+
+А для случаев, когда никакая очистка не требуется, можно использовать обёртку `SimpleInstance`.
+Она реализует `Instance`, но ничего не делает в `onDestroy()` — просто оборачивает ваш объект и делает его совместимым с `InstanceKeeper`.
 
 ```kotlin
 
