@@ -712,11 +712,34 @@ ViewRootImpl
                 └── AndroidComposeView -> имеет слабую ссылку на ViewModelStoreOwner (то есть активити)
 ```
 
+
+<note title="Интересный факт" >
+
+ViewRootImpl - самый коренной контейнер в ииерахий View, на практике каждый хоть раз сталкаивался с ошибкой:
+"Only the original thread that created a view hierarchy can touch its views." - при вызове методов View вне главного потока, так
+вот эту ошибку выбрасывает ViewRootImpl
+
+```java
+
+public final class ViewRootImpl implements ViewParent, ...{
+    
+        }
+    void checkThread() {
+        Thread current = Thread.currentThread();
+        if (mThread != current) {
+            throw new CalledFromWrongThreadException(
+                    "Only the original thread that created a view hierarchy can touch its views."
+                            + " Expected: " + mThread.getName()
+                            + " Calling: " + current.getName());
+        }
+    }
+}
+```
+</note>
+
 Ключевая мысль — `LocalView` по умолчанию указывает на `AndroidComposeView`, который создаётся внутри `ComposeView`
 динамически. Сам `ComposeView` — просто оболочка, которая знает, как всё связать и встроить дерево `Composable` в нужное
 место иерархии.
-
----
 
 Тут мы рассмотрели первый кейс, когда мы используем ComponentActicity.setContent{} с передачей нашей композиции и
 создания ViewModel. Второй флоу использования — это внутри иерархии View, например, если у нас все экраны на

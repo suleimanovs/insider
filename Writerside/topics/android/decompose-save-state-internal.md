@@ -645,6 +645,10 @@ internal class DefaultStateKeeperDispatcher(
 Отличное замечание — да, ты прав. `registerSavedStateProvider(...)` вызывается у `SavedStateRegistry`, и это важно показать, потому что
 именно здесь `StateKeeper` подвязывается к системной механике `onSaveInstanceState`.
 
+Вот диаграмма в твоём формате, уже отредактированная с учётом точности и согласованности ключей:
+
+---
+
 **`StateKeeper.register(...)`**:
 
 ```
@@ -653,14 +657,14 @@ DefaultCounterComponent
         └── StateKeeper (интерфейс)  
               └── StateKeeperDispatcher (интерфейс)  
                     └── DefaultStateKeeperDispatcher.register(...)  
-                          ├── suppliers[key] = Supplier(...)
+                          └── suppliers[key] = Supplier(...)
 
-StateKeeper(...) (создание при инициализации)  
-  └── SavedStateRegistry.registerSavedStateProvider(KEY_STATE)  
+StateKeeper(...) // создание при инициализации  
+  └── SavedStateRegistry.registerSavedStateProvider("state_keeper_key")  
         └── dispatcher.save()  
               └── сериализация значений через kotlinx.serialization  
-                    └── SerializableContainer(...)  
-                          └── Bundle.putSerializable(KEY_STATE, ...)  
+                    └── оборачивание в SerializableContainer  
+                          └── Bundle.putSerializable("state", ...)
 ```
 
 **`StateKeeper.consume(...)`**:
@@ -670,10 +674,10 @@ defaultComponentContext()
   └── stateKeeper(...)  
         └── StateKeeper(...)  
               └── StateKeeperDispatcher(savedState = ...)  
-                    └── DefaultStateKeeperDispatcher  
-                          └── consume(key, strategy)  
-                                └── SerializableContainer.remove(key)  
-                                      └── SerializableContainer.consume(strategy)  
-                                            └── kotlinx.serialization.decodeFromByteArray(...)  
+                    └── DefaultStateKeeperDispatcher.consume(key, strategy)  
+                          └── savedState.remove(key)?.consume(strategy)  
+                                └── SerializableContainer.consume(strategy)  
+                                      └── kotlinx.serialization.decodeFromByteArray(...)
 ```
+Далее рассмоnhb
 
