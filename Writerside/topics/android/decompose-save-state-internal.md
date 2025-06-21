@@ -126,7 +126,7 @@ class MainActivity : ComponentActivity() {
 }
 ```
 
-Давайте визуально проверим:
+Теперь давайте проверим поведение визуально:
 
 1. Как будет вести себя счётчик при изменении конфигурации (именно повороте экрана).
 2. Как будет вести себя счётчик при уничтожении процесса, когда приложение находится в фоне.
@@ -416,7 +416,8 @@ class SerializableContainer private constructor(
 
 Это даёт контроль над моментом сериализации и возможность отложенной обработки.
 
-Теперь о том, как это всё оказывается внутри `Bundle`. Ниже — вспомогательные функции, которые используются внутри библиотеки Essenty/Decompose для
+Теперь о том, как это всё оказывается внутри `Bundle`. Ниже — вспомогательные функции, которые используются внутри библиотеки
+Essenty/Decompose для
 сериализации и десериализации `SerializableContainer` и произвольных объектов, вызовы которых мы уже встречали в фукнций StateKeeper:
 
 ```kotlin
@@ -537,13 +538,13 @@ interface StateKeeper {
     fun isRegistered(key: String): Boolean
 }
 ```
+
 Вот чуть более развернутые описания методов `StateKeeper`, по одному предложению на каждый:
 
 1. **`consume`** — извлекает и удаляет ранее сохранённое значение по заданному ключу, используя стратегию десериализации.
 2. **`register`** — регистрирует поставщика значения, которое будет сериализовано и сохранено при следующем сохранении состояния.
 3. **`unregister`** — удаляет ранее зарегистрированного поставщика, чтобы его значение больше не сохранялось.
 4. **`isRegistered`** — возвращает `true`, если по указанному ключу уже зарегистрирован поставщик значения.
-
 
 **com.arkivanov.essenty.statekeeper.StateKeeperDispatcher.kt:**
 
@@ -680,16 +681,16 @@ defaultComponentContext()
                                       └── kotlinx.serialization.decodeFromByteArray(...)
 ```
 
-Далее рассмотрим другой механизм сохронения состояние в Decompose, а если быть точнее в Essenty
+Теперь разберём другой механизм сохранения состояния в Decompose — точнее, в библиотеке **Essenty**, на которой всё построено.
 
 ## InstanceKeeper
 
-Далее рассмотрим компонент InstanceKeeper, один из всадников ComponentContext, давайте узнаем его определение:
-InstanceKeeper в Decompose — это механизм для хранения произвольных объектов (обычно — долгоживущих), которые не должны уничтожаться при
-конфигурационных изменениях (например, при повороте экрана). Это аналог ViewModel из Android Jetpack, но в кроссплатформенном (KMP)
-контексте.
+**InstanceKeeper** — это один из "всадников" `ComponentContext`. Его задача — сохранять произвольные объекты, которые не должны уничтожаться
+при конфигурационных изменениях (например, при повороте экрана). Это аналог `ViewModel` из Android Jetpack, но в контексте
+кроссплатформенной разработки (KMP).
 
-Давайте наш компонент с DefaultComponentCounter переделаем для испольщования InstanceKeeper вместо StateKeeper:
+Переделаем наш компонент `DefaultCounterComponent`, чтобы вместо `StateKeeper` использовать `InstanceKeeper`:
+
 ```kotlin
 
 class DefaultCounterComponent(
@@ -698,10 +699,13 @@ class DefaultCounterComponent(
 
     val model: StateFlow<Int> field = instanceKeeper.getOrCreate(
         key = KEY,
-        factory = { object : InstanceKeeper.Instance { val state = MutableStateFlow(0) } }
+        factory = {
+            object : InstanceKeeper.Instance {
+                val state = MutableStateFlow(0)
+            }
+        }
     ).state
-
-
+    
     fun increase() {
         model.value++
     }
@@ -715,21 +719,19 @@ class DefaultCounterComponent(
     }
 }
 ```
-<note> 
-Был удален init блок, и изменена только сама переменная model, остальное осталось как было:
-</note>
 
-Давайте визуально проверим:
+<tip> Обратите внимание: блок `init` был удалён, а изменена только переменная `model`. Всё остальное осталось без изменений.</tip>
 
+Теперь давайте проверим поведение визуально:
 1. Как будет вести себя счётчик при изменении конфигурации (именно повороте экрана).
 2. Как будет вести себя счётчик при уничтожении процесса, когда приложение находится в фоне.
 
 ![Screenshot](instanceKeeper.gif)
 
-Что мы видим? наш counter умеет переживать изменений конфигураций, но не умеет переживать смерть процесса, это то поведение как
-у ViewModel, то что требуется от InstanceKeeper, давайте теперь поймем как работает это консртукция под капотом:
+Что мы видим? Счётчик переживает поворот экрана, но обнуляется при смерти процесса. Это как раз поведение `ViewModel`, и именно этого мы
+ожидаем от `InstanceKeeper`.
 
-Начнем с того откуда береться у ComponentContext, все дело в том что он наследуется от интерфейса :
+Теперь давайте посмотрим, как эта конструкция работает под капотом.
 
 ```kotlin
 /**
@@ -785,7 +787,7 @@ private fun <T> T.defaultComponentContext(
     isStateSavingAllowed: () -> Boolean,
 ): DefaultComponentContext where
         T : SavedStateRegistryOwner, T : ViewModelStoreOwner, T : LifecycleOwner {
-    ...        
+    ...
     return DefaultComponentContext(
         lifecycle = lifecycle.asEssentyLifecycle(),
         stateKeeper = stateKeeper,
@@ -810,6 +812,7 @@ fun ViewModelStoreOwner.instanceKeeper(discardRetainedInstances: Boolean = false
 Видим что функция instanceKeeper является расширением для ViewModelStoreOwner, этот вызов внутри defaultComponentContext возможен
 потому что дженнерик у фукнций defaultComponentContext явно требует что бы дженнерик был наследников интерфейса ViewModelStoreOwner,
 видим что идет обращение к InstanceKeeper, хоть и выглядит как класс, на самом деле это фукнция:
+
 ```kotlin
 /**
  * Creates a new instance of [InstanceKeeper] and attaches it to the provided AndroidX [ViewModelStore].
@@ -840,6 +843,7 @@ fun InstanceKeeper(
 И тут все то очевидно, InstanceKeeper сущность для Android полагается на саму ViewModel которую использует внутри неявно, на уровне
 самого апи даже нет намека на это, видим инициализацию и создание ViewModel-и, а именно InstanceKeeperViewModel,
 далее у этой ViewModel идет обращение к instanceKeeperDispatcher, далее тело самого InstanceKeeperViewModel:
+
 ```kotlin
 
 internal class InstanceKeeperViewModel : ViewModel() {
@@ -858,6 +862,7 @@ internal class InstanceKeeperViewModel : ViewModel() {
 ```
 
 //TODO для chatgpt: тут нужно просто пару слов с обьяснением внутренности этой ViewModel и полей
+
 ```kotlin
 
 /**
@@ -878,7 +883,9 @@ interface InstanceKeeperDispatcher : InstanceKeeper {
 @JsName("instanceKeeperDispatcher")
 fun InstanceKeeperDispatcher(): InstanceKeeperDispatcher = DefaultInstanceKeeperDispatcher()
 ```
+
 //TODO для chatgpt: тут тоже
+
 ```kotlin
 
 
@@ -925,6 +932,7 @@ interface InstanceKeeper {
 ```
 
 //TODO для chatgpt: тут тоже, немного про интерфейс Instance тоже
+
 ```kotlin
 
 
@@ -958,9 +966,11 @@ internal class DefaultInstanceKeeperDispatcher : InstanceKeeperDispatcher {
 }
 
 ```
+
 //TODO для chatgpt: тут тоже
 
 Мы в нашем компоненте DefaulConterComponent использовали не фукнцию , а функцию getOrCreate:
+
 ```kotlin
 /**
  * Returns a previously stored [InstanceKeeper.Instance] of type [T] with the given key,
