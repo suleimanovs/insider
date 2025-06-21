@@ -131,7 +131,7 @@ class MainActivity : ComponentActivity() {
 1. Как будет вести себя счётчик при изменении конфигурации (именно повороте экрана).
 2. Как будет вести себя счётчик при уничтожении процесса, когда приложение находится в фоне.
 
-![Screenshot](output.gif)
+![Screenshot](stateKeeper.gif)
 
 Как видим, всё работает ровно так, как ожидалось. При этом мы не видим здесь ни методов `onSaveInstanceState`, ни `ViewModel`. Давайте снова
 взглянем на компонент счётчика:
@@ -166,7 +166,7 @@ class DefaultCounterComponent(
 
 ```kotlin
 /**
- * Представляет собой держатель [StateKeeper].
+ * Represents a holder of [StateKeeper].
  */
 interface StateKeeperOwner {
 
@@ -537,6 +537,13 @@ interface StateKeeper {
     fun isRegistered(key: String): Boolean
 }
 ```
+Вот чуть более развернутые описания методов `StateKeeper`, по одному предложению на каждый:
+
+1. **`consume`** — извлекает и удаляет ранее сохранённое значение по заданному ключу, используя стратегию десериализации.
+2. **`register`** — регистрирует поставщика значения, которое будет сериализовано и сохранено при следующем сохранении состояния.
+3. **`unregister`** — удаляет ранее зарегистрированного поставщика, чтобы его значение больше не сохранялось.
+4. **`isRegistered`** — возвращает `true`, если по указанному ключу уже зарегистрирован поставщик значения.
+
 
 **com.arkivanov.essenty.statekeeper.StateKeeperDispatcher.kt:**
 
@@ -679,5 +686,298 @@ defaultComponentContext()
                                 └── SerializableContainer.consume(strategy)  
                                       └── kotlinx.serialization.decodeFromByteArray(...)
 ```
-Далее рассмоnhb
 
+Далее рассмотрим компонент InstanceKeeper, один из всадников ComponentContext, давайте узнаем его определение:
+InstanceKeeper в Decompose — это механизм для хранения произвольных объектов (обычно — долгоживущих), которые не должны уничтожаться при
+конфигурационных изменениях (например, при повороте экрана). Это аналог ViewModel из Android Jetpack, но в кроссплатформенном (KMP)
+контексте.
+
+Давайте наш компонент с DefaultComponentCounter переделаем для испольщования InstanceKeeper вместо StateKeeper:
+```kotlin
+
+class DefaultCounterComponent(
+    componentContext: ComponentContext
+) : ComponentContext by componentContext {
+
+    val model: StateFlow<Int> field = instanceKeeper.getOrCreate(
+        key = KEY,
+        factory = { object : InstanceKeeper.Instance { val state = MutableStateFlow(0) } }
+    ).state
+
+
+    fun increase() {
+        model.value++
+    }
+
+    fun decrease() {
+        model.value--
+    }
+
+    companion object {
+        private const val KEY = "counter_state"
+    }
+}
+```
+<note> 
+Был удален init блок, и изменена только сама переменная model, остальное осталось как было:
+</note>
+
+Давайте визуально проверим:
+
+1. Как будет вести себя счётчик при изменении конфигурации (именно повороте экрана).
+2. Как будет вести себя счётчик при уничтожении процесса, когда приложение находится в фоне.
+
+![Screenshot](instanceKeeper.gif)
+
+Что мы видим? наш counter умеет переживать изменений конфигураций, но не умеет переживать смерть процесса, это то поведение как
+у ViewModel, то что требуется от InstanceKeeper, давайте теперь поймем как работает это консртукция под капотом:
+
+Начнем с того откуда береться у ComponentContext, все дело в том что он наследуется от интерфейса :
+
+```kotlin
+/**
+ * Represents a holder of [InstanceKeeper].
+ */
+interface InstanceKeeperOwner {
+
+    val instanceKeeper: InstanceKeeper
+}
+
+
+/**
+ * A generic component context that extends [LifecycleOwner], [StateKeeperOwner],
+ * [InstanceKeeperOwner] and [BackHandlerOwner] interfaces, and also able to create
+ * new instances of itself via [ComponentContextFactory].
+ */
+interface GenericComponentContext<out T : Any> :
+    LifecycleOwner,
+    StateKeeperOwner,
+    InstanceKeeperOwner,
+    BackHandlerOwner,
+    ComponentContextFactoryOwner<T>
+
+
+interface ComponentContext : GenericComponentContext<ComponentContext>
+```
+
+Таким образом, цепочка наследования выглядит так:
+`InstanceKeeperOwner` ← `GenericComponentContext` ← `ComponentContext`.
+
+Давайте начнем с того как создается InstanceKeeper
+
+А в `MainActivity` создаём `ComponentContext`, используя готовую extension-функцию `defaultComponentContext`,
+которая за нас уже создаёт `ComponentContext` со всеми нужными компонентами, вроде `InstanceKeeper`:
+
+```kotlin
+class MainActivity : ComponentActivity() {
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        ...
+        val counterComponent = DefaultCounterComponent(defaultComponentContext())
+        ...
+    }
+}
+```
+
+Пропустим промежуточные методы которых мы уже встретили при разборе StateKeeper статье, и сразу к сути:
+
+```kotlin
+private fun <T> T.defaultComponentContext(
+    backHandler: BackHandler?,
+    discardSavedState: Boolean,
+    isStateSavingAllowed: () -> Boolean,
+): DefaultComponentContext where
+        T : SavedStateRegistryOwner, T : ViewModelStoreOwner, T : LifecycleOwner {
+    ...        
+    return DefaultComponentContext(
+        lifecycle = lifecycle.asEssentyLifecycle(),
+        stateKeeper = stateKeeper,
+        instanceKeeper = instanceKeeper(discardRetainedInstances = marker == null),
+        backHandler = backHandler,
+    )
+}
+```
+
+Видим что для создания InstanceKeeper вызывается функция `instanceKeeper`:
+```kotlin
+/**
+ * Creates a new instance of [InstanceKeeper] and attaches it to the AndroidX [ViewModelStore].
+ *
+ * @param discardRetainedInstances a flag indicating whether any previously retained instances should be
+ * discarded and destroyed or not, default value is `false`.
+ */
+fun ViewModelStoreOwner.instanceKeeper(discardRetainedInstances: Boolean = false): InstanceKeeper =
+    InstanceKeeper(viewModelStore = viewModelStore, discardRetainedInstances = discardRetainedInstances)
+```
+
+Видим что функция instanceKeeper является расширением для ViewModelStoreOwner, этот вызов внутри defaultComponentContext возможен
+потому что дженнерик у фукнций defaultComponentContext явно требует что бы дженнерик был наследников интерфейса ViewModelStoreOwner,
+видим что идет обращение к InstanceKeeper, хоть и выглядит как класс, на самом деле это фукнция:
+```kotlin
+/**
+ * Creates a new instance of [InstanceKeeper] and attaches it to the provided AndroidX [ViewModelStore].
+ *
+ * @param discardRetainedInstances a flag indicating whether any previously retained instances should be
+ * discarded and destroyed or not, default value is `false`.
+ */
+fun InstanceKeeper(
+    viewModelStore: ViewModelStore,
+    discardRetainedInstances: Boolean = false,
+): InstanceKeeper =
+    ViewModelProvider(
+        viewModelStore,
+        object : ViewModelProvider.Factory {
+            @Suppress("UNCHECKED_CAST")
+            override fun <T : ViewModel> create(modelClass: Class<T>): T = InstanceKeeperViewModel() as T
+        }
+    )
+        .get<InstanceKeeperViewModel>()
+        .apply {
+            if (discardRetainedInstances) {
+                recreate()
+            }
+        }
+        .instanceKeeperDispatcher
+```
+
+И тут все то очевидно, InstanceKeeper сущность для Android полагается на саму ViewModel которую использует внутри неявно, на уровне
+самого апи даже нет намека на это, видим инициализацию и создание ViewModel-и, а именно InstanceKeeperViewModel,
+далее у этой ViewModel идет обращение к instanceKeeperDispatcher, далее тело самого InstanceKeeperViewModel:
+```kotlin
+
+internal class InstanceKeeperViewModel : ViewModel() {
+    var instanceKeeperDispatcher: InstanceKeeperDispatcher = InstanceKeeperDispatcher()
+        private set
+
+    override fun onCleared() {
+        instanceKeeperDispatcher.destroy()
+    }
+
+    fun recreate() {
+        instanceKeeperDispatcher.destroy()
+        instanceKeeperDispatcher = InstanceKeeperDispatcher()
+    }
+}
+```
+
+//TODO для chatgpt: тут нужно просто пару слов с обьяснением внутренности этой ViewModel и полей
+```kotlin
+
+/**
+ * Represents a destroyable [InstanceKeeper].
+ */
+interface InstanceKeeperDispatcher : InstanceKeeper {
+
+    /**
+     * Destroys all existing instances. Instances are not cleared, so that they can be
+     * accessed later. Any new instances will be immediately destroyed.
+     */
+    fun destroy()
+}
+
+/**
+ * Creates a default implementation of [InstanceKeeperDispatcher].
+ */
+@JsName("instanceKeeperDispatcher")
+fun InstanceKeeperDispatcher(): InstanceKeeperDispatcher = DefaultInstanceKeeperDispatcher()
+```
+//TODO для chatgpt: тут тоже
+```kotlin
+
+
+/**
+ * A generic keyed store of [Instance] objects. Instances are destroyed at the end of the
+ * [InstanceKeeper]'s scope, which is typically tied to the scope of a back stack entry.
+ * E.g. instances are retained over Android configuration changes, and destroyed when the
+ * corresponding back stack entry is popped.
+ */
+interface InstanceKeeper {
+
+    /**
+     * Returns an instance with the given [key], or `null` if no instance with the given key exists.
+     */
+    fun get(key: Any): Instance?
+
+    /**
+     * Stores the given [instance] with the given [key]. Throws [IllegalStateException] if another
+     * instance is already registered with the given [key].
+     */
+    fun put(key: Any, instance: Instance)
+
+    /**
+     * Removes an instance with the given [key]. This does not destroy the instance.
+     */
+    fun remove(key: Any): Instance?
+
+    /**
+     * Represents a destroyable instance.
+     */
+    interface Instance {
+
+        /**
+         * Called at the end of the [InstanceKeeper]'s scope.
+         */
+        fun onDestroy() {}
+    }
+
+    /**
+     * Are simple [Instance] wrapper for cases when destroying is not required.
+     */
+    class SimpleInstance<out T>(val instance: T) : Instance
+}
+```
+
+//TODO для chatgpt: тут тоже, немного про интерфейс Instance тоже
+```kotlin
+
+
+internal class DefaultInstanceKeeperDispatcher : InstanceKeeperDispatcher {
+
+    private val map = HashMap<Any, Instance>()
+    private var isDestroyed = false
+
+    override fun get(key: Any): Instance? =
+        map[key]
+
+    override fun put(key: Any, instance: Instance) {
+        check(key !in map) { "Another instance is already associated with the key: $key" }
+
+        map[key] = instance
+
+        if (isDestroyed) {
+            instance.onDestroy()
+        }
+    }
+
+    override fun remove(key: Any): Instance? =
+        map.remove(key)
+
+    override fun destroy() {
+        if (!isDestroyed) {
+            isDestroyed = true
+            map.values.toList().forEach(Instance::onDestroy)
+        }
+    }
+}
+
+```
+//TODO для chatgpt: тут тоже
+
+Мы в нашем компоненте DefaulConterComponent использовали не фукнцию , а функцию getOrCreate:
+```kotlin
+/**
+ * Returns a previously stored [InstanceKeeper.Instance] of type [T] with the given key,
+ * or creates and stores a new one if it doesn't exist.
+ */
+inline fun <T : InstanceKeeper.Instance> InstanceKeeper.getOrCreate(key: Any, factory: () -> T): T {
+    @Suppress("UNCHECKED_CAST") // Assuming the type per key is always the same
+    var instance: T? = get(key) as T?
+    if (instance == null) {
+        instance = factory()
+        put(key, instance)
+    }
+
+    return instance
+}
+
+```
