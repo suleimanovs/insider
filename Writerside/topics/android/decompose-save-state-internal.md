@@ -347,10 +347,6 @@ fun StateKeeper(
 Это универсальная обёртка, которая хранит сериализованные данные в виде `ByteArray`, кодирует их в строку (через `Base64`) и позволяет положить всё это в `Bundle` без `Parcelable`.
 В момент восстановления, всё это снова превращается в объект: строка → байты → десериализация через `kotlinx.serialization`.
 
-Вот как можно **естественно и по стилю статьи** встроить объяснение `SerializableContainer` в конец блока *"Что реально происходит внутри `StateKeeper`"* — **без AI-интонации**, но сохраняя техническую точность и логику:
-
----
-
 Таким образом, при сохранении состояния через `dispatcher.save()` создаётся сериализуемый объект, который кладётся в `Bundle`.
 Самое интересное — это не то, как сериализуются данные, а во что они оборачиваются. Это не Parcelable, и не Serializable, а SerializableContainer.
 
@@ -402,7 +398,7 @@ class SerializableContainer private constructor(
 
 На практике это значит следующее:
 
-* Cохраняеncz объект через `set(value, strategy)`
+* Сохраняется объект через `set(value, strategy)`
 * При сериализации объект превращается в `ByteArray`, потом в `Base64`, и кодируется в строку (это и кладётся в `Bundle`)
 * При восстановлении — строка обратно в байты, байты обратно в объект через `deserialize`
 
@@ -410,21 +406,52 @@ class SerializableContainer private constructor(
 
 Ниже — вспомогательные функции из библиотеки, которые использовались внутри функций StateKeeper(...) для сохранения и восстановления SerializableContainer через обычный Bundle:
 ```kotlin
-
-fun <T : Any> PersistableBundle.putSerializable(key: String?, value: T?, strategy: SerializationStrategy<T>) {
-    putString(key, value?.serialize(strategy)?.toBase64())
+fun <T : Any> Bundle.putSerializable(key: String?, value: T?, strategy: SerializationStrategy<T>) {
+   putParcelable(key, ValueHolder(value = value, bytes = lazy { value?.serialize(strategy) }))
 }
 
-fun <T : Any> PersistableBundle.getSerializable(key: String?, strategy: DeserializationStrategy<T>): T? =
-    getString(key)?.base64ToByteArray()?.deserialize(strategy)
+fun <T : Any> Bundle.getSerializable(key: String?, strategy: DeserializationStrategy<T>): T? =
+   getParcelableCompat<ValueHolder<T>>(key)?.let { holder ->
+      holder.value ?: holder.bytes.value?.deserialize(strategy)
+   }
 
-fun PersistableBundle.putSerializableContainer(key: String?, value: SerializableContainer?) {
-    putSerializable(key = key, value = value, strategy = SerializableContainer.serializer())
+@Suppress("DEPRECATION")
+private inline fun <reified T : Parcelable> Bundle.getParcelableCompat(key: String?): T? =
+   classLoader.let { savedClassLoader ->
+      try {
+         classLoader = T::class.java.classLoader
+         getParcelable(key) as T?
+      } finally {
+         classLoader = savedClassLoader
+      }
+   }
+
+fun Bundle.putSerializableContainer(key: String?, value: SerializableContainer?) {
+   putSerializable(key = key, value = value, strategy = SerializableContainer.serializer())
 }
 
-fun PersistableBundle.getSerializableContainer(key: String?): SerializableContainer? =
-    getSerializable(key = key, strategy = SerializableContainer.serializer())
 
+fun Bundle.getSerializableContainer(key: String?): SerializableContainer? =
+   getSerializable(key = key, strategy = SerializableContainer.serializer())
+
+private class ValueHolder<out T : Any>(
+   val value: T?,
+   val bytes: Lazy<ByteArray?>,
+) : Parcelable {
+   override fun writeToParcel(dest: Parcel, flags: Int) {
+      dest.writeByteArray(bytes.value)
+   }
+
+   override fun describeContents(): Int = 0
+
+   companion object CREATOR : Parcelable.Creator<ValueHolder<Any>> {
+      override fun createFromParcel(parcel: Parcel): ValueHolder<Any> =
+         ValueHolder(value = null, bytes = lazyOf(parcel.createByteArray()))
+
+      override fun newArray(size: Int): Array<ValueHolder<Any>?> =
+         arrayOfNulls(size)
+   }
+}
 ```
 ### К чему это всё ведёт
 
