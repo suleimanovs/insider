@@ -433,10 +433,6 @@ private fun ensureViewModelStore() {
 }
 ```
 
-Исправленный вариант с улучшенной читаемостью и точностью формулировок:
-
----  
-
 Тут-то и начинается самое интересное. Если поле `_viewModelStore` равно `null`, сначала выполняется попытка получить 
 его из метода `getLastNonConfigurationInstance()`, который возвращает объект класса `NonConfigurationInstances`.
 

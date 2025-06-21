@@ -48,11 +48,11 @@
 * **InstanceKeeperOwner** — даёт возможность сохранять любые объекты внутри компонента (аналог `ViewModel` в AndroidX).
 * **BackHandlerOwner** — позволяет каждому компоненту обрабатывать нажатие кнопки «назад».
 
-Основное внимание мы уделим именно `StateKeeperOwner` и `InstanceKeeperOwner`. Как видно, они на самом деле тянутся из библиотеки
-**Essenty**, которая также была создана Аркадием Ивановым. Однако особую популярность эта библиотека получила именно благодаря **Decompose
-**.
+Основное внимание мы уделим именно `StateKeeperOwner`(`StateKeeper`) и `InstanceKeeperOwner`(`InstanceKeeper`).
+Как видно, они на самом деле тянутся из библиотеки **Essenty**, которая также была создана Аркадием Ивановым. 
+Однако особую популярность эта библиотека получила именно благодаря **Decompose**.
 
-Начнём углубляться в работу `StateKeeperOwner`. Я буду полагаться на то, что вы уже читали предыдущие статьи. Давайте начнём.
+Начнём углубляться в работу `StateKeeperOwner`(`StateKeeper`). Я буду полагаться на то, что вы уже читали предыдущие статьи. Давайте начнём.
 
 ## StateKeeperOwner
 
@@ -89,7 +89,7 @@ class DefaultCounterComponent(
 Довольно простая логика: у нас есть `model`, который хранит текущее значение счётчика, и два метода для его изменения.
 При инициализации переменной мы получаем значение из `stateKeeper` через `consume`, если оно отсутствует — используем `0` по умолчанию.
 
-А в init блоке мы регистрируем лямбду, которая будет вызвана при сохранении состояния. Пока просто запомните этот момент — позже разберёмся,
+А в `init` блоке мы регистрируем лямбду, которая будет вызвана при сохранении состояния. Пока просто запомните этот момент — позже разберёмся,
 как и когда она срабатывает.
 
 Теперь экран счетчика, который работает с `DefaultCounterComponent`:
@@ -133,7 +133,8 @@ class MainActivity : ComponentActivity() {
 
 ![Screenshot](stateKeeper.gif)
 
-Как видим, всё работает ровно так, как ожидалось. При этом мы не видим здесь ни методов `onSaveInstanceState`, ни `ViewModel`. Давайте снова
+Как видим, всё работает ровно так, как ожидалось. Значение счётчика сохраняется как при повороте экрана, так и после полного убийства процесса.
+При этом мы не видим здесь ни методов `onSaveInstanceState`, ни `ViewModel`. Давайте снова
 взглянем на компонент счётчика:
 
 ```kotlin
@@ -165,19 +166,11 @@ class DefaultCounterComponent(
 `ComponentContext`, а поле `stateKeeper` приходит из `StateKeeperOwner`. Полная цепочка наследования следующая:
 
 ```kotlin
-/**
- * Represents a holder of [StateKeeper].
- */
 interface StateKeeperOwner {
 
     val stateKeeper: StateKeeper
 }
 
-/**
- * A generic component context that extends [LifecycleOwner], [StateKeeperOwner],
- * [InstanceKeeperOwner] and [BackHandlerOwner] interfaces, and also able to create
- * new instances of itself via [ComponentContextFactory].
- */
 interface GenericComponentContext<out T : Any> :
     LifecycleOwner,
     StateKeeperOwner,
@@ -190,7 +183,8 @@ interface ComponentContext : GenericComponentContext<ComponentContext>
 ```
 
 Таким образом, цепочка наследования выглядит так:
-`StateKeeperOwner` ← `GenericComponentContext` ← `ComponentContext`.
+`StateKeeperOwner` ← `GenericComponentContext` ← `ComponentContext` ← `DefaultCounterComponent`.
+
 Мы реализуем `ComponentContext`, делегируя его переданному в конструктор параметру `componentContext`.
 
 ```kotlin
@@ -416,9 +410,9 @@ class SerializableContainer private constructor(
 
 Это даёт контроль над моментом сериализации и возможность отложенной обработки.
 
-Теперь о том, как это всё оказывается внутри `Bundle`. Ниже — вспомогательные функции, которые используются внутри библиотеки
-Essenty/Decompose для
-сериализации и десериализации `SerializableContainer` и произвольных объектов, вызовы которых мы уже встречали в фукнций StateKeeper:
+Теперь о том, как это всё оказывается внутри `Bundle`. Ниже — вспомогательные функции, 
+которые используются внутри библиотеки Essenty/Decompose для сериализации и десериализации `SerializableContainer` и произвольных объектов,
+вызовы которых мы уже встречали в фукнций StateKeeper:
 
 ```kotlin
 fun <T : Any> Bundle.putSerializable(key: String?, value: T?, strategy: SerializationStrategy<T>) {
@@ -504,42 +498,19 @@ private class ValueHolder<out T : Any>(
 **com.arkivanov.essenty.statekeeper.StateKeeper.kt:**
 
 ```kotlin
-/**
- * A key-value storage, typically used to persist data after process death or Android configuration changes.
- */
+
 interface StateKeeper {
 
-    /**
-     * Removes and returns a previously saved value for the given [key].
-     *
-     * @param key a key to look up.
-     * @param strategy a [DeserializationStrategy] for deserializing the value.
-     * @return the value for the given [key] or `null` if no value is found.
-     */
+
     fun <T : Any> consume(key: String, strategy: DeserializationStrategy<T>): T?
 
-    /**
-     * Registers the value [supplier] to be called when it's time to persist the data.
-     *
-     * @param key a key to be associated with the value.
-     * @param strategy a [SerializationStrategy] for serializing the value.
-     * @param supplier a supplier of the value.
-     */
     fun <T : Any> register(key: String, strategy: SerializationStrategy<T>, supplier: () -> T?)
 
-    /**
-     * Unregisters a previously registered `supplier` for the given [key].
-     */
     fun unregister(key: String)
 
-    /**
-     * Checks if a `supplier` is registered for the given [key].
-     */
     fun isRegistered(key: String): Boolean
 }
 ```
-
-Вот чуть более развернутые описания методов `StateKeeper`, по одному предложению на каждый:
 
 1. **`consume`** — извлекает и удаляет ранее сохранённое значение по заданному ключу, используя стратегию десериализации.
 2. **`register`** — регистрирует поставщика значения, которое будет сериализовано и сохранено при следующем сохранении состояния.
@@ -549,20 +520,11 @@ interface StateKeeper {
 **com.arkivanov.essenty.statekeeper.StateKeeperDispatcher.kt:**
 
 ```kotlin
-/**
- * Represents a savable [StateKeeper].
- */
 interface StateKeeperDispatcher : StateKeeper {
 
-    /**
-     * Calls all registered `suppliers` and saves the data into a [SerializableContainer].
-     */
     fun save(): SerializableContainer
 }
 
-/**
- * Creates a default implementation of [StateKeeperDispatcher] with the provided [savedState].
- */
 @JsName("stateKeeperDispatcher")
 fun StateKeeperDispatcher(savedState: SerializableContainer? = null): StateKeeperDispatcher =
     DefaultStateKeeperDispatcher(savedState)
@@ -760,7 +722,7 @@ interface ComponentContext : GenericComponentContext<ComponentContext>
 ```
 
 Таким образом, цепочка наследования выглядит так:
-`InstanceKeeperOwner` ← `GenericComponentContext` ← `ComponentContext`.
+`InstanceKeeperOwner` ← `GenericComponentContext` ← `ComponentContext` ← `DefaultCounterComponent`.
 
 Теперь разберёмся, **откуда приходит реализация**.
 
@@ -889,11 +851,15 @@ internal class InstanceKeeperViewModel : ViewModel() {
 ```
 
 Что здесь важно:
-* `instanceKeeperDispatcher` — это и есть хранилище всех зарегистрированных экземпляров (`InstanceKeeper.Instance`).
-* Метод `onCleared()` вызывается, когда ViewModel удаляется из `ViewModelStore`. Он вызывает `destroy()` у `dispatcher`, уничтожая все зарегистрированные экземпляры.
-* Метод `recreate()` позволяет вручную сбросить все ранее сохранённые экземпляры — полезно, если нужно очистить состояние при пересоздании компонента.
 
-После того как мы поняли, что `InstanceKeeperViewModel` возвращает `instanceKeeperDispatcher`, возникает логичный вопрос — что он из себя представляет.
+* `instanceKeeperDispatcher` — это и есть хранилище всех зарегистрированных экземпляров (`InstanceKeeper.Instance`).
+* Метод `onCleared()` вызывается, когда ViewModel удаляется из `ViewModelStore`. Он вызывает `destroy()` у `dispatcher`, уничтожая все
+  зарегистрированные экземпляры.
+* Метод `recreate()` позволяет вручную сбросить все ранее сохранённые экземпляры — полезно, если нужно очистить состояние при пересоздании
+  компонента.
+
+После того как мы поняли, что `InstanceKeeperViewModel` возвращает `instanceKeeperDispatcher`, возникает логичный вопрос — что он из себя
+представляет.
 
 ```kotlin
 /**
@@ -910,7 +876,8 @@ interface InstanceKeeperDispatcher : InstanceKeeper {
 ```
 
 `InstanceKeeperDispatcher` — это интерфейс, расширяющий `InstanceKeeper` и добавляющий к нему жизненно важную функцию `destroy()`.
-Она уничтожает все текущие экземпляры `Instance`, но не очищает их из внутреннего хранилища — к ним всё ещё можно обращаться при необходимости.
+Она уничтожает все текущие экземпляры `Instance`, но не очищает их из внутреннего хранилища — к ним всё ещё можно обращаться при
+необходимости.
 Однако любые новые экземпляры, созданные после вызова `destroy()`, уничтожаются сразу.
 
 Метод `destroy()` вызывается системой тогда, когда жизненный цикл компонента подходит к концу — например, при полном удалении из back stack.
@@ -960,11 +927,11 @@ interface InstanceKeeper {
 Он будет вызван системой при уничтожении компонента — это аналог `onCleared()` у `ViewModel`, но с более гибким контролем.
 
 А для случаев, когда никакая очистка не требуется, можно использовать обёртку `SimpleInstance`.
-Она реализует `Instance`, но ничего не делает в `onDestroy()` — просто оборачивает ваш объект и делает его совместимым с `InstanceKeeper`.
+Она реализует `Instance`, но ничего не делает в `onDestroy()` — просто превращает любой объект в совместимый с `InstanceKeeper`.
+
+Теперь давай посмотрим, как работает сама реализация хранилища:
 
 ```kotlin
-
-
 internal class DefaultInstanceKeeperDispatcher : InstanceKeeperDispatcher {
 
     private val map = HashMap<Any, Instance>()
@@ -993,20 +960,23 @@ internal class DefaultInstanceKeeperDispatcher : InstanceKeeperDispatcher {
         }
     }
 }
-
 ```
 
-//TODO для chatgpt: тут тоже
+`DefaultInstanceKeeperDispatcher` — это конкретная реализация `InstanceKeeperDispatcher`.
+Внутри у него обычная `HashMap`, где по ключу хранятся все текущие `Instance`. Метод `put()` добавляет объект, предварительно проверяя, что
+ключ не занят.
+Флаг `isDestroyed` позволяет отслеживать, завершена ли уже работа хранилища — если `true`, то даже только что добавленный объект сразу
+уничтожается через `onDestroy()`.
 
-Мы в нашем компоненте DefaulConterComponent использовали не фукнцию , а функцию getOrCreate:
+Метод `destroy()` проходит по всем зарегистрированным объектам и вызывает `onDestroy()` у каждого.
+При этом сами объекты остаются в `map`, чтобы, если нужно, можно было к ним обратиться позже — хотя новые уже не будут жить.
+
+Теперь — о том, что мы используем в нашем компоненте `DefaultCounterComponent`. Там вызывается не `put`, а `getOrCreate`, и вот как он
+работает:
 
 ```kotlin
-/**
- * Returns a previously stored [InstanceKeeper.Instance] of type [T] with the given key,
- * or creates and stores a new one if it doesn't exist.
- */
 inline fun <T : InstanceKeeper.Instance> InstanceKeeper.getOrCreate(key: Any, factory: () -> T): T {
-    @Suppress("UNCHECKED_CAST") // Assuming the type per key is always the same
+    @Suppress("UNCHECKED_CAST")
     var instance: T? = get(key) as T?
     if (instance == null) {
         instance = factory()
@@ -1015,5 +985,79 @@ inline fun <T : InstanceKeeper.Instance> InstanceKeeper.getOrCreate(key: Any, fa
 
     return instance
 }
-
 ```
+
+Метод `getOrCreate()` — это удобный хелпер: сначала он пробует достать объект по ключу, и если такого ещё нет, — создаёт его через
+`factory()` и сохраняет.
+Используется он в 90% случаев, потому что избавляет от ручной проверки наличия и двойного кода.
+
+## DefaultComponentContext
+
+На протяжении всей статьи мы много раз касались функции `defaultComponentContext()` — именно она выступает точкой входа, где собираются все
+зависимости компонента:
+
+```kotlin
+private fun <T> T.defaultComponentContext(
+    backHandler: BackHandler?,
+    discardSavedState: Boolean,
+    isStateSavingAllowed: () -> Boolean,
+): DefaultComponentContext where
+        T : SavedStateRegistryOwner, T : ViewModelStoreOwner, T : LifecycleOwner {
+    val stateKeeper = stateKeeper(discardSavedState = discardSavedState, isSavingAllowed = isStateSavingAllowed)
+    val marker = stateKeeper.consume(key = KEY_STATE_MARKER, strategy = String.serializer())
+    stateKeeper.register(key = KEY_STATE_MARKER, strategy = String.serializer()) { "marker" }
+
+    return DefaultComponentContext(
+        lifecycle = lifecycle.asEssentyLifecycle(),
+        stateKeeper = stateKeeper,
+        instanceKeeper = instanceKeeper(discardRetainedInstances = marker == null),
+        backHandler = backHandler,
+    )
+}
+
+private const val KEY_STATE_MARKER = "DefaultComponentContext_state_marker"
+```
+
+Мы уже детально разобрали, откуда здесь берётся `StateKeeper`, как создаётся `InstanceKeeper`, и какую роль играет `marker`.
+Но до сих пор мы не смотрели внутрь самого `DefaultComponentContext` — давай это исправим:
+
+```kotlin
+class DefaultComponentContext(
+    override val lifecycle: Lifecycle,
+    stateKeeper: StateKeeper? = null,
+    instanceKeeper: InstanceKeeper? = null,
+    backHandler: BackHandler? = null,
+) : ComponentContext {
+
+    override val stateKeeper: StateKeeper = stateKeeper ?: StateKeeperDispatcher()
+    override val instanceKeeper: InstanceKeeper = instanceKeeper ?: InstanceKeeperDispatcher().attachTo(lifecycle)
+    override val backHandler: BackHandler = backHandler ?: BackDispatcher()
+    override val componentContextFactory: ComponentContextFactory<ComponentContext> =
+        ComponentContextFactory(::DefaultComponentContext)
+
+    constructor(lifecycle: Lifecycle) : this(
+        lifecycle = lifecycle,
+        stateKeeper = null,
+        instanceKeeper = null,
+        backHandler = null,
+    )
+}
+```
+
+Как видно, `DefaultComponentContext` — это просто удобный бандл, который объединяет в себе `Lifecycle`, `StateKeeper`, `InstanceKeeper` и
+`BackHandler`.
+Если какие-то зависимости не были переданы извне — он сам создаёт дефолтные реализации. Всё это обёрнуто в единый объект `ComponentContext`,
+который дальше передаётся в компоненты и навигационные структуры.
+
+Таким образом, `DefaultComponentContext` можно считать связующим звеном между Android-инфраструктурой и кроссплатформенной архитектурой
+Decompose — он превращает низкоуровневые сущности в универсальный интерфейс.
+
+## Финал
+
+Если вы дошли до этого момента — значит, прошли со мной весь путь по хранению состояний в Android на глубоком, подкапотном уровне: от того, где реально живёт `ViewModelStore` в `Activity` и `Fragment`, до того, как `ViewModel` хранятся в `Compose` и `View`, как работает `Saved State API`, чем отличается от `onSaveInstanceState`, и где в итоге оказывается `Bundle`.
+
+В последней части мы разобрали, как устроена логика сохранения состояния в `Decompose` и `Essenty`, чтобы снять иллюзию "магии" и показать, что под капотом — всё те же стандартные механизмы Android, просто обёрнутые в более универсальный API. Всё это рассматривалось строго через призму хранения и восстановления данных.
+
+Эта статья завершает серию. Всё, что здесь написано — не документация и не руководство. Это просто попытка заглянуть внутрь, разобраться и собрать цельную картину.
+
+Если посчитаете, что это может быть полезно кому-то ещё — можете поделиться. Если захотите обсудить или предложить правки — я открыт.
