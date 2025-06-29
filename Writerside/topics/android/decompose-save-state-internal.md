@@ -1,5 +1,6 @@
-# Decompose: Save State
+# Decompose и Essenty: под капотом сохранения состояния без ViewModel
 
+[//]: # В этой статье мы заглядываем глубоко внутрь Decompose и Essenty: как они сохраняют состояние без использования ViewModel и onSaveInstanceState, что происходит на уровне StateKeeper и InstanceKeeper, как всё это связано с Android SavedStateRegistry и сериализацией через kotlinx.serialization. Подробный, пошаговый разбор всей цепочки — от компонентов до низкоуровневых деталей.()
 ### Введение
 
 Это продолжение четырех предыдущих статей.

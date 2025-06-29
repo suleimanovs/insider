@@ -1,66 +1,57 @@
-Это продолжение трех предыдущих статей.
+# SavedStateHandle и Bundle под капотом: как Android сохраняет состояние
 
-### Введение
+[//]: # (В этой статье подробно разбирается, как работает сохранение состояния в Android: от старых методов onSaveInstanceState и Bundle до современной архитектуры с SavedStateHandle и SavedStateRegistry. Рассмотрено, как связаны ViewModel, SavedStateHandle, SavedStateRegistryOwner, а также цепочка вызовов, ведущая к сохранению и восстановлению данных. Показана вся внутренняя кухня: низкоуровневые классы (ActivityThread, Instrumentation, ActivityClientRecord) и вся цепочка до onCreate. Глубокий технический разбор для тех, кто хочет понять, как состояние реально сохраняется и восстанавливается под капотом Android.)
+
+Это продолжение трех предыдущих статей.
 
 1. В первой мы разобрали, где в конечном итоге хранится `ViewModelStore` в случае с `Activity`,
 2. Во второй — как это устроено во `Fragment`,
 3. В третьей где хранятся `ViewModel`-и, когда мы используем **Compose** (или даже просто `View`).
 
 В этой статье рассмотрим Где хранится SavedStateHandle, проверим SavedStateHandle vs onSaveInstanceState vs ViewModel(ViewModelStore)
-Поймем связку SavedStateHandle с ViewModel . Но, как всегда, начнём с базиса.
+Поймем связку SavedStateHandle с ViewModel. И узнаем ответ на главный вопрос, где храниться Bundle. Но, как всегда, начнём с базиса. 
 
 ### Базис
 
-В статье не будет описания как работать с этими Api, а будет о том как они работают изнутри, по этому я буду пологаться на то
-что вы уже работали с ними.
-Как всегда начнем с базиса, давайте сначала дадим определения для SavedStateHandle, onSaveInstanceState, ViewModel:
+В статье не будет описания того, как работать с этими API, а будет рассказано о том, как они устроены изнутри, поэтому я буду исходить из
+того, что вы уже работали с ними.
+Как всегда, начнём с базиса — дадим определения для SavedStateHandle, onSaveInstanceState и ViewModel:
 
-**ViewModel** - компонент архитектурного паттерна MVVM, который был предоставлен Google как примитив
-позволяющий пережить изменение конфигураций. Изменение конфигураций в свою очередь - это состояние, заставляющая
-activity/fragment пересоздаваться, это именно то состояние которое может пережить ViewModel.
-Увы на этом обьязанности ViewModel по хранению данных в контексте android заканчивается
+**ViewModel** — компонент архитектурного паттерна MVVM, предоставленный Google как примитив, позволяющий пережить изменение конфигурации.
+Изменение конфигурации — это состояние, из-за которого Activity/Fragment пересоздаётся; именно это состояние может пережить ViewModel. Увы,
+на этом обязанности ViewModel по хранению данных в контексте Android заканчиваются.
 
-Если proccess приложения умирает или прырывается proccess , то в таком случае ViewModel не справится,
-по этому тут в дело входит старые добрые методы onSaveInstanceState/onRestoreInstanceState
+Если же процесс приложения умирает или прерывается, ViewModel не справится; тогда на сцену выходят старые добрые методы
+onSaveInstanceState/onRestoreInstanceState.
 
-**onSaveInstanceState/onRestoreInstanceState** — это методы жизненного цикла Activity, Fragment и View(да View тоже может сохранять
-состояние)
-которые позволяют сохранять и восстанавливать временное состояние пользовательского интерфейса при изменениях конфигурации (например, при
-повороте экрана)
-или при полном уничтожении активности из-за нехватки ресурсов.
-В onSaveInstanceState данные сохраняются в Bundle, который автоматически передаётся в метод onRestoreInstanceState при восстановлении
-активности.
+**onSaveInstanceState/onRestoreInstanceState** — методы жизненного цикла Activity, Fragment и даже View (да, View тоже может сохранять
+состояние), которые позволяют сохранять и восстанавливать временное состояние пользовательского интерфейса при изменении конфигурации (
+например, при повороте экрана) или при полном уничтожении активности из-за нехватки ресурсов. В onSaveInstanceState данные сохраняются в
+Bundle, который автоматически передаётся в onRestoreInstanceState при восстановлении активности.
 
-Это базовый механизм для хранения состояния примитивных(и их массивы) типов данных, Parcelable/ Serializeble и еще пару нативных андроид
-типов, эти методы требуют явного указания того, что именно нужно сохранить, плюс логика прописывается внутри Activity и Fragment.
-Большинство архитектурных паттернов MVI, MVVM гласят что View(Fragment/Activity/Compose) должны быть максимально простыми и не содержать
-какую либо логику помимо отбражения данных, по этому прямое использование этих методов в последнее время отпадает с появлением Saved State
-Api
-которая хорошо интегрируется с ViewModel наделяя ViewModel не только спасать данные от изменений конфигураций, но и вохможностью
-спасать сериализуемых данных от уничтожения/остановки процесса по инициативе системы.
+Это базовый механизм для хранения примитивных типов (и их массивов), Parcelable/Serializable и ещё пары нативных Android-типов. Эти методы
+требуют явного указания того, что именно нужно сохранить, а логика прописывается внутри Activity и Fragment. Большинство архитектурных
+паттернов (MVI, MVVM) гласят, что View (Fragment/Activity/Compose) должны быть максимально простыми и не содержать никакой логики, кроме
+отображения данных, поэтому прямое использование этих методов сейчас уступает место Saved State API, которое хорошо интегрируется с
+ViewModel, наделяя её не только возможностью «спасать» данные от изменений конфигурации, но и сохранять сериализуемые данные при уничтожении
+или остановке процесса по инициативе системы.
 
-**SavedState API** — это современная альтернатива методам onSaveInstanceState/onRestoreInstanceStat,
-которая более гибко управляет состоянием, особенно в связке с ViewModel.
-**SavedStateHandle** — это объект, предоставленный в конструкторе ViewModel, который позволяет безопасно сохранять и восстанавливать данные,
-даже если процесс был уничтожен. В отличие от статичного использования onSaveInstanceState, SavedStateHandle предоставляет так же
-возможность
-подписаться на Flow, LiveData данные которые он хранит и восстанавливает.
-Он автоматически интегрирован с ViewModel и поддерживает сохранение состояния при изменениях конфигурации, а также при полном уничтожении
-приложения(процесса).
-Дополнительное преимущество — это возможность подписываться на изменения значений в SavedStateHandle, получая реактивное поведение прямо в
-ViewModel.
+**Saved State API** — современная альтернатива onSaveInstanceState/onRestoreInstanceState, более гибко управляющая состоянием, особенно в
+связке с ViewModel.
+**SavedStateHandle** — объект, передаваемый в конструктор ViewModel, который позволяет безопасно сохранять и восстанавливать данные даже
+после уничтожения процесса. В отличие от статичного onSaveInstanceState, SavedStateHandle также позволяет подписываться на Flow и LiveData
+тех данных, которые он хранит и восстанавливает. Он автоматически интегрирован с ViewModel и поддерживает сохранение состояния при
+изменениях конфигурации, а также при полном уничтожении процесса приложения. Дополнительное преимущество — возможность подписываться на
+изменения значений в SavedStateHandle и получать реактивное поведение прямо в ViewModel.
 
-<tip> Под уничтожением или прерыванием процесса, о котором идёт речь в статье, подразумевается ситуация, когда приложение находится 
-в фоне и сохраняется в стеке задач. 
+<tip>Под «уничтожением или прерыванием процесса», о котором идёт речь в статье, подразумевается ситуация, когда приложение находится 
+в фоне и сохраняется в стеке задач. Обычно это происходит, когда пользователь сворачивает приложение, не закрывая его. 
+Через некоторое время бездействия система может остановить процесс. 
+Не стоит путать это с кейсом, когда пользователь сам вручную закрывает приложение — это другой сценарий.</tip>
 
-Обычно это происходит, когда пользователь сворачивает приложение, не закрывая его. Через некоторое время бездействия система может
-остановить процесс.
-Не стоит путать это с кейсом, когда пользователь сам вручную закрывает приложение — это другой сценарий.
-</tip>
+### onSaveInstanceState / onRestoreInstanceState
 
-### onSaveInstanceState/ onRestoreInstanceState
-
-Давайте так же освижим память о методах onSaveInstanceState/ onRestoreInstanceState:
+Давайте также освежим память о методах onSaveInstanceState и onRestoreInstanceState:
 
 ```kotlin
 class RestoreActivity : AppCompatActivity() {
@@ -88,24 +79,28 @@ class RestoreActivity : AppCompatActivity() {
 }
 ```
 
-**onSaveInstanceState** — вызывается для получения состояния Activity перед её уничтожением, чтобы это состояние могло быть
-восстановлено в методах `onCreate` или `onRestoreInstanceState`. `Bundle`, заполненный в этом методе, будет передан в оба метода.
+**onSaveInstanceState** — вызывается для получения состояния Activity перед её уничтожением, чтобы оно могло быть восстановлено в методах
+`onCreate` или `onRestoreInstanceState`. `Bundle`, заполненный в этом методе, будет передан в оба метода.
 
-Этот метод вызывается перед тем, как активность может быть уничтожена, чтобы в будущем, при повторном создании, она могла восстановить своё
-состояние. Не следует путать этот метод с методами жизненного цикла, такими как `onPause`, который всегда вызывается, когда пользователь
-больше не взаимодействует с активностью, или `onStop`, который вызывается, когда активность становится невидимой. Пример, когда `onPause` и
-`onStop`
-вызываются, но `onSaveInstanceState` — нет: пользователь возвращается из Activity B в Activity A — в этом случае состояние B не требуется
-восстанавливать, поэтому `onSaveInstanceState` для B не вызывается. Другой пример: если Activity B запускается поверх Activity A, но A
-остаётся в памяти, то `onSaveInstanceState` для A также не вызывается, так как его состояние остаётся неизменным.
+Этот метод вызывается до того, как Activity может быть уничтожена, чтобы при повторном создании она могла восстановить своё состояние. Не
+следует путать его с методами жизненного цикла, такими как `onPause` (вызывается всегда, вызывается при частичной потере фокуса Activity) или `onStop` (когда Activity становится невидимой).
 
-Реализация по умолчанию этого метода автоматически сохраняет большую часть состояния пользовательского интерфейса, **вызывая метод
-`onSaveInstanceState()` у каждого представления(`View`) в иерархии**, у которых есть ID, так же сохраняется ID элемента, который был в
-фокусе.
-Восстановление этих данных будет происходить в стандартной реализации метода `onRestoreInstanceState()`. Если метод переопределяется для
-сохранения дополнительной информации, которая не захвачена отдельными представлениями(`View`), рекомендуется вызвать реализацию по умолчанию
-через
-`super.onSaveInstanceState(outState)`. В противном случае разработчику придётся вручную сохранять состояние всех представлений(`View`).
+* **Пример**, когда `onPause` и `onStop` вызываются, но `onSaveInstanceState` — нет: при возвращении из Activity B в Activity A. В этом
+  случае состояние B не требуется восстанавливать, поэтому `onSaveInstanceState` для B не вызывается.
+* **Другой пример**: если Activity B запускается поверх Activity A, но A остаётся в памяти, то `onSaveInstanceState` для A также не
+  вызывается, так как Activity остаётся в памяти и не требуется сохранять её состояние.
+
+Реализация по умолчанию этого метода автоматически сохраняет большую часть состояния пользовательского интерфейса, 
+**вызывая `onSaveInstanceState()` у каждого `View` в иерархии, у которого есть ID**, а также сохраняет ID элемента, находившегося в фокусе.
+Восстановление этих данных происходит в стандартной реализации `onRestoreInstanceState()`.
+Если вы переопределяете метод для сохранения дополнительной информации, рекомендуется вызвать
+реализацию по умолчанию через
+
+```kotlin
+super.onSaveInstanceState(outState)
+```
+
+— иначе придётся вручную сохранять состояние всех `View`.
 
 Если метод вызывается, то это произойдёт **после `onStop`** для приложений, нацеленных на платформы, начиная с Android P. Для более ранних
 версий Android этот метод будет вызван **до `onStop`**, и нет никаких гарантий, будет ли он вызван до или после `onPause`.
@@ -218,8 +213,8 @@ savedStateRegistry.registerSavedStateProvider(
 когда `Activity` или `Fragment` пересоздаются (например, после уничтожения процесса или изменении конфигурации),
 создаётся новый экземпляр этого объекта.
 
-Но откуда береться `savedStateRegistry` переменная внутри `Activity` мы рассмотрим позже, пока достаточно знать
-что он есть у `Activity`, далее исходники метода `registerSavedStateProvider` и `consumeRestoredStateForKey` пренадлежащий классу
+Но откуда берется `savedStateRegistry` переменная внутри `Activity` мы рассмотрим позже, пока достаточно знать
+что он есть у `Activity`, далее исходники метода `registerSavedStateProvider` и `consumeRestoredStateForKey` принадлежащий классу
 `SavedStateRegistry`(expect):
 **androidx.savedstate.SavedStateRegistry.kt**
 
@@ -268,7 +263,7 @@ public expect class SavedStateRegistry internal constructor(
 6. **isRestored** — возвращает `true`, если состояние было восстановлено после создания компонента.
 
 В `expect`-версиях отсутствуют реализации — там только сигнатуры методов.
-Также мы рассмотрели исходники интерфейса `SavedStateProvider`, который представляет собой коллбэк для получения `Bundle`, подлежащего
+Также мы рассмотрели исходники интерфейса `SavedStateProvider`, который представляет собой callback для получения `Bundle`, подлежащего
 сохранению.
 Чтобы увидеть реализацию метода `registerSavedStateProvider`, необходимо найти **`actual`-реализацию**, а затем перейти к `actual`
 -реализации `SavedStateRegistry`.
@@ -349,9 +344,9 @@ internal class SavedStateRegistryImpl(
 1. `consumeRestoredStateForKey` - достает значение из `restoredState`(Bundle) по ключу, после того как достает значение,
    удаляет из `restoredState`(Bundle) значение и ключ, `restoredState` является самым коренным `Bundle` который внутри себя хранит все
    другие bundle
-2. `registerSavedStateProvider` - просто добавляет объеки `SavedStateProvider` внутрь карты `keyToProviders`
+2. `registerSavedStateProvider` - просто добавляет объект `SavedStateProvider` внутрь карты `keyToProviders`
 
-Эти методы — очень верхнеуровневые и не раскрывают, как именно в итоге сохраняются данные, поэтому нужно копнуть глубже — внутри этого же
+Эти методы — очень верхне уровневые и не раскрывают, как именно в итоге сохраняются данные, поэтому нужно копнуть глубже — внутри этого же
 класса `SavedStateRegistryImpl`:
 
 ```kotlin
@@ -490,30 +485,38 @@ public interface SavedStateRegistryOwner : androidx.lifecycle.LifecycleOwner {
 `SavedStateRegistry` доступен в любом компоненте, реализующем интерфейс `SavedStateRegistryOwner`. Этим интерфейсом обладают:
 
 * `ComponentActivity` — это базовый класс для всех современных `Activity`.
+    ```kotlin
+    open class ComponentActivity() : ..., SavedStateRegistryOwner, ... {
+    
+        private val savedStateRegistryController: SavedStateRegistryController =
+            SavedStateRegistryController.create(this)
+    
+        final override val savedStateRegistry: SavedStateRegistry
+            get() = savedStateRegistryController.savedStateRegistry
+    }
+    ```
 * `Fragment` — любой `Fragment` также реализует этот интерфейс.
-
-```java
-public class Fragment implements ...SavedStateRegistryOwner,...{
-
-SavedStateRegistryController mSavedStateRegistryController;
-
-@NonNull
-@Override
-public final SavedStateRegistry getSavedStateRegistry() {
-    return mSavedStateRegistryController.getSavedStateRegistry();
-}
-}
-```
+    ```java
+    public class Fragment implements ...SavedStateRegistryOwner,...{
+    
+        SavedStateRegistryController mSavedStateRegistryController;
+        
+        @NonNull
+        @Override
+        public final SavedStateRegistry getSavedStateRegistry() {
+            return mSavedStateRegistryController.getSavedStateRegistry();
+        }
+    }
+    ```
 
 * `NavBackStackEntry` - компонент навигаций из Jetpack Navigation
-
-```kotlin
-public expect class NavBackStackEntry : ..., SavedStateRegistryOwner {
-
-    override val savedStateRegistry: SavedStateRegistry
-
-}
-```
+    ```kotlin
+    public expect class NavBackStackEntry : ..., SavedStateRegistryOwner {
+    
+        override val savedStateRegistry: SavedStateRegistry
+    
+    }
+    ```
 
 Мы выяснили большую цепочку вызовов, давайте визуально посмотрим:
 
@@ -872,7 +875,7 @@ internal class SavedStateHandlesProvider(
 
 Теперь перейдём к тому, как данные хранятся внутри `ViewModel`. `savedStateHandlesVM` — это
 расширение, которое создаёт или восстанавливает
-объект `SavedStateHandlesVM`, хранящий в себе мапу из ключей на `SavedStateHandle`:
+объект `SavedStateHandlesVM`, хранящий в себе Map из ключей на `SavedStateHandle`:
 
 ```kotlin
 internal val ViewModelStoreOwner.savedStateHandlesVM: SavedStateHandlesVM
@@ -1047,7 +1050,6 @@ public class Instrumentation {
 ```
 
 <note title="Официальная документация гласит следующее об этом классе:">
-
 Base class for implementing application instrumentation code.  
 When running with instrumentation turned on, this class will be instantiated for you before any of the application code,  
 allowing you to monitor all of the interaction the system has with the application.  
@@ -1345,7 +1347,7 @@ public final class ActivityThread extends ClientTransactionHandler implements Ac
 }
 ```
 
-### Перезапуск Activity при релаунче (например, при повороте экрана)
+### Перезапуск Activity при релаунче (например, при повороте экрана) {id="activity_1"}
 
 При пересоздании Activity, например, при повороте экрана, срабатывает метод `handleRelaunchActivity`:
 
@@ -1776,7 +1778,7 @@ class RootWindowContainer extends WindowContainer<DisplayContent> implements Dis
 `RootWindowContainer` — это центральный компонент в системе управления окнами Android,
 который содержит в себе всю иерархию окон на всех дисплеях.
 Он управляет экземплярами `DisplayContent`, координирует layout, input, фокус, анимации, транзишены, split-screen,
-picture-in-picture и любые изменения, связанные с конфигурацией экрана.
+`picture-in-picture` и любые изменения, связанные с конфигурацией экрана.
 Всё, что должно появиться, исчезнуть, пересчитаться или анимироваться — сначала проходит через него.
 Это точка входа для всех транзакций окон, включая запуск и завершение активностей.
 
@@ -1822,16 +1824,15 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
    ...
 }
 ```
+Видим, что он хранит в себе список `ActivityRecord` в поле `mStartingProcessActivities` — вызов которого мы уже видели в
+`RootWindowContainer.attachApplication`.
 
-Видим что он хранит в себе список ActivityRecord в поле `mStartingProcessActivities` - вызов которого мы уже видели мы в
-RootWindowContainer.attachApplication,
+Далее видим, что у него также есть ссылка на `RootWindowContainer`, и в методе `ActivityTaskManagerService.attachApplication`
+происходит вызов метода `RootWindowContainer.attachApplication`.
+`startProcessAsync` — также очень важный метод, который добавляет новые `ActivityRecord` в список `mStartingProcessActivities`,
+внутри которых хранится `Bundle` (его мы разберём позже).
 
-Далее видим что у него так же есть ссылка на RootWindowContainer, и в методе ActivityTaskManagerService.attachApplication
-происходит вызов метода RootWindowContainer.attachApplication,
-startProcessAsync - Так же очень важный метод, который в список ActivityRecord добавляет новые ActivityRecord внутри
-которых храниться Bundle, позже его разберем тоже.
-
-Выше ActivityTaskManagerService стоит класс ActivityManagerService, он и вызывает attachApplication у ActivityTaskManagerService:
+Выше `ActivityTaskManagerService` находится класс `ActivityManagerService`, он и вызывает `attachApplication` у `ActivityTaskManagerService`:
 
 ```java
 public class ActivityManagerService extends IActivityManager.Stub {
@@ -1859,17 +1860,15 @@ public class ActivityManagerService extends IActivityManager.Stub {
 }
 ```
 
-Видим в методе finishAttachApplicationInner - вызов метода attachApplication у mAtmInternal, ActivityTaskManagerInternal который является
-абстакрным AIDl для ActivityTaskManagerService,
-по этому фактический здесь вызваеется ActivityTaskManagerService.attachApplication()
+Видим в методе `finishAttachApplicationInner` вызов метода `attachApplication` у `mAtmInternal`,
+`ActivityTaskManagerInternal`, который является абстрактным AIDL-интерфейсом для `ActivityTaskManagerService`,
+поэтому фактически здесь вызывается `ActivityTaskManagerService.attachApplication()`.
 
-сам метод finishAttachApplicationInner вызывается из attachApplicationLocked, так же получает процесс из mPidsSelfLocked по ключу pid(то
-есть process id)
+Сам метод `finishAttachApplicationInner` вызывается из `attachApplicationLocked`, где процесс извлекается из `mPidsSelfLocked`
+по ключу `pid` (то есть process id).
 
-Сам ActivityManagerService - является Singleton-ом в рамках всей системы Android, у него внутри есть своя структура PidMap
-которая хранит в себе ProcessRecord, по ключу pid(то есть process id), то есть вызов mPidsSelfLocked.get(pid), mPidsSelfLocked:
-
-Сам класс PidMap выглядит следующим образом:
+Сам `ActivityManagerService` является синглтоном в рамках всей системы Android, у него внутри есть структура `PidMap`,
+которая хранит объекты `ProcessRecord` по ключу `pid`. То есть вызов `mPidsSelfLocked.get(pid)` обращается к `PidMap`:
 
 ```java
 public class ActivityManagerService extends IActivityManager.Stub {
@@ -1916,29 +1915,29 @@ public class ActivityManagerService extends IActivityManager.Stub {
 }
 ```
 
-Видим Структуру PidMap которая внутри себя хранит список записей для процессов приложения
+Видим структуру `PidMap`, которая внутри себя хранит список записей процессов приложения.
 
-Так же видим две методы, setSystemProcess создаем новый proccessRecord и вызывает метод addPidLocked, addPidLocked кладет
-в mPidsSelfLocked ProcessRecord, setSystemProcess вызывается из SystemServer(он же system_service), ниже краткий стэк вызовов:
+Также видим методы `setSystemProcess` и `addPidLocked`. В `setSystemProcess` создаётся новый `ProcessRecord` и вызывается
+метод `addPidLocked`, который кладёт его в `mPidsSelfLocked`. Метод `setSystemProcess` вызывается из `SystemServer` (он же system\_service).
+Ниже краткий стек вызовов:
 
 ```
 1. Загрузчик (Bootloader) → Ядро (Linux Kernel)  
 2. Процесс init (первый userspace-процесс)  
    ├─ Запуск zygote (через app_process)  
    │   ├─ ZygoteInit (singleton, подготавливает среду для Java-процессов)  
-   │   │   ├─ fork() → Создаёт SystemServer  
-   │   │   └─ fork() → Создаёт приложения  
+   │   │   ├─ fork() → создаёт SystemServer  
+   │   │   └─ fork() → создаёт приложения  
    └─ SystemServer (singleton, запускает все системные сервисы)  
        ├─ RuntimeInit (инициализирует среду для SystemServer)  
-       └─ ActivityManagerService (singleton, включая setSystemProcess())
+       └─ ActivityManagerService (singleton, включая `setSystemProcess()`)
 ```
 
-Выше ActivityManagerService подниматься не будем, да и нет смысла, так как там нечего о Bundle не хранится, многие из них
-singleton-ы в рамках все системы и никакого отнощения к конкретному приложению не имеют.
+Выше `ActivityManagerService` подниматься нет смысла, так как там `Bundle` не хранится, большинство этих компонентов
+— это синглтоны всей системы и не имеют прямого отношения к конкретному приложению.
 
-На этом моменте по идее уже многое стало ясно, расмотрели очень длинный флоу вызовов, момент который мы немного пропустили, это
-то где создаются ActivityRecord, ранее мы уже видели список ActivityRecord получаем из поля mStartingProcessActivities у
-ActivityTaskManagerService:
+На этом моменте уже многое стало ясно: мы рассмотрели очень длинный flow вызовов. Момент, который мы немного пропустили, — где именно создаются `ActivityRecord`. 
+Ранее мы уже видели список `ActivityRecord`, получаемый из поля `mStartingProcessActivities` у `ActivityTaskManagerService`:
 
 ```java
 class RootWindowContainer extends WindowContainer<DisplayContent> implements DisplayManager.DisplayListener {
@@ -1961,12 +1960,13 @@ class RootWindowContainer extends WindowContainer<DisplayContent> implements Dis
 }
 ```
 
-а в ActivityTaskManagerService это выглядит следующим образом как мы уже видели, поле mStartingProcessActivities явлыяется
-коллекцией которая хранит ActivityRecord и есть один метод который в него добавляет ActivityRecord - это метод startProcessAsync
+В `ActivityTaskManagerService` это выглядит следующим образом.
+Как мы уже видели, поле `mStartingProcessActivities` является коллекцией, которая хранит объекты `ActivityRecord`.
+Есть один метод, который добавляет `ActivityRecord` в эту коллекцию — это метод `startProcessAsync`:
 
 ```java
 public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
-...
+    ...
 
     /** The starting activities which are waiting for their processes to attach. */
     final ArrayList<ActivityRecord> mStartingProcessActivities = new ArrayList<>();
@@ -1974,9 +1974,9 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
 
     void startProcessAsync(ActivityRecord activity, boolean knownToBeDead, boolean isTop,
                            String hostingType) {
-         ...
+        ...
         mStartingProcessActivities.add(activity);
-         ...
+        ...
     }
     ...
 }
@@ -1985,7 +1985,7 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
 Следующая глава статьи будет раскрывать этот момент, где создается ActivityRecord и кто его кладет в ActivityTaskManagerService
 в поле mStartingProcessActivities
 
-## Пересоздание процесса с сохронением Bundle
+## Пересоздание процесса с сохранением Bundle
 
 ```
 ActivityManagerService.startActivity()
@@ -2376,12 +2376,12 @@ Recents), как переходят между состояниями, как с
 Вот как выглядит эта цепочка вызовов на первых уровнях:
 
 ```java
-public class ActivityManagerService extends IActivityManager.Stub ,...{
+public class ActivityManagerService extends IActivityManager.Stub,...{
 
-    @Override
-    public int startActivityWithFeature(IApplicationThread caller, String callingPackage,...) {
-        return mActivityTaskManager.startActivity(caller, callingPackage, callingFeatureId, intent,...);
-    }
+@Override
+public int startActivityWithFeature(IApplicationThread caller, String callingPackage,...) {
+    return mActivityTaskManager.startActivity(caller, callingPackage, callingFeatureId, intent,...);
+}
 
 }
 ```
@@ -2427,9 +2427,11 @@ public class ActivityStartController {
 ```
 
 После того как мы получаем `ActivityStarter` через `obtainStarter`, именно здесь происходит создание нового объекта `ActivityRecord`.
-`ActivityStarter` формирует все ключевые параметры запуска: интент, флаги, целевой `Task`, конфигурацию окна, а также решает, нужно ли создать новую задачу или использовать существующую.
+`ActivityStarter` формирует все ключевые параметры запуска: интент, флаги, целевой `Task`, конфигурацию окна, а также решает, нужно ли
+создать новую задачу или использовать существующую.
 
-Созданный `ActivityRecord` связывается с задачей, добавляется в иерархию контейнеров и становится частью общей структуры `RootWindowContainer`.
+Созданный `ActivityRecord` связывается с задачей, добавляется в иерархию контейнеров и становится частью общей структуры
+`RootWindowContainer`.
 После создания `ActivityRecord` хранится в дереве контейнеров до завершения активности или её удаления системой.
 
 ---
@@ -2477,7 +2479,9 @@ class ActivityStarter {
 }
 ```
 
-В методе `executeRequest` через билдер создаётся объект `ActivityRecord`. После инициализации передаётся в `startActivityUnchecked`, а затем в `startActivityInner`, где вызывается метод `setInitialState`. Здесь объект сохраняется в `mStartActivity` — это ссылка на текущую активность, которая будет запущена.
+В методе `executeRequest` через билдер создаётся объект `ActivityRecord`. После инициализации передаётся в `startActivityUnchecked`, а затем
+в `startActivityInner`, где вызывается метод `setInitialState`. Здесь объект сохраняется в `mStartActivity` — это ссылка на текущую
+активность, которая будет запущена.
 
 Далее активити подготавливается к запуску через вызов `resumeFocusedTasksTopActivities` у `RootWindowContainer`.
 
@@ -2529,13 +2533,18 @@ class RootWindowContainer extends WindowContainer<DisplayContent>
 }
 ```
 
-В методе `resumeFocusedTasksTopActivities` происходит обход всех дисплеев и корневых задач. Для каждой задачи выбирается верхняя активити, проверяется её состояние и возможность активации. Если задача содержит целевую активити (`target`), она активируется вызовом `resumeTopActivityUncheckedLocked`.
+В методе `resumeFocusedTasksTopActivities` происходит обход всех дисплеев и корневых задач. Для каждой задачи выбирается верхняя активити,
+проверяется её состояние и возможность активации. Если задача содержит целевую активити (`target`), она активируется вызовом
+`resumeTopActivityUncheckedLocked`.
 
-Таким образом, после создания `ActivityRecord`, система полностью подготавливает задачу и активирует верхнюю активити, переводя её в состояние RESUMED.
+Таким образом, после создания `ActivityRecord`, система полностью подготавливает задачу и активирует верхнюю активити, переводя её в
+состояние RESUMED.
+Отлично, продолжим ровно в том же техническом, «ровном» стиле, учитывая, что эти методы мы действительно уже подробно разбирали ранее.
 
 После того как контейнер окон выбрал задачу для возобновления, управление переходит в метод `resumeTopActivityUncheckedLocked` внутри класса
 `Task`.
-Здесь вызывается внутренний метод `resumeTopActivityInnerLocked`, который уже окончательно определяет, какую Activity нужно запустить.
+Мы уже встречали этот метод раньше — он отвечает за выбор и финальную подготовку верхней активити внутри задачи перед запуском. Внутри него
+вызывается `resumeTopActivityInnerLocked`, который в свою очередь извлекает нужный `TaskFragment`.
 
 ```java
 class Task extends TaskFragment {
@@ -2556,12 +2565,11 @@ class Task extends TaskFragment {
 }
 ```
 
-В методе `resumeTopActivityInnerLocked` вытаскивается фрагмент задачи (`TaskFragment`), к которому привязана верхняя Activity. Именно тут
-начинается конкретная подготовка к запуску компонента приложения.
+Как мы помним, в методе `resumeTopActivityInnerLocked` вытаскивается верхний фрагмент задачи (объект `TaskFragment`), который содержит
+активити, готовую к запуску.
 
-Дальше вызывается `resumeTopActivity` у `TaskFragment`. Здесь происходит поиск верхней активности (`topRunningActivity`) и запуск метода
-`startSpecificActivity`. По сути, `startSpecificActivity` — это последняя точка внутри ядра системы, где принимается решение: запустить
-новый процесс для активности или использовать уже существующий.
+Далее вызывается `resumeTopActivity` у `TaskFragment`. Этот метод ищет верхнюю активити в контейнере (`topRunningActivity`) и инициирует
+вызов `startSpecificActivity`. Здесь принимается решение, нужно ли запускать новый процесс или использовать уже существующий.
 
 ```java
 class TaskFragment extends WindowContainer<WindowContainer> {
@@ -2578,9 +2586,10 @@ class TaskFragment extends WindowContainer<WindowContainer> {
 }
 ```
 
-Далее метод `startSpecificActivity` внутри `ActivityTaskSupervisor`. Здесь анализируется состояние процесса: если процесс уже существует и
-привязан, то активити будет сразу запущена. Если же процесс отсутствует или был завершён системой, тогда вызывается `startProcessAsync`,
-чтобы создать новый процесс для этой активности.
+Мы уже видели метод `startSpecificActivity` внутри `ActivityTaskSupervisor` в предыдущих главах.
+Он проверяет, существует ли уже процесс для текущей активности. Если процесс жив и активити привязана, то система продолжает её запуск
+напрямую. Если процесс отсутствует или был выгружен системой, вызывается метод `startProcessAsync`, который отвечает за асинхронный старт
+нового процесса.
 
 ```java
 public class ActivityTaskSupervisor implements RecentTasks.Callbacks {
@@ -2596,8 +2605,9 @@ public class ActivityTaskSupervisor implements RecentTasks.Callbacks {
 }
 ```
 
-В методе `startProcessAsync` активити добавляется в список `mStartingProcessActivities`. Это своего рода «очередь на запуск», куда система
-кладёт активности, пока ожидает, что процесс для них будет создан и привязан.
+Внутри `startProcessAsync`, как мы уже подробно разбирали, активити добавляется в список `mStartingProcessActivities`.
+Это очередь для тех активити, которые ждут, пока процесс будет создан и привязан системой. Такая очередь позволяет системе контролировать
+порядок запуска и управлять ресурсами без потерь состояний.
 
 ```java
 public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
@@ -2615,3 +2625,12 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
     ...
 }
 ```
+
+Таким образом, вся эта цепочка методов, которые мы уже встречали ранее, замыкается именно здесь: от вызова из контейнеров окон до финального
+решения о создании нового процесса или продолжении в текущем.
+В результате создаётся, сохраняется и активируется `ActivityRecord`, и именно он становится ключевым звеном между системой и
+пользовательским интерфейсом.
+Что происходит после вызова этого метода и последующую логику обработки мы уже подробно разбирали в предыдущих главах.
+
+На этом, пожалуй, всё — это конец статьи.
+

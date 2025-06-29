@@ -1,6 +1,6 @@
-# ViewModel под капотом: от ViewModelStore до ActivityThread
+# ViewModel под капотом: как она выживает при пересоздании Activity
 
-![view-model-under-the-hood-store.png](view-model-under-the-hood-store.png)
+[//]: # (В статье подробно разобран весь скрытый путь, по которому ViewModel переживает изменение конфигурации Activity. От ViewModelStore и NonConfigurationInstances до роли ActivityThread и ActivityClientRecord. Шаг за шагом показано, где и как реально хранится ViewModel, что происходит при уничтожении и пересоздании Activity, и как всё это связано с внутренними механизмами Android. Полный низкоуровневый разбор без магии и упрощений.)
 
 ## Введение
 
