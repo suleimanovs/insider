@@ -1,9 +1,11 @@
-# ViewModel Under The Hood: Saved State Handle
+# ViewModel в Fragment под капотом: от ViewModelStore до Retain-фрагментов
+
+[//]: # (В статье подробно разбирается, как именно ViewModel хранится и выживает внутри фрагментов: от связи с FragmentManagerViewModel и ViewModelStore активности до механизма вложенных child-фрагментов и дерева FragmentManagerViewModel. Показано, как всё это заменило устаревший механизм Retain-фрагментов, и как на самом деле устроено хранение состояния при пересоздании. Полный низкоуровневый разбор всех цепочек вызовов и архитектурных связей, включая современные и устаревшие подходы.)
 
 В предыдущей статье мы рассмотрели [ViewModelStore](view-model-under-the-hood-store.md) и изучили полный путь от
 создания
-`ViewModel` до его хранения в `ViewModelStore`. Мы выяснили, где хранится сам `ViewModelStore`, но рассматривали
-это в контексте `ComponentActivity` и его родителя `Activity`.
+`ViewModel` до его хранения в `ViewModelStore`. Мы выяснили, где хранится сам `ViewModelStore`,
+но рассматривали это в контексте `ComponentActivity` и его родителя `Activity`.
 
 А как обстоят дела у `Fragment`-ов? В этой статье мы ответим на вопрос:
 
@@ -539,7 +541,6 @@ private final HashMap<String, FragmentManagerViewModel> mChildNonConfigs = new H
 
 Этот подход уже **не рекомендуется**, и с современными `androidx.fragment.app.Fragment` он **не работает**. Он применим
 только для старых `android.app.Fragment` и только при активном флаге `setRetainInstance(true)`.
-
 Когда мы добавляем фрагмент в активити через `supportFragmentManager`, мы всегда попадаем под **второе условие**,
 описанное выше:  
 `host instanceof ViewModelStoreOwner`. В этой ситуации `FragmentManager` получает `ViewModelStore` у `host` (то есть
