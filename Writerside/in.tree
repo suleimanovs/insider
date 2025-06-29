@@ -7,12 +7,13 @@
 <instance-profile id="in" name="suleimanov" start-page="start-page.md"
 >
     <toc-element topic="start-page.md"/>
+    <toc-element topic="android-vacancy.md"/>
 
     <toc-element toc-title="Android">
         <toc-element topic="view-model-under-the-hood-store.md"/>
         <toc-element topic="view-model-under-the-hood-сompose.md"/>
         <toc-element topic="fragment-viewmodelstore-and-retain-fragment.md"/>
-        <toc-element topic="view-model-under-the-hood-state-handle.md" in="in"/>
+        <toc-element topic="saved-state-handle-under-the-hood.md" in="in"/>
     </toc-element>
     <toc-element topic="decompose-save-state-internal.md"/>
 

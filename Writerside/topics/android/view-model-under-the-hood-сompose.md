@@ -1,4 +1,4 @@
-# ViewModel Under The Hood: Compose
+# ViewModel под капотом: Compose и View
 
 Это продолжение двух предыдущих статей. Если в первой мы разобрали, где в конечном итоге хранится `ViewModelStore` в
 случае с `Activity`, а во второй — как это устроено во `Fragment`, то сегодня разберёмся, где хранятся `ViewModel`-и,

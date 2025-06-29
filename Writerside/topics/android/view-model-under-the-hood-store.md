@@ -1,4 +1,4 @@
-# ViewModel Under The Hood: View Model Store
+# ViewModel под капотом: от ViewModelStore до ActivityThread
 
 ![view-model-under-the-hood-store.png](view-model-under-the-hood-store.png)
 
@@ -828,3 +828,21 @@ flowchart TD
     ComponentActivity.kt == Наследуется ===> Activity.java
     MAP --> MyViewModel["MyViewModel"]
 ```
+
+## Итоги
+
+В этой статье мы не касались работы ViewModel как таковой — фокус был исключительно на том, **почему она не умирает при пересоздании Activity**, и за счёт чего это вообще возможно.
+
+Мы проследили всю цепочку:
+`ViewModel` → `ViewModelStore` → `ComponentActivity#NonConfigurationInstances` → `Activity#NonConfigurationInstances` → `ActivityClientRecord` → `ActivityThread`.
+Именно в этой глубокой вложенности и заключается ответ: **ViewModel выживает, потому что сохраняется не в Activity напрямую, а в объекте, который система сама передаёт новой Activity при конфигурационных изменениях.**
+
+Сам `ViewModelStore` создаётся либо с нуля, либо восстанавливается через `getLastNonConfigurationInstance()`.
+Он очищается только в `onDestroy()`, если `isChangingConfigurations == false`, — то есть если Activity действительно умирает, а не пересоздаётся.
+
+Под капотом всё это обеспечивается `ActivityThread`, который сохраняет `NonConfigurationInstances` в `ActivityClientRecord`, а потом передаёт в метод `attach()` при создании новой Activity. `ActivityThread` — синглтон, живущий столько же, сколько и процесс, и именно он является опорной точкой, через которую проходит вся цепочка восстановления.
+
+**ViewModel выживает не потому, что её кто-то “сохраняет” — а потому, что никто её не убивает.**
+Пока жив `ActivityThread`, жив и `ViewModelStore`.
+
+Позже мы снова вернемся к `ActivityThread` и `ActivityClientRecord`, это будет в рамках следующих статьей.
