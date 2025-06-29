@@ -2346,16 +2346,34 @@ WindowManager использует для управления окнами. О�
 нарушая общую структуру приложения в памяти. Именно поэтому пользователь всегда видит «цельную» задачу в Recents, а не отдельные активности.
 
 
-> Для более наглядного понимания иерархии можно посмотреть диаграмму ниже, которая отлично иллюстрирует дерево контейнеров в Android WindowManager (начиная с Android 12).
+> Для более наглядного понимания иерархии можно посмотреть диаграмму ниже, которая отлично иллюстрирует дерево контейнеров в Android
+> WindowManager (начиная с Android 12).
 >
 > ![Android WindowManager Hierarchy](https://cdn.jsdelivr.net/gh/b0xt/sobyte-images/2022/02/15/8e302de71ed649b7aab54919ae455e61.png)
 >
-> *Диаграмма взята с [sobyte.net — Android 12 WMS Hierarchy](https://www.sobyte.net/post/2022-02/android-12-wms-hierarchy/#:~:text=%2A%20RootWindowContainer%3A%20The%20top,%E2%80%A6) для иллюстрации иерархии WindowManager.*
-
+> *Диаграмма взята
+с [sobyte.net — Android 12 WMS Hierarchy](https://www.sobyte.net/post/2022-02/android-12-wms-hierarchy/#:~:text=%2A%20RootWindowContainer%3A%20The%20top,%E2%80%A6)
+для иллюстрации иерархии WindowManager.*
 
 ## Где и когда создается ActivityRecord в первые
 
-Когда мы впервые запускаем `Activity`, система начинает с вызова метода `startActivityWithFeature` в `ActivityManagerService`. Этот метод — публичный интерфейс сервиса, куда попадают все запросы на старт активити из клиентской стороны (например, из приложения или из системы). Он принимает кучу параметров: `IApplicationThread caller`, `Intent intent`, имя пакета и прочие детали, которые нужны для контроля прав доступа и валидации вызова.
+После того как мы разобрали, где именно хранится `ActivityRecord` в иерархии контейнеров, возникает следующий важный вопрос: **а когда и как
+этот объект вообще появляется в системе?**
+
+Все предыдущие главы показывали нам, как система управляет уже существующими `ActivityRecord` — как они восстанавливаются из стека задач (
+Recents), как переходят между состояниями, как сохраняются их состояния. Но откуда берётся первый экземпляр `ActivityRecord`, когда Activity
+запускается впервые, например, при самом первом запуске приложения или при старте новой Activity через интент?
+
+Именно этот момент — создание `ActivityRecord` — можно считать точкой входа активности в «жизнь» на стороне system server.
+На этом этапе создаётся основная структура, к которой в дальнейшем будут привязаны всё: и окна (`WindowState`), и состояния (`Bundle`), и
+привязки к задаче (`Task`).
+
+Дальше система начинает «разворачивать» процесс по цепочке вызовов, начиная с верхнего уровня — `ActivityManagerService`.
+Когда приложение или другой компонент системы вызывает `startActivity(...)`, эта команда сначала попадает в публичный API
+`ActivityManagerService`, а уже оттуда прокладывает путь вниз через слои system server, где и подготавливаются все объекты, необходимые для
+старта.
+
+Вот как выглядит эта цепочка вызовов на первых уровнях:
 
 ```java
 public class ActivityManagerService extends IActivityManager.Stub ,...{
@@ -2368,8 +2386,8 @@ public class ActivityManagerService extends IActivityManager.Stub ,...{
 }
 ```
 
-Далее, `ActivityManagerService` делегирует всё в `ActivityTaskManagerService`. Именно здесь идёт основной разбор параметров и первая проверка, какой пользовательский профиль запущен, какие флаги стоят у интента и т.д.
-Метод `startActivity` перенаправляет вызов в `startActivityAsUser`, чтобы окончательно определить, от чьего имени стартуем активити (в Android всегда есть поддержка многопользовательских сценариев).
+Здесь `ActivityManagerService` лишь перенаправляет вызов в `ActivityTaskManagerService`, где начинается более детальная работа с профилями
+пользователей, флагами интентов и прочими проверками.
 
 ```java
 public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
@@ -2379,24 +2397,25 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
         return startActivityAsUser(caller, callingPackage, callingFeatureId, intent, ...);
     }
 
-   private int startActivityAsUser(IApplicationThread caller, String callingPackage, ...) {
+    private int startActivityAsUser(IApplicationThread caller, String callingPackage, ...) {
 
-      return getActivityStartController().obtainStarter(intent, "startActivityAsUser")
+        return getActivityStartController().obtainStarter(intent, "startActivityAsUser")
               ...
               .execute();
-   }
+    }
 
-
-   ActivityStartController getActivityStartController() {
-      return mActivityStartController;
-   }
+    ActivityStartController getActivityStartController() {
+        return mActivityStartController;
+    }
 
 }
 ```
 
-Самая важная часть тут — это `ActivityStartController`. Когда мы попадаем в метод `startActivityAsUser`, мы вызываем `getActivityStartController().obtainStarter(...)`.
-Здесь впервые создаётся объект `ActivityStarter`. Его задача — инкапсулировать всю логику подготовки и окончательной «развёртки» активити: проверка прав, проверка флагов, проверка существующих задач, выбор taskAffinity и так далее.
-Мы передаём интент и «reason» (строку с причиной старта, используется для отладочных логов).
+В методе `startActivityAsUser` мы уже видим обращение к `ActivityStartController`, который управляет процессом создания и конфигурации
+старта активности.
+Метод `obtainStarter` возвращает объект `ActivityStarter`, который можно назвать настоящим «дирижёром» запуска. Он собирает все параметры,
+проверяет, нужна ли новая задача (`Task`) или можно использовать существующую, проверяет конфигурацию и наконец подготавливает
+`ActivityRecord`.
 
 ```java
 public class ActivityStartController {
@@ -2407,10 +2426,13 @@ public class ActivityStartController {
 }
 ```
 
-`ActivityStarter` в итоге отвечает за всю финальную подготовку, включая создание нового `Task`, если это нужно, и самое главное — за создание нового объекта `ActivityRecord`, который будет представлять будущую активити внутри system server.
+После того как мы получаем `ActivityStarter` через `obtainStarter`, именно здесь происходит создание нового объекта `ActivityRecord`.
+`ActivityStarter` формирует все ключевые параметры запуска: интент, флаги, целевой `Task`, конфигурацию окна, а также решает, нужно ли создать новую задачу или использовать существующую.
 
-На этом моменте мы и начинаем «закладывать» наш `ActivityRecord`, который позже будет помещён в нужный `Task` (или в новый, или в существующий), зарегистрирован в `TaskDisplayArea` и полностью привязан к своей оконной иерархии через `WindowContainer`.
+Созданный `ActivityRecord` связывается с задачей, добавляется в иерархию контейнеров и становится частью общей структуры `RootWindowContainer`.
+После создания `ActivityRecord` хранится в дереве контейнеров до завершения активности или её удаления системой.
 
+---
 
 ```java
 class ActivityStarter {
@@ -2425,11 +2447,9 @@ class ActivityStarter {
         ...
     }
 
-
     private int executeRequest(Request request) {
-
         final ActivityRecord r = new ActivityRecord.Builder(mService)
-                 ... // builder methods
+                 ... // параметры через билдер
                 .build();
 
         mLastStartActivityResult = startActivityUnchecked(r, ...);
@@ -2443,12 +2463,10 @@ class ActivityStarter {
     }
 
     int startActivityInner(final ActivityRecord r, ...) {
-
         setInitialState(r, ...);
 
         mRootWindowContainer.resumeFocusedTasksTopActivities(
                 mTargetRootTask, mStartActivity, mOptions, mTransientLaunch);
-
     }
 
     private void setInitialState(ActivityRecord r, ...) {
@@ -2457,8 +2475,13 @@ class ActivityStarter {
         ...
     }
 }
-
 ```
+
+В методе `executeRequest` через билдер создаётся объект `ActivityRecord`. После инициализации передаётся в `startActivityUnchecked`, а затем в `startActivityInner`, где вызывается метод `setInitialState`. Здесь объект сохраняется в `mStartActivity` — это ссылка на текущую активность, которая будет запущена.
+
+Далее активити подготавливается к запуску через вызов `resumeFocusedTasksTopActivities` у `RootWindowContainer`.
+
+---
 
 ```java
 class RootWindowContainer extends WindowContainer<DisplayContent>
@@ -2468,7 +2491,6 @@ class RootWindowContainer extends WindowContainer<DisplayContent>
             Task targetRootTask, ActivityRecord target, ActivityOptions targetOptions,
             boolean deferPause) {
 
-       ...
         for (int displayNdx = getChildCount() - 1; displayNdx >= 0; --displayNdx) {
             final DisplayContent display = getChildAt(displayNdx);
             final boolean curResult = result;
@@ -2491,7 +2513,6 @@ class RootWindowContainer extends WindowContainer<DisplayContent>
             });
             result |= resumedOnDisplay[0];
             if (!resumedOnDisplay[0]) {
-
                 final Task focusedRoot = display.getFocusedRootTask();
                 if (focusedRoot != null) {
                     result |= focusedRoot.resumeTopActivityUncheckedLocked(
@@ -2505,10 +2526,12 @@ class RootWindowContainer extends WindowContainer<DisplayContent>
 
         return result;
     }
-
 }
 ```
 
+В методе `resumeFocusedTasksTopActivities` происходит обход всех дисплеев и корневых задач. Для каждой задачи выбирается верхняя активити, проверяется её состояние и возможность активации. Если задача содержит целевую активити (`target`), она активируется вызовом `resumeTopActivityUncheckedLocked`.
+
+Таким образом, после создания `ActivityRecord`, система полностью подготавливает задачу и активирует верхнюю активити, переводя её в состояние RESUMED.
 
 После того как контейнер окон выбрал задачу для возобновления, управление переходит в метод `resumeTopActivityUncheckedLocked` внутри класса
 `Task`.
@@ -2543,14 +2566,14 @@ class Task extends TaskFragment {
 ```java
 class TaskFragment extends WindowContainer<WindowContainer> {
 
-   final boolean resumeTopActivity(ActivityRecord prev, ActivityOptions options,
-                                   boolean skipPause) {
-      ActivityRecord next = topRunningActivity(true /* focusableOnly */);
-      mTaskSupervisor.startSpecificActivity(next, true, false);
+    final boolean resumeTopActivity(ActivityRecord prev, ActivityOptions options,
+                                    boolean skipPause) {
+        ActivityRecord next = topRunningActivity(true /* focusableOnly */);
+        mTaskSupervisor.startSpecificActivity(next, true, false);
         ...
-      return true;
+        return true;
         ...
-   }
+    }
 
 }
 ```
@@ -2562,14 +2585,14 @@ class TaskFragment extends WindowContainer<WindowContainer> {
 ```java
 public class ActivityTaskSupervisor implements RecentTasks.Callbacks {
     ...
-   final ActivityTaskManagerService mService;
+    final ActivityTaskManagerService mService;
 
-   void startSpecificActivity(ActivityRecord r, boolean andResume, boolean checkConfig) {
+    void startSpecificActivity(ActivityRecord r, boolean andResume, boolean checkConfig) {
         ...
-      mService.startProcessAsync(r, knownToBeDead, isTop,
-              isTop ? HostingRecord.HOSTING_TYPE_TOP_ACTIVITY
-                      : HostingRecord.HOSTING_TYPE_ACTIVITY);
-   }
+        mService.startProcessAsync(r, knownToBeDead, isTop,
+                isTop ? HostingRecord.HOSTING_TYPE_TOP_ACTIVITY
+                        : HostingRecord.HOSTING_TYPE_ACTIVITY);
+    }
 }
 ```
 
@@ -2580,15 +2603,15 @@ public class ActivityTaskSupervisor implements RecentTasks.Callbacks {
 public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
     ...
 
-   final ArrayList<ActivityRecord> mStartingProcessActivities = new ArrayList<>();
-   RootWindowContainer mRootWindowContainer;
+    final ArrayList<ActivityRecord> mStartingProcessActivities = new ArrayList<>();
+    RootWindowContainer mRootWindowContainer;
 
-   void startProcessAsync(ActivityRecord activity, boolean knownToBeDead, boolean isTop,
-                          String hostingType) {
+    void startProcessAsync(ActivityRecord activity, boolean knownToBeDead, boolean isTop,
+                           String hostingType) {
         ...
-      mStartingProcessActivities.add(activity);
+        mStartingProcessActivities.add(activity);
         ...
-   }
+    }
     ...
 }
 ```
