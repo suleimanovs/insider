@@ -100,9 +100,11 @@ class RestoreActivity : AppCompatActivity() {
 остаётся в памяти, то `onSaveInstanceState` для A также не вызывается, так как его состояние остаётся неизменным.
 
 Реализация по умолчанию этого метода автоматически сохраняет большую часть состояния пользовательского интерфейса, **вызывая метод
-`onSaveInstanceState()` у каждого представления(`View`) в иерархии**, у которых есть ID, так же сохраняется ID элемента, который был в фокусе.
+`onSaveInstanceState()` у каждого представления(`View`) в иерархии**, у которых есть ID, так же сохраняется ID элемента, который был в
+фокусе.
 Восстановление этих данных будет происходить в стандартной реализации метода `onRestoreInstanceState()`. Если метод переопределяется для
-сохранения дополнительной информации, которая не захвачена отдельными представлениями(`View`), рекомендуется вызвать реализацию по умолчанию через
+сохранения дополнительной информации, которая не захвачена отдельными представлениями(`View`), рекомендуется вызвать реализацию по умолчанию
+через
 `super.onSaveInstanceState(outState)`. В противном случае разработчику придётся вручную сохранять состояние всех представлений(`View`).
 
 Если метод вызывается, то это произойдёт **после `onStop`** для приложений, нацеленных на платформы, начиная с Android P. Для более ранних
@@ -404,7 +406,8 @@ internal class SavedStateRegistryImpl(
    `SAVED_COMPONENTS_KEY`.
 
 2. `performRestore` — вызывается при создании или восстановлении `Activity` или `Fragment`. Этот метод просто читает из `savedState`значение
-   по ключу `SAVED_COMPONENTS_KEY`, если оно существует. Найденное значение (вложенный `SavedState`) сохраняется в переменную `restoredState`,
+   по ключу `SAVED_COMPONENTS_KEY`, если оно существует. Найденное значение (вложенный `SavedState`) сохраняется в переменную
+   `restoredState`,
    чтобы потом можно было передать его в соответствующие компоненты.
 
 На данный момент мы увидели как работает логика сохранения и регистраций, теперь осталось понять кто же вызывает методы `performSave`
@@ -451,7 +454,7 @@ public actual class SavedStateRegistryController private actual constructor(
 ```
 
 И видим, что вызовами методов `SavedStateRegistryImpl.performSave` и `SavedStateRegistryImpl.performRestore` управляют одноимённые методы из
-`SavedStateRegistryController`. 
+`SavedStateRegistryController`.
 
 Также видим метод `create`, который создаёт `SavedStateRegistryImpl`, передаёт его в конструктор
 `SavedStateRegistryController` и возвращает сам `SavedStateRegistryController`.
@@ -492,13 +495,13 @@ public interface SavedStateRegistryOwner : androidx.lifecycle.LifecycleOwner {
 ```java
 public class Fragment implements ...SavedStateRegistryOwner,...{
 
-    SavedStateRegistryController mSavedStateRegistryController;
+SavedStateRegistryController mSavedStateRegistryController;
 
-    @NonNull
-    @Override
-    public final SavedStateRegistry getSavedStateRegistry() {
-        return mSavedStateRegistryController.getSavedStateRegistry();
-    }
+@NonNull
+@Override
+public final SavedStateRegistry getSavedStateRegistry() {
+    return mSavedStateRegistryController.getSavedStateRegistry();
+}
 }
 ```
 
@@ -1010,15 +1013,15 @@ open class ComponentActivity() : ..., SavedStateRegistryOwner, ... {
 ```java
 public class Activity extends ContextThemeWrapper ...{
 
-    final void performSaveInstanceState(@NonNull Bundle outState) {
+final void performSaveInstanceState(@NonNull Bundle outState) {
        ...
-       onSaveInstanceState(outState);
+    onSaveInstanceState(outState);
        ...
-    }
-    
-    protected void onSaveInstanceState(@NonNull Bundle outState) {
+}
+
+protected void onSaveInstanceState(@NonNull Bundle outState) {
        ...
-    }
+}
 }
 ```
 
@@ -1121,6 +1124,7 @@ public final class ActivityThread extends ClientTransactionHandler implements Ac
     }
 }
 ```
+
 Метод callActivityOnStop определяет, нужно ли сохранять состояние активности перед остановкой.
 Проверяется флаг saveState, активность не должна быть завершена (!mFinished), состояние (r.state) должно быть ещё не сохранено,
 и версия должна быть до Honeycomb (!isPreHoneycomb()).
@@ -2001,13 +2005,13 @@ ActivityManagerService.startActivity()
                           → mStartingProcessActivities.add(r) // финальная точка
 ```
 
-ActivityRecord(с Bundle) умеет переживать смерть или прерыванием процесса, подразумевается ситуация, когда приложение находится 
-в фоне и сохраняется в стеке задач. По этому когда пользователь возвращается в приложение, то ActivityManagerService вызывает 
-метод startActivityFromRecents для восстановления процесса и задачи(Task), каждая задача равняется одному активити которая может
-хранить в себе другие задачи которые так же ровняются опредеоенному компоненту
+`ActivityRecord` (с `Bundle`) умеет переживать смерть процесса или его прерывание. Подразумевается ситуация, когда приложение уходит в фон и
+сохраняется в стеке задач (Recents), система через какое-то время убивает процесс.
+Когда пользователь возвращается, система вызывает метод `startActivityFromRecents`, чтобы восстановить задачу (Task) и поднять процесс.
+Каждая задача, как правило, соответствует одной корневой Activity, но внутри может хранить дочерние Activity, которые тоже связаны с
+компонентами.
 
-
-```Java
+```java
 public class ActivityManagerService extends IActivityManager.Stub {
 
     @Override
@@ -2018,31 +2022,30 @@ public class ActivityManagerService extends IActivityManager.Stub {
 }
 ```
 
-Метод ActivityManagerService.startActivityFromRecents обращается к ActivityTaskManagerService.startActivityFromRecents
+Метод `startActivityFromRecents` внутри `ActivityManagerService` напрямую делегирует вызов в `ActivityTaskManagerService`.
+Сам по себе он ничего не делает, просто перекидывает управление дальше.
 
 ```java
 public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
-
 
     ActivityTaskSupervisor mTaskSupervisor;
 
     @Override
     public final int startActivityFromRecents(int taskId, Bundle bOptions) {
-
         ...
-            return mTaskSupervisor.startActivityFromRecents(callingPid, callingUid, taskId,
-                    safeOptions);
-
-        ...
-
+        return mTaskSupervisor.startActivityFromRecents(callingPid, callingUid, taskId, safeOptions);
     }
 }
-
 ```
+
+В `ActivityTaskManagerService.startActivityFromRecents` происходит подготовка: извлекаются PID, UID, формируются безопасные опции запуска (
+SafeActivityOptions). Далее метод сразу передаёт выполнение в `ActivityTaskSupervisor`, где происходит основная логика обработки задачи.
+
 ```java
 public class ActivityTaskSupervisor implements RecentTasks.Callbacks {
-final ActivityTaskManagerService mService;
-RootWindowContainer mRootWindowContainer;
+
+    final ActivityTaskManagerService mService;
+    RootWindowContainer mRootWindowContainer;
 
     int startActivityFromRecents(int callingPid, int callingUid, int taskId,
                                  SafeActivityOptions options) {
@@ -2052,9 +2055,9 @@ RootWindowContainer mRootWindowContainer;
 
         if (!mService.mAmInternal.shouldConfirmCredentials(task.mUserId) && task.getRootActivity() != null) {
             final ActivityRecord targetActivity = task.getTopNonFinishingActivity();
-                ...
+         ...
             mService.moveTaskToFrontLocked(...);
-            ...
+         ...
             return ActivityManager.START_TASK_TO_FRONT;
         }
     }
@@ -2062,6 +2065,17 @@ RootWindowContainer mRootWindowContainer;
 }
 
 ```
+
+Внутри `startActivityFromRecents` у `ActivityTaskSupervisor` происходит уже настоящий разбор: сначала ищется нужная задача через
+`mRootWindowContainer.anyTaskForId(...)`, где передаются различные флаги (например, `MATCH_ATTACHED_TASK_OR_RECENT_TASKS_AND_RESTORE`),
+чтобы восстановить задачу из списка недавних.
+Затем проверяется, нужно ли подтверждать учётные данные пользователя (например, если включён режим защиты профиля). После этого смотрится,
+есть ли у задачи root Activity (`getRootActivity()`), и извлекается верхняя невыполненная Activity через `getTopNonFinishingActivity()`.
+
+Если все условия подходят, вызывается `moveTaskToFrontLocked(...)` у `ActivityTaskManagerService`, который отвечает за перенос задачи в
+передний план и дальнейший запуск. Всё это нужно для того, чтобы корректно восстановить состояние приложения из стека задач без
+необходимости полного пересоздания Activity с нуля.
+
 ```java
 public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
 
@@ -2074,31 +2088,40 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
     }
 
 }
-
 ```
+
+Метод `moveTaskToFrontLocked` после проверки передаёт управление в `findTaskToMoveToFront`. Здесь задача не просто находится, а
+действительно перемещается на передний план. В начале вытаскивается корневой контейнер задачи через `getRootTask()`. Если задача ещё не была
+«переподвешена» (reparented), вызывается `moveHomeRootTaskToFrontIfNeeded`, чтобы при необходимости поднять домашнюю задачу (например, если
+приложение долго не запускалось).
+
+Далее через `getTopNonFinishingActivity()` достаётся верхняя невыполненная ActivityRecord(Activity) в задаче. Затем вызывается
+`currentRootTask.moveTaskToFront`, куда передаётся сама задача, опции анимации и другие параметры
+
 ```java
 public class ActivityTaskSupervisor implements RecentTasks.Callbacks {
 
-    /**
-     * This doesn't just find a task, it also moves the task to front.
-     */
     void findTaskToMoveToFront(Task task, int flags, ActivityOptions options, String reason,
                                boolean forceNonResizeable) {
         Task currentRootTask = task.getRootTask();
 
-            if (!reparented) {
-                moveHomeRootTaskToFrontIfNeeded(flags, currentRootTask.getDisplayArea(), reason);
-            }
+        if (!reparented) {
+            moveHomeRootTaskToFrontIfNeeded(flags, currentRootTask.getDisplayArea(), reason);
+        }
 
-            final ActivityRecord r = task.getTopNonFinishingActivity();
-            currentRootTask.moveTaskToFront(task, false /* noAnimation */, options,
-                    r == null ? null : r.appTimeTracker, reason);
+        final ActivityRecord r = task.getTopNonFinishingActivity();
+        currentRootTask.moveTaskToFront(task, false /* noAnimation */, options,
+                r == null ? null : r.appTimeTracker, reason);
         ...
     }
 
 }
-
 ```
+
+В методе `moveTaskToFront` внутри класса `Task` мы видим финальный шаг — вызов `mRootWindowContainer.resumeFocusedTasksTopActivities()`.
+Этот вызов отвечает за то, чтобы на уровне контейнера окон (WindowContainer) запустить или возобновить верхнюю активность, сделать её
+активной и отрисовать.
+
 ```java
 class Task extends TaskFragment {
 
@@ -2109,11 +2132,19 @@ class Task extends TaskFragment {
     }
 
 }
-
 ```
+
+Метод `resumeFocusedTasksTopActivities` у `RootWindowContainer` проходит по всем дисплеям, чтобы определить, какая задача должна быть
+запущена или возобновлена. Для каждого дисплея вызывается `forAllRootTasks`, внутри которого берётся верхняя активность (
+`topRunningActivity`). Если она уже в состоянии `RESUMED`, то просто выполняется переход приложения (executeAppTransition). В противном
+случае активность активируется через `makeActiveIfNeeded`.
+
+Если на дисплее не оказалось ни одной подходящей активности, вызывается `resumeTopActivityUncheckedLocked` у фокусной задачи. А если вообще
+нет фокусных задач, система запускает домашнюю Activity через `resumeHomeActivity`.
+
 ```java
 class RootWindowContainer extends WindowContainer<DisplayContent>
-implements DisplayManager.DisplayListener {
+        implements DisplayManager.DisplayListener {
 
     boolean resumeFocusedTasksTopActivities(
             Task targetRootTask, ActivityRecord target, ActivityOptions targetOptions,
@@ -2157,8 +2188,16 @@ implements DisplayManager.DisplayListener {
     }
 
 }
-
 ```
+
+Таким образом, когда пользователь возвращается к приложению из Recents, система шаг за шагом поднимает задачу из стека, подготавливает
+корневую Activity и доводит её до состояния RESUMED. Всё это происходит последовательно: от поиска задачи в стеке — до финального вызова
+`makeActiveIfNeeded`, который, по сути, завершает процесс восстановления.
+
+После того как контейнер окон выбрал задачу для возобновления, управление переходит в метод `resumeTopActivityUncheckedLocked` внутри класса
+`Task`.
+Здесь вызывается внутренний метод `resumeTopActivityInnerLocked`, который уже окончательно определяет, какую Activity нужно запустить.
+
 ```java
 class Task extends TaskFragment {
 
@@ -2176,8 +2215,15 @@ class Task extends TaskFragment {
     }
 
 }
-
 ```
+
+В методе `resumeTopActivityInnerLocked` вытаскивается фрагмент задачи (`TaskFragment`), к которому привязана верхняя Activity. Именно тут
+начинается конкретная подготовка к запуску компонента приложения.
+
+Дальше вызывается `resumeTopActivity` у `TaskFragment`. Здесь происходит поиск верхней активности (`topRunningActivity`) и запуск метода
+`startSpecificActivity`. По сути, `startSpecificActivity` — это последняя точка внутри ядра системы, где принимается решение: запустить
+новый процесс для активности или использовать уже существующий.
+
 ```java
 class TaskFragment extends WindowContainer<WindowContainer> {
 
@@ -2185,98 +2231,25 @@ class TaskFragment extends WindowContainer<WindowContainer> {
                                     boolean skipPause) {
         ActivityRecord next = topRunningActivity(true /* focusableOnly */);
         mTaskSupervisor.startSpecificActivity(next, true, false);
-       ...
-        mTaskSupervisor.startSpecificActivity(next, true, true);
-       ...
+        ...
         return true;
-        ..
+        ...
     }
 
 }
 ```
-```java
-public class ActivityTaskSupervisor implements RecentTasks.Callbacks {
-    ...
-        final ActivityTaskManagerService mService;
-    
-    
-        void startSpecificActivity(ActivityRecord r, boolean andResume, boolean checkConfig) {
-          ...
-            mService.startProcessAsync(r, knownToBeDead, isTop,
-                    isTop ? HostingRecord.HOSTING_TYPE_TOP_ACTIVITY
-                            : HostingRecord.HOSTING_TYPE_ACTIVITY);
-        }
-    }
-}
-```
 
-```java
-public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
-...
-
-    final ArrayList<ActivityRecord> mStartingProcessActivities = new ArrayList<>();
-    RootWindowContainer mRootWindowContainer;
-
-    void startProcessAsync(ActivityRecord activity, boolean knownToBeDead, boolean isTop,
-                           String hostingType) {
-         ...
-        mStartingProcessActivities.add(activity);
-         ...
-    }
-    ...
-}
-```
-
-```java
-class RootWindowContainer extends WindowContainer<DisplayContent> implements DisplayManager.DisplayListener {
-
-    ActivityTaskSupervisor mTaskSupervisor;
-    ActivityTaskManagerService mService;
-
-    boolean attachApplication(WindowProcessController app) throws RemoteException {
-        final ArrayList<ActivityRecord> activities = mService.mStartingProcessActivities;
-        for (int i = activities.size() - 1; i >= 0; i--) {
-            final ActivityRecord r = activities.get(i);
-            ...
-            if (mTaskSupervisor.realStartActivityLocked(r, app, canResume,
-                    true /* checkConfig */)) {
-                hasActivityStarted = true;
-            }
-            ...
-        }
-    }
-}
-```
-
-а в ActivityTaskManagerService это выглядит следующим образом как мы уже видели, поле mStartingProcessActivities явлыяется
-коллекцией которая хранит ActivityRecord и есть один метод который в него добавляет ActivityRecord - это метод startProcessAsync
-
-```java
-public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
-...
-
-    /** The starting activities which are waiting for their processes to attach. */
-    final ArrayList<ActivityRecord> mStartingProcessActivities = new ArrayList<>();
-    RootWindowContainer mRootWindowContainer;
-
-    void startProcessAsync(ActivityRecord activity, boolean knownToBeDead, boolean isTop,
-                           String hostingType) {
-         ...
-        mStartingProcessActivities.add(activity);
-         ...
-    }
-    ...
-}
-```
+Далее метод `startSpecificActivity` внутри `ActivityTaskSupervisor`. Здесь анализируется состояние процесса: если процесс уже существует и
+привязан, то активити будет сразу запущена. Если же процесс отсутствует или был завершён системой, тогда вызывается `startProcessAsync`,
+чтобы создать новый процесс для этой активности.
 
 ```java
 public class ActivityTaskSupervisor implements RecentTasks.Callbacks {
     ...
     final ActivityTaskManagerService mService;
 
-
     void startSpecificActivity(ActivityRecord r, boolean andResume, boolean checkConfig) {
-      ...
+        ...
         mService.startProcessAsync(r, knownToBeDead, isTop,
                 isTop ? HostingRecord.HOSTING_TYPE_TOP_ACTIVITY
                         : HostingRecord.HOSTING_TYPE_ACTIVITY);
@@ -2284,23 +2257,250 @@ public class ActivityTaskSupervisor implements RecentTasks.Callbacks {
 }
 ```
 
-Так же видим метод getLifecycleManager который мы уже ранее встречали, и вот мы на финале,
+В методе `startProcessAsync` активити добавляется в список `mStartingProcessActivities`. Это своего рода «очередь на запуск», куда система
+кладёт активности, пока ожидает, что процесс для них будет создан и привязан.
 
 ```java
-class TaskFragment extends WindowContainer<WindowContainer> {
+public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
+    ...
 
-    final boolean resumeTopActivity(ActivityRecord prev, ActivityOptions options,
-                                    boolean skipPause) {
-        ActivityRecord next = topRunningActivity(true /* focusableOnly */);
-        mTaskSupervisor.startSpecificActivity(next, true, false);
-       ...
-        mTaskSupervisor.startSpecificActivity(next, true, true);
-       ...
-        return true;
-        ..
+    final ArrayList<ActivityRecord> mStartingProcessActivities = new ArrayList<>();
+    RootWindowContainer mRootWindowContainer;
+
+    void startProcessAsync(ActivityRecord activity, boolean knownToBeDead, boolean isTop,
+                           String hostingType) {
+        ...
+        mStartingProcessActivities.add(activity);
+        ...
+    }
+    ...
+}
+```
+
+Таким образом, когда мы доходим до финальной стадии, встает важный вопрос: **где в конечном итоге хранится `ActivityRecord` и как устроены
+связи между ключевыми сущностями — `DisplayContent`, `WindowContainer`, `Task` (и `TaskFragment`)?** Это поможет окончательно понять, как
+именно система управляет состоянием и «жизнью» Activity на стороне System Server.
+
+**Общая структура иерархии**
+Android управляет активностями и окнами в виде **иерархического дерева контейнеров**, где каждый контейнер реализован через базовый класс
+`WindowContainer`. Вся структура начинается с корневого контейнера `RootWindowContainer`, внутри которого для каждого физического или
+виртуального дисплея создается `DisplayContent`.
+
+**DisplayContent**
+`DisplayContent` представляет отдельный физический или виртуальный дисплей. Он является прямым потомком `RootWindowContainer` и внутри себя
+хранит так называемые **DisplayAreas**, в которых сегментируются разные типы окон (например, область приложений, область системных оверлеев
+и т.д.). Внутри DisplayContent находится **TaskDisplayArea**, которая отвечает за размещение пользовательских задач (Tasks).
+
+**TaskDisplayArea**
+`TaskDisplayArea` — это область дисплея, куда добавляются задачи (`Task`). В большинстве случаев, если нет multi-window или особых режимов,
+используется один **DefaultTaskDisplayArea**, где и размещаются все задачи приложения. В иерархии путь выглядит так: **DisplayContent →
+TaskDisplayArea → Task**.
+
+**Task**
+`Task` (по сути, «стек задач») группирует одну или несколько активити, которые пользователь воспринимает как одно приложение в списке
+Recents. В Android `Task` наследуется от `TaskFragment`, что делает его контейнером, способным содержать дочерние `WindowContainer`. Обычно
+внутри задачи размещаются именно `ActivityRecord`, каждая из которых представляет конкретную активити. В более сложных случаях, например при
+split-screen, `Task` может содержать и другие задачи или TaskFragments. Однако в стандартном сценарии (одиночный экран без split) задача
+содержит список ActivityRecords напрямую.
+
+*Здесь ключевой момент*: **`Task` является прямым родителем для `ActivityRecord`**. Это значит, что все состояния и контекст конкретной
+Activity хранятся внутри её `ActivityRecord`, который в свою очередь всегда находится внутри задачи. Таким образом, при возврате
+пользователя к приложению через Recents, система восстанавливает задачу, а вместе с ней и все вложенные ActivityRecords.
+
+**TaskFragment**
+`TaskFragment` — это базовый класс, который используется для создания под-контейнеров внутри задачи. В обычных сценариях мы его напрямую не
+видим, потому что работаем с `Task`, который уже является расширением `TaskFragment`. В некоторых режимах (например, Activity Embedding)
+могут создаваться отдельные TaskFragments, чтобы разделить экран между несколькими активити. Но если таких сценариев нет, `Task` сам по себе
+содержит ActivityRecords, и дополнительных TaskFragments не используется.
+
+**ActivityRecord**
+`ActivityRecord` представляет конкретный экземпляр Activity в системе. Он наследуется от `WindowToken`, который в свою очередь является
+дочерним классом `WindowContainer`. Таким образом, `ActivityRecord` — это одновременно и контейнер для окон активити, и токен, который
+WindowManager использует для управления окнами. Обычно внутри `ActivityRecord` размещается один основной `WindowState` (окно приложения), а
+также любые дочерние окна (например, диалоги).
+
+**Путь в иерархии выглядит так**:
+`RootWindowContainer → DisplayContent → TaskDisplayArea → Task → ActivityRecord → WindowState`.
+
+Это означает, что `ActivityRecord` **всегда живёт внутри задачи** и никогда не существует сам по себе или в глобальном списке. Именно
+поэтому при возврате из Recents задача сначала поднимается целиком (`Task`), а затем уже внутри неё активируются нужные активности (
+`ActivityRecord`).
+
+Такое дерево контейнеров позволяет системе Android централизованно управлять всей иерархией окон и задач. Например, при изменении
+конфигурации или выгрузке процесса, состояние активности остаётся «привязанным» к её `ActivityRecord`, который живёт внутри `Task`. Когда
+задача возвращается на экран, все объекты дерева последовательно восстанавливаются, и Activity получает свои данные обратно через `Bundle`,
+связанный с её `ActivityRecord`.
+
+Сделаем краткий итог
+
+* **DisplayContent** — верхний контейнер для дисплея, включает TaskDisplayArea.
+* **TaskDisplayArea** — область дисплея для задач.
+* **Task** — контейнер, группирующий одну или несколько ActivityRecords.
+* **TaskFragment** — промежуточный контейнер, используется при embedding или split, обычно не нужен в базовом сценарии.
+* **ActivityRecord** — контейнер и токен конкретной Activity, всегда находится внутри Task.
+* **WindowState** — дочерние окна Activity, живут внутри ActivityRecord.
+
+Таким образом, вопрос *«где хранится ActivityRecord»* можно чётко ответить: **внутри Task**, как дочерний элемент в дереве контейнеров.
+
+Эта архитектура делает поведение задач предсказуемым и позволяет системе сохранять, приостанавливать и восстанавливать активности, не
+нарушая общую структуру приложения в памяти. Именно поэтому пользователь всегда видит «цельную» задачу в Recents, а не отдельные активности.
+
+
+> Для более наглядного понимания иерархии можно посмотреть диаграмму ниже, которая отлично иллюстрирует дерево контейнеров в Android WindowManager (начиная с Android 12).
+>
+> ![Android WindowManager Hierarchy](https://cdn.jsdelivr.net/gh/b0xt/sobyte-images/2022/02/15/8e302de71ed649b7aab54919ae455e61.png)
+>
+> *Диаграмма взята с [sobyte.net — Android 12 WMS Hierarchy](https://www.sobyte.net/post/2022-02/android-12-wms-hierarchy/#:~:text=%2A%20RootWindowContainer%3A%20The%20top,%E2%80%A6) для иллюстрации иерархии WindowManager.*
+
+
+## Где и когда создается ActivityRecord в первые
+
+Когда Activity впервые запускается, то вызывается метод:
+
+```java
+public class ActivityManagerService extends IActivityManager.Stub ,...{
+
+    @Override
+    public int startActivityWithFeature(IApplicationThread caller, String callingPackage,...) {
+        return mActivityTaskManager.startActivity(caller, callingPackage, callingFeatureId, intent,...);
+    }
+
+}
+
+```
+```java
+public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
+
+    @Override
+    public final int startActivity(IApplicationThread caller, String callingPackage, ...) {
+        return startActivityAsUser(caller, callingPackage, callingFeatureId, intent, ...);
+    }
+
+   private int startActivityAsUser(IApplicationThread caller, String callingPackage, ...) {
+
+      return getActivityStartController().obtainStarter(intent, "startActivityAsUser")
+              ...
+              .execute();
+   }
+
+
+   ActivityStartController getActivityStartController() {
+      return mActivityStartController;
+   }
+
+}
+
+```
+
+```java
+public class ActivityStartController {
+
+    ActivityStarter obtainStarter(Intent intent, String reason) {
+        return mFactory.obtain().setIntent(intent).setReason(reason);
     }
 }
 ```
+```java
+class ActivityStarter {
+
+    private final ActivityTaskManagerService mService;
+    private final RootWindowContainer mRootWindowContainer;
+    ActivityRecord mStartActivity;
+
+    int execute() {
+        ...
+        res = executeRequest(mRequest);
+        ...
+    }
+
+
+    private int executeRequest(Request request) {
+
+        final ActivityRecord r = new ActivityRecord.Builder(mService)
+                 ... // builder methods
+                .build();
+
+        mLastStartActivityResult = startActivityUnchecked(r, ...);
+        ...
+    }
+
+    private int startActivityUnchecked(final ActivityRecord r, ...) {
+        ...
+        result = startActivityInner(r, ...);
+        ...
+    }
+
+    int startActivityInner(final ActivityRecord r, ...) {
+
+        setInitialState(r, ...);
+
+        mRootWindowContainer.resumeFocusedTasksTopActivities(
+                mTargetRootTask, mStartActivity, mOptions, mTransientLaunch);
+
+    }
+
+    private void setInitialState(ActivityRecord r, ...) {
+        ...
+        mStartActivity = r;
+        ...
+    }
+}
+
+```
+
+```java
+class RootWindowContainer extends WindowContainer<DisplayContent>
+        implements DisplayManager.DisplayListener {
+
+    boolean resumeFocusedTasksTopActivities(
+            Task targetRootTask, ActivityRecord target, ActivityOptions targetOptions,
+            boolean deferPause) {
+
+       ...
+        for (int displayNdx = getChildCount() - 1; displayNdx >= 0; --displayNdx) {
+            final DisplayContent display = getChildAt(displayNdx);
+            final boolean curResult = result;
+            boolean[] resumedOnDisplay = new boolean[1];
+            final ActivityRecord topOfDisplay = display.topRunningActivity();
+            display.forAllRootTasks(rootTask -> {
+                final ActivityRecord topRunningActivity = rootTask.topRunningActivity();
+                if (!rootTask.isFocusableAndVisible() || topRunningActivity == null) {
+                    return;
+                }
+                if (rootTask == targetRootTask) {
+                    resumedOnDisplay[0] |= curResult;
+                    return;
+                }
+                if (topRunningActivity.isState(RESUMED) && topRunningActivity == topOfDisplay) {
+                    rootTask.executeAppTransition(targetOptions);
+                } else {
+                    resumedOnDisplay[0] |= topRunningActivity.makeActiveIfNeeded(target);
+                }
+            });
+            result |= resumedOnDisplay[0];
+            if (!resumedOnDisplay[0]) {
+
+                final Task focusedRoot = display.getFocusedRootTask();
+                if (focusedRoot != null) {
+                    result |= focusedRoot.resumeTopActivityUncheckedLocked(
+                            target, targetOptions, false /* skipPause */);
+                } else if (targetRootTask == null) {
+                    result |= resumeHomeActivity(null /* prev */, "no-focusable-task",
+                            display.getDefaultTaskDisplayArea());
+                }
+            }
+        }
+
+        return result;
+    }
+
+}
+```
+
+
+После того как контейнер окон выбрал задачу для возобновления, управление переходит в метод `resumeTopActivityUncheckedLocked` внутри класса
+`Task`.
+Здесь вызывается внутренний метод `resumeTopActivityInnerLocked`, который уже окончательно определяет, какую Activity нужно запустить.
 
 ```java
 class Task extends TaskFragment {
@@ -2317,69 +2517,66 @@ class Task extends TaskFragment {
         final TaskFragment topFragment = topActivity.getTaskFragment();
         resumed[0] = topFragment.resumeTopActivity(prev, options, deferPause);
     }
+
 }
 ```
 
-```java
-/** Root {@link WindowContainer} for the device. */
-class RootWindowContainer extends WindowContainer<DisplayContent>
-        implements DisplayManager.DisplayListener {
-    boolean resumeFocusedTasksTopActivities(
-            Task targetRootTask, ActivityRecord target, ActivityOptions targetOptions,
-            boolean deferPause) {
-        ...
-        result = targetRootTask.resumeTopActivityUncheckedLocked(target, targetOptions,
-                deferPause);
-        ...
-    }
-}
-```
+В методе `resumeTopActivityInnerLocked` вытаскивается фрагмент задачи (`TaskFragment`), к которому привязана верхняя Activity. Именно тут
+начинается конкретная подготовка к запуску компонента приложения.
+
+Дальше вызывается `resumeTopActivity` у `TaskFragment`. Здесь происходит поиск верхней активности (`topRunningActivity`) и запуск метода
+`startSpecificActivity`. По сути, `startSpecificActivity` — это последняя точка внутри ядра системы, где принимается решение: запустить
+новый процесс для активности или использовать уже существующий.
 
 ```java
-
-
 class TaskFragment extends WindowContainer<WindowContainer> {
-    @VisibleForTesting
-    void completePause(boolean resumeNext, ActivityRecord resuming) {
-        // Complete the pausing process of a pausing activity, so it doesn't make sense to
-        // operate on non-leaf tasks.
-        // warnForNonLeafTask("completePauseLocked");
 
-        ActivityRecord prev = mPausingActivity;
+   final boolean resumeTopActivity(ActivityRecord prev, ActivityOptions options,
+                                   boolean skipPause) {
+      ActivityRecord next = topRunningActivity(true /* focusableOnly */);
+      mTaskSupervisor.startSpecificActivity(next, true, false);
+        ...
+      return true;
+        ...
+   }
 
-        final Task topRootTask = mRootWindowContainer.getTopDisplayFocusedRootTask();
-        if (topRootTask != null && !topRootTask.shouldSleepOrShutDownActivities()) {
-            mRootWindowContainer.resumeFocusedTasksTopActivities(topRootTask, prev);
-        }
-    }
 }
 ```
+
+Далее метод `startSpecificActivity` внутри `ActivityTaskSupervisor`. Здесь анализируется состояние процесса: если процесс уже существует и
+привязан, то активити будет сразу запущена. Если же процесс отсутствует или был завершён системой, тогда вызывается `startProcessAsync`,
+чтобы создать новый процесс для этой активности.
 
 ```java
-class ActivityStarter {
+public class ActivityTaskSupervisor implements RecentTasks.Callbacks {
+    ...
+   final ActivityTaskManagerService mService;
 
-    private void resumeTargetRootTaskIfNeeded() {
-        if (mDoResume) {
-            final ActivityRecord next = mTargetRootTask.topRunningActivity(
-                    true /* focusableOnly */);
-            if (next != null) {
-                next.setCurrentLaunchCanTurnScreenOn(true);
-            }
-            if (mTargetRootTask.isFocusable()) {
-                mRootWindowContainer.resumeFocusedTasksTopActivities(mTargetRootTask, null,
-                        mOptions, mTransientLaunch);
-            } else {
-                mRootWindowContainer.ensureActivitiesVisible();
-            }
-        } else {
-            ActivityOptions.abort(mOptions);
-        }
-        mRootWindowContainer.updateUserRootTask(mStartActivity.mUserId, mTargetRootTask);
-    }
+   void startSpecificActivity(ActivityRecord r, boolean andResume, boolean checkConfig) {
+        ...
+      mService.startProcessAsync(r, knownToBeDead, isTop,
+              isTop ? HostingRecord.HOSTING_TYPE_TOP_ACTIVITY
+                      : HostingRecord.HOSTING_TYPE_ACTIVITY);
+   }
 }
-
 ```
 
-как вы наверное догадались, ProcessRecord хранит в себе
-все всю информацию о процессе, в том числе массив ActivityRecord, давайте глянем на исходники ProcessRecord
-и метода getWindowProcessController()
+В методе `startProcessAsync` активити добавляется в список `mStartingProcessActivities`. Это своего рода «очередь на запуск», куда система
+кладёт активности, пока ожидает, что процесс для них будет создан и привязан.
+
+```java
+public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
+    ...
+
+   final ArrayList<ActivityRecord> mStartingProcessActivities = new ArrayList<>();
+   RootWindowContainer mRootWindowContainer;
+
+   void startProcessAsync(ActivityRecord activity, boolean knownToBeDead, boolean isTop,
+                          String hostingType) {
+        ...
+      mStartingProcessActivities.add(activity);
+        ...
+   }
+    ...
+}
+```
