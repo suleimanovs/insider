@@ -334,9 +334,9 @@ internal class SavedStateRegistryImpl(
 
     @MainThread
     fun registerSavedStateProvider(key: String, provider: SavedStateProvider) {
-            ..
-            keyToProviders[key] = provider
-            ...
+        ..
+        keyToProviders[key] = provider
+        ...
     }
     ...
 }
@@ -494,14 +494,11 @@ public class Fragment implements ...SavedStateRegistryOwner,...{
 
     SavedStateRegistryController mSavedStateRegistryController;
 
-    ...
-
     @NonNull
     @Override
     public final SavedStateRegistry getSavedStateRegistry() {
         return mSavedStateRegistryController.getSavedStateRegistry();
     }
-    ...
 }
 ```
 
@@ -714,7 +711,7 @@ public actual class SavedStateViewModelFactory :
             ...
             newInstance(modelClass, constructor, extras.createSavedStateHandle())
             ...
-        } 
+        }
         ...
     }
 }
@@ -858,13 +855,17 @@ internal class SavedStateHandlesProvider(
 }
 ```
 
-`SavedStateHandlesProvider` — это прослойка между `SavedStateRegistry` и `SavedStateHandle`, обеспечивающая централизованное сохранение и восстановление состояний `ViewModel`. В методе `saveState()` собираются все актуальные состояния из `viewModel.handles`, добавляется возможное ранее восстановленное состояние, и итог сохраняется в `SavedStateRegistry`.
+`SavedStateHandlesProvider` — это прослойка между `SavedStateRegistry` и `SavedStateHandle`, обеспечивающая централизованное сохранение и
+восстановление состояний `ViewModel`. В методе `saveState()` собираются все актуальные состояния из `viewModel.handles`, добавляется
+возможное ранее восстановленное состояние, и итог сохраняется в `SavedStateRegistry`.
 
-Для выборочного восстановления используется метод `consumeRestoredStateForKey()`, позволяющий получить состояние по ключу без необходимости загружать всё сразу. Восстановление и подготовка состояний происходят в `performRestore()`.
+Для выборочного восстановления используется метод `consumeRestoredStateForKey()`, позволяющий получить состояние по ключу без необходимости
+загружать всё сразу. Восстановление и подготовка состояний происходят в `performRestore()`.
 
-По сути, `SavedStateHandlesProvider` управляет жизненным циклом всех `SavedStateHandle` в рамках владельца состояния, поддерживая логику ленивого восстановления и гарантируя корректное сохранение после процесса или конфигурационных изменений.
+По сути, `SavedStateHandlesProvider` управляет жизненным циклом всех `SavedStateHandle` в рамках владельца состояния, поддерживая логику
+ленивого восстановления и гарантируя корректное сохранение после процесса или конфигурационных изменений.
 
-**Взаимодействие с `SavedStateHandlesVM`:** 
+**Взаимодействие с `SavedStateHandlesVM`:**
 
 Теперь перейдём к тому, как данные хранятся внутри `ViewModel`. `savedStateHandlesVM` — это
 расширение, которое создаёт или восстанавливает
@@ -1011,7 +1012,7 @@ public class Activity extends ContextThemeWrapper ...{
 
     final void performSaveInstanceState(@NonNull Bundle outState) {
        ...
-        onSaveInstanceState(outState);
+       onSaveInstanceState(outState);
        ...
     }
     
@@ -1129,8 +1130,6 @@ public final class ActivityThread extends ClientTransactionHandler implements Ac
 Здесь условия упрощены: активность не должна быть завершена, версия — до Honeycomb.
 Если да, то снова вызывается callActivityOnSaveInstanceState для формирования Bundle.
 
-
-
 ```java
 public final class ActivityThread extends ClientTransactionHandler implements ActivityThreadInternal {
 
@@ -1156,8 +1155,6 @@ performStopActivityInner используется при полной остан
 
 В handleRelaunchActivityInner вызывается callActivityOnStop, если активность ещё не остановлена (!r.stopped).
 Это важно при пересоздании активности (например, при изменении конфигурации), чтобы сохранить состояние до пересоздания.
-
-
 
 ```java
 public final class ActivityThread extends ClientTransactionHandler implements ActivityThreadInternal {
@@ -1186,17 +1183,15 @@ handleRelaunchActivity — внешний метод, который вызыв�
 Используется для обработки полного пересоздания активности.
 Все проверки и логика сохранения состояния уже находятся внутри handleRelaunchActivityInner.
 
-handleStopActivity вызывает performStopActivityInner, передавая туда флаг saveState = true, чтобы принудительно сохранить состояние перед окончательной остановкой.
+handleStopActivity вызывает performStopActivityInner, передавая туда флаг saveState = true, чтобы принудительно сохранить состояние перед
+окончательной остановкой.
 Это используется, например, при закрытии приложения или выгрузке активности системой.
 
-
-Последующие вызовы методов `performStopActivity` и `handleRelaunchActivity` упираются в классы `ActivityRelaunchItem.execute()`,
-`StopActivityItem.execute()`, `performStopActivity` - вызывается из `StopActivityItem.execute()`, а `handleRelaunchActivity` вызывается
-из `ActivityRelaunchItem.execute()`,
-
+Последующие вызовы методов `performStopActivity` и `handleRelaunchActivity` упираются в классы `ActivityRelaunchItem.execute()`
+и `StopActivityItem.execute()`.
+Метод `performStopActivity` вызывается из `StopActivityItem.execute()`, а `handleRelaunchActivity` — из `ActivityRelaunchItem.execute()`.
 
 ```java
-
 public class StopActivityItem extends ActivityLifecycleItem {
     @Override
     public void execute(@NonNull ClientTransactionHandler client, @NonNull ActivityClientRecord r,
@@ -1205,64 +1200,60 @@ public class StopActivityItem extends ActivityLifecycleItem {
                 true /* finalStateRequest */, "STOP_ACTIVITY_ITEM");
         Trace.traceEnd(TRACE_TAG_ACTIVITY_MANAGER);
     }
-
 }
 ```
-В методе StopActivityItem.execute видим вызов client.handleStopActivity, то есть client является ClientTransactionHandler,
-ActivityThread наследуется от ClientTransactionHandler, по этому здесь фактический вызов ActivityThread.handleStopActivity,
+
+В методе `StopActivityItem.execute` видим вызов `client.handleStopActivity`.
+Так как `client` — это `ClientTransactionHandler`, а `ActivityThread` наследуется от него, фактически здесь вызывается
+`ActivityThread.handleStopActivity`.
 
 ```java
-
 public class ActivityRelaunchItem extends ActivityTransactionItem {
-
     @Override
     public void execute(@NonNull ClientTransactionHandler client, @NonNull ActivityClientRecord r,
                         @NonNull PendingTransactionActions pendingActions) {
         client.handleRelaunchActivity(mActivityClientRecord, pendingActions);
     }
 }
-
 ```
-В методе ActivityRelaunchItem.execute видим вызов client.handleRelaunchActivity, то есть client является ClientTransactionHandler,
-ActivityThread наследуется от ClientTransactionHandler, по этому здесь фактический вызов ActivityThread.handleRelaunchActivity,
 
-На данный момент мы выследили следующий вызов:
+В методе `ActivityRelaunchItem.execute` видим вызов `client.handleRelaunchActivity`.
+По той же логике, фактически вызывается `ActivityThread.handleRelaunchActivity`.
 
-`StopActivityItem.execute` → `ActivityThread.handleStopActivity` → `ActivityThread.performStopActivityInner` → 
+На данный момент мы выследили следующую цепочку вызовов:
+
+`StopActivityItem.execute` → `ActivityThread.handleStopActivity` → `ActivityThread.performStopActivityInner` →
 `ActivityThread.callActivityOnStop` → `ActivityThread.callActivityOnSaveInstanceState` →
 `Instrumentation.callActivityOnSaveInstanceState` → `Activity.performSaveInstanceState` → `Activity.onSaveInstanceState`.
 
-Это ключевая цепочка, которая обеспечивает сохранение состояния `Activity` при изменениях конфигурации или завершении её работы. Обратим
-внимание, что вызов `callActivityOnSaveInstanceState` из `Instrumentation` — это и есть та самая точка, где система передаёт управление
-обратно в `Activity`, вызывая метод `performSaveInstanceState`, который, в свою очередь, инициирует сохранение всех данных в объект`Bundle`.
+Это ключевая цепочка, которая обеспечивает сохранение состояния `Activity` при изменениях конфигурации или её завершении.
+Обратим внимание, что вызов `callActivityOnSaveInstanceState` из `Instrumentation` — это как раз та точка, где система передаёт управление
+обратно в `Activity`, вызывая метод `performSaveInstanceState`, который инициирует сохранение всех данных в объект `Bundle`.
 
 Параллельно, в случае изменения конфигурации или пересоздания активности, запускается другая цепочка:
 
-`ActivityRelaunchItem.execute` → `ActivityThread.handleRelaunchActivity` → `ActivityThread.handleRelaunchActivityInner` → 
+`ActivityRelaunchItem.execute` → `ActivityThread.handleRelaunchActivity` → `ActivityThread.handleRelaunchActivityInner` →
 `ActivityThread.callActivityOnStop` → `ActivityThread.callActivityOnSaveInstanceState` →
 `Instrumentation.callActivityOnSaveInstanceState` → `Activity.performSaveInstanceState` → `Activity.onSaveInstanceState`.
 
 Эти две цепочки работают независимо, но сходятся в методе `callActivityOnStop`, который гарантирует сохранение данных в `Bundle` перед тем,
 как `Activity` будет остановлена или пересоздана.
 
-Далее, сформированный объект `Bundle`, содержащий состояние `Activity`, сохраняется в объекте `ActivityClientRecord`. Этот объект
-представляет собой структуру данных, хранящую всю необходимую информацию о `Activity` во время её жизненного цикла. Именно в поле `state`
-этого класса система сохраняет переданный `Bundle`, чтобы при пересоздании `Activity` восстановить её состояние.
-`ActivityClientRecord` существует в процессе всех вызовов в цепочке, перед тем как активити перейдет в состояние STOP, внутри  метода 
-ActivityThread.callActivityOnSaveInstanceState полю `ActivityClientRecord.state` присваевается новый `Bundle`, дальше
-активити/фрагменты в этот Bundle кладут все нужное, начиная с состояния ииерархий View, заканчивая на данных которых разработчик решил
-сохранить
+Далее, сформированный объект `Bundle`, содержащий состояние `Activity`, сохраняется в объекте `ActivityClientRecord`.
+Этот объект представляет собой структуру данных, хранящую всю необходимую информацию о `Activity` во время её жизненного цикла.
+Именно в поле `state` этого класса система сохраняет переданный `Bundle`, чтобы при пересоздании активности восстановить её состояние.
+`ActivityClientRecord` существует в процессе всех вызовов цепочки, перед тем как `Activity` перейдёт в состояние STOP.
+Внутри метода `ActivityThread.callActivityOnSaveInstanceState` полю `ActivityClientRecord.state` присваивается новый `Bundle`,
+в который активити и фрагменты кладут всё нужное — от состояния иерархий `View` до любых данных, которые разработчик решил сохранить.
 
-Таким образом, мы понимаем, что вся эта цепочка запускается не из самой `Activity`, а из внутренней логики Android через `ActivityThread`.
-Это ещё раз подтверждает, что все жизненные циклы управляются системой через единый механизм клиент-серверных транзакций, а `ActivityThread`
-выполняет роль посредника, координирующего вызовы между `Activity` и основной системой.
+Таким образом, мы видим, что эта цепочка запускается не из самой `Activity`, а из внутренней логики Android через `ActivityThread`.
+Это ещё раз подтверждает, что все жизненные циклы управляются системой через единый механизм клиент-серверных транзакций,
+а `ActivityThread` выполняет роль посредника, координирующего вызовы между `Activity` и системой.
 
-Важное здесь это то откуда береться `ActivityClientRecord`, и как его внутренний Bundle переживает смерть процесса,
-в случае слхронения между PAUSE/STOP мы увидели где создается чистый Bundle с нулья в которую можно хранить данные, тут секретов нет,
-но то как этот сохроенный Bundle внутри `ActivityClientRecord` переживает смерть системы и затем обратно возвращается в `Activity.onCreate`
-мы еще не знаем, следующая глава раскроет этот момент
-
----
+Важный момент здесь — откуда берётся `ActivityClientRecord` и как его внутренний `Bundle` переживает смерть процесса.
+В случае сохранения между PAUSE/STOP мы увидели, где создаётся чистый `Bundle`, в который можно сохранять данные.
+Здесь особых секретов нет. Но то, как этот сохранённый `Bundle` внутри `ActivityClientRecord` переживает смерть системы
+и затем возвращается в `Activity.onCreate`, мы ещё не знаем. Следующая глава раскроет этот момент.
 
 ## Цепочка вызова onCreate
 
@@ -1272,30 +1263,30 @@ ActivityThread.callActivityOnSaveInstanceState полю `ActivityClientRecord.st
 ```java
 public class Activity extends ContextThemeWrapper ...{
 
-    public void onCreate(@Nullable Bundle savedInstanceState, @Nullable PersistableBundle persistentState) {
-        onCreate(savedInstanceState);
-    }
-    
-    @MainThread
-    @CallSuper
-    protected void onCreate(@Nullable Bundle savedInstanceState) {
+public void onCreate(@Nullable Bundle savedInstanceState, @Nullable PersistableBundle persistentState) {
+    onCreate(savedInstanceState);
+}
+
+@MainThread
+@CallSuper
+protected void onCreate(@Nullable Bundle savedInstanceState) {
             ...
-    }
-    
-    final void performCreate(Bundle icicle) {
-        performCreate(icicle, null);
-    }
-    
-    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
-    final void performCreate(Bundle icicle, PersistableBundle persistentState) {
+}
+
+final void performCreate(Bundle icicle) {
+    performCreate(icicle, null);
+}
+
+@UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
+final void performCreate(Bundle icicle, PersistableBundle persistentState) {
             ...
-        if (persistentState != null) {
-            onCreate(icicle, persistentState);
-        } else {
-            onCreate(icicle);
-        }
-            ...
+    if (persistentState != null) {
+        onCreate(icicle, persistentState);
+    } else {
+        onCreate(icicle);
     }
+            ...
+}
 }
 ```
 
@@ -1315,9 +1306,8 @@ public class Instrumentation {
 ```
 
 Класс `Instrumentation` управляет жизненным циклом `Activity` и вызывает `performCreate`, передавая ему объект `Bundle` для восстановления
-состояния.
-
-Теперь поднимемся выше. Кто же вызывает `callActivityOnCreate`? За это отвечает метод `performLaunchActivity` в классе `ActivityThread`:
+состояния. Теперь поднимемся выше. Кто же вызывает `callActivityOnCreate`?
+За это отвечает метод `performLaunchActivity` в классе `ActivityThread`:
 
 ```java
 public final class ActivityThread extends ClientTransactionHandler implements ActivityThreadInternal {
@@ -1374,7 +1364,7 @@ public final class ActivityThread extends ClientTransactionHandler implements Ac
 }
 ```
 
-Вызов метода handleRelaunchActivity иницирует класс команда/транзакция `ActivityRelaunchItem`, которая действует как маркер для того, 
+Вызов метода handleRelaunchActivity иницирует класс команда/транзакция `ActivityRelaunchItem`, которая действует как маркер для того,
 чтобы выполнить перезапуск с сохранением состояния:
 
 ```java
@@ -1439,15 +1429,19 @@ public class LaunchActivityItem extends ClientTransactionItem {
 ```
 
 Цепочка выглядит так:
-`LaunchActivityItem.execute` → `handleLaunchActivity` → `performLaunchActivity` → `callActivityOnCreate` → `performCreate` → `onCreate`.
+`LaunchActivityItem.execute` → `ActivityThread.handleLaunchActivity` → `ActivityThread.performLaunchActivity` →
+`ActivityThread.callActivityOnCreate` → `ActivityperformCreate` → `ActivityonCreate`.
 
 Следует запомнить важную вещь, прежде чем подниматься выше, нужно понимать что `LaunchActivityItem` — это транзакция, которая в своём
-конструкторе принимает
-`Bundle` и `PersistableBundle` (последний мы рассматривать не будем). Класс `LaunchActivityItem` наследуется от `ClientTransactionItem`.
+конструкторе принимает`Bundle` и `PersistableBundle` (последний мы рассматривать не будем).
+Класс `LaunchActivityItem` наследуется от `ClientTransactionItem`.
 
-`ClientTransactionItem` — это абстрактный базовый класс, от которого наследуются все транзакции, связанные с жизненным циклом `Activity`. В
-него входят `LaunchActivityItem`, `ActivityRelaunchItem`, `ResumeActivityItem` (последние — **не прямые**, а транзитивные наследники) и
+`ClientTransactionItem` — это абстрактный базовый класс, от которого наследуются все транзакции, связанные с жизненным циклом `Activity`.
+В него входят `LaunchActivityItem`, `ActivityRelaunchItem`, `ResumeActivityItem` (последние — **не прямые**, а транзитивные наследники) и
 другие элементы, участвующие в управлении состоянием `Activity`.
+
+Мы увидели что создание ActivityClientRecord происходит в `LaunchActivityItem.execute`, но она использует готовые данные которые
+бьли переданы ей в конструктор при созданий.
 
 Наша цель дальше — выяснить два момента:
 
@@ -1488,18 +1482,13 @@ public class TransactionExecutor {
 
     private void executeLifecycleItem(@NonNull ClientTransaction transaction,
                                       @NonNull ActivityLifecycleItem lifecycleItem) {
-        final IBinder token = lifecycleItem.getActivityToken();
-        final ActivityClientRecord r = mTransactionHandler.getActivityClient(token);
         ...
-        // Execute the final transition with proper parameters.
         lifecycleItem.execute(mTransactionHandler, mPendingActions);
-        lifecycleItem.postExecute(mTransactionHandler, mPendingActions);
+                ...
     }
 
     private void executeNonLifecycleItem(@NonNull ClientTransaction transaction,
                                          @NonNull ClientTransactionItem item, boolean shouldExcludeLastLifecycleState) {
-        final IBinder token = item.getActivityToken();
-        ActivityClientRecord r = mTransactionHandler.getActivityClient(token);
         ...
         item.execute(mTransactionHandler, mPendingActions);
         ...
@@ -1564,7 +1553,7 @@ public final class ActivityThread extends ClientTransactionHandler implements Ac
 ```
 
 Напомним, что `ClientTransactionHandler` — это абстрактный класс, от которого наследуется `ActivityThread`. Далее мы видим, что создаётся
-объект `H`, а также `TransactionExecutor`, которому в качестве аргумента передаётся `this` — то есть `ActivityThread`, реализующий
+объект `H`, а также `TransactionExecutor`, которому в качестве аргумента передаётся `this`, то есть `ActivityThread`, реализующий
 `ClientTransactionHandler`.
 
 Теперь обратим внимание на реализацию `handleMessage` внутри класса `H`: когда приходит сообщение с типом `EXECUTE_TRANSACTION`, из объекта
@@ -1693,21 +1682,16 @@ class ClientLifecycleManager {
 
 Внутри него определён метод `scheduleTransactionItems`, который принимает `IApplicationThread` и массив `ClientTransactionItem`. Этот метод
 создаёт или достаёт транзакцию через `getOrCreatePendingTransaction`, добавляет в неё все `ClientTransactionItem` (например,
-`LaunchActivityItem`,
-`ResumeActivityItem`, `PauseActivityItem` и т.д.), после чего передаёт её в метод `onClientTransactionItemScheduled`, где вызывается
-`scheduleTransaction`.
+`LaunchActivityItem`, `ResumeActivityItem`, `PauseActivityItem` и т.д.), после чего передаёт её в метод `onClientTransactionItemScheduled`,
+где вызывается`scheduleTransaction`.
 
 После чего управление переходит в метод `scheduleTransaction`, внутри которого вызывается `transaction.schedule()`. А как мы уже знаем,
-метод
-`schedule` вызывает `ApplicationThread.scheduleTransaction`, то есть фактически мы возвращаемся обратно к AIDL-вызову, из которого всё и
+метод `schedule` вызывает `ApplicationThread.scheduleTransaction`, то есть фактически мы возвращаемся обратно к AIDL-вызову, из которого всё
+и
 начинается.
 
 Таким образом, `ClientLifecycleManager` собирает транзакцию, наполняет её нужными `ClientTransactionItem`, и отправляет её в исполнение. Это
 класс, который формирует цепочку действий, и делегирует выполнение низкоуровневому слою через AIDL.
-
-<note title="Мотивация">
-Если на этом моменте вы уже устали отслеживать вызовы, и думаете когда же это закончится, то скажу что мы почти на финале
-</note>
 
 `ClientLifecycleManager.scheduleTransactionItems` - вызовом метода занимается очень важный класс `ActivityTaskSupervisor`
 
@@ -1802,7 +1786,7 @@ picture-in-picture и любые изменения, связанные с ко�
 `attachApplication`, получает список ActivityRecord у ActivityTaskManagerService, и в цикле для всех вызывает метод
 `ActivityTaskSupervisor.realStartActivityLocked`.
 
-Далее мы снова возвращаемся к `ActivityTaskManagerService`, потому что именно он вызывает метод attachApplication у RootWindowContainer 
+Далее мы снова возвращаемся к `ActivityTaskManagerService`, потому что именно он вызывает метод attachApplication у RootWindowContainer
 и передает ему
 
 ```java
@@ -1835,15 +1819,16 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
 }
 ```
 
-Видим что он хранит в себе список ActivityRecord в поле mStartingProcessActivities - вызов которого мы уже видели мы в
+Видим что он хранит в себе список ActivityRecord в поле `mStartingProcessActivities` - вызов которого мы уже видели мы в
 RootWindowContainer.attachApplication,
 
 Далее видим что у него так же есть ссылка на RootWindowContainer, и в методе ActivityTaskManagerService.attachApplication
 происходит вызов метода RootWindowContainer.attachApplication,
-startProcessAsync -  Так же очень важный метод, который в список ActivityRecord добавляет новые ActivityRecord внутри
-которых храниться Bundle,  позже его разберем тоже.
+startProcessAsync - Так же очень важный метод, который в список ActivityRecord добавляет новые ActivityRecord внутри
+которых храниться Bundle, позже его разберем тоже.
 
-Выше ActivityTaskManagerService стоит класс ActivityManagerService, он и вызывает  attachApplication у ActivityTaskManagerService:
+Выше ActivityTaskManagerService стоит класс ActivityManagerService, он и вызывает attachApplication у ActivityTaskManagerService:
+
 ```java
 public class ActivityManagerService extends IActivityManager.Stub {
 
@@ -1869,65 +1854,68 @@ public class ActivityManagerService extends IActivityManager.Stub {
     }
 }
 ```
+
 Видим в методе finishAttachApplicationInner - вызов метода attachApplication у mAtmInternal, ActivityTaskManagerInternal который является
 абстакрным AIDl для ActivityTaskManagerService,
 по этому фактический здесь вызваеется ActivityTaskManagerService.attachApplication()
 
-сам метод finishAttachApplicationInner вызывается из attachApplicationLocked, так же получает процесс из mPidsSelfLocked по ключу pid(то есть process id)
+сам метод finishAttachApplicationInner вызывается из attachApplicationLocked, так же получает процесс из mPidsSelfLocked по ключу pid(то
+есть process id)
 
 Сам ActivityManagerService - является Singleton-ом в рамках всей системы Android, у него внутри есть своя структура PidMap
 которая хранит в себе ProcessRecord, по ключу pid(то есть process id), то есть вызов mPidsSelfLocked.get(pid), mPidsSelfLocked:
 
-
 Сам класс PidMap выглядит следующим образом:
+
 ```java
 public class ActivityManagerService extends IActivityManager.Stub {
 
-   final PidMap mPidsSelfLocked = new PidMap();
+    final PidMap mPidsSelfLocked = new PidMap();
 
     ...
+
     static final class PidMap {
         private final SparseArray<ProcessRecord> mPidMap = new SparseArray<>();
-    
+
         ProcessRecord get(int pid) {
             return mPidMap.get(pid);
         }
         ...
+
         void doAddInternal(int pid, ProcessRecord app) {
             mPidMap.put(pid, app);
         }
        ...
     }
 
-   public void setSystemProcess() {
+    public void setSystemProcess() {
       ...
-            ProcessRecord app = mProcessList.newProcessRecordLocked(info, info.processName,
-                    false,
-                    0,
-                    false,
-                    0,
-                    null,
-                    new HostingRecord(HostingRecord.HOSTING_TYPE_SYSTEM));
+        ProcessRecord app = mProcessList.newProcessRecordLocked(info, info.processName,
+                false,
+                0,
+                false,
+                0,
+                null,
+                new HostingRecord(HostingRecord.HOSTING_TYPE_SYSTEM));
             ...
-            addPidLocked(app);
+        addPidLocked(app);
             ...
-   }
+    }
 
-   void addPidLocked(ProcessRecord app) {
-      final int pid = app.getPid();
-      synchronized (mPidsSelfLocked) {
-         mPidsSelfLocked.doAddInternal(pid, app);
-      }
+    void addPidLocked(ProcessRecord app) {
+        final int pid = app.getPid();
+        synchronized (mPidsSelfLocked) {
+            mPidsSelfLocked.doAddInternal(pid, app);
+        }
       ...
-   }
+    }
 }
 ```
 
 Видим Структуру PidMap которая внутри себя хранит список записей для процессов приложения
 
 Так же видим две методы, setSystemProcess создаем новый proccessRecord и вызывает метод addPidLocked, addPidLocked кладет
-в mPidsSelfLocked ProcessRecord, setSystemProcess  вызывается из SystemServer(он же system_service), ниже краткий стэк вызовов:
-
+в mPidsSelfLocked ProcessRecord, setSystemProcess вызывается из SystemServer(он же system_service), ниже краткий стэк вызовов:
 
 ```
 1. Загрузчик (Bootloader) → Ядро (Linux Kernel)  
@@ -1945,7 +1933,8 @@ public class ActivityManagerService extends IActivityManager.Stub {
 singleton-ы в рамках все системы и никакого отнощения к конкретному приложению не имеют.
 
 На этом моменте по идее уже многое стало ясно, расмотрели очень длинный флоу вызовов, момент который мы немного пропустили, это
-то где создаются ActivityRecord, ранее мы уже видели xnj список ActivityRecord получаем из поля mStartingProcessActivities у ActivityTaskManagerService:
+то где создаются ActivityRecord, ранее мы уже видели список ActivityRecord получаем из поля mStartingProcessActivities у
+ActivityTaskManagerService:
 
 ```java
 class RootWindowContainer extends WindowContainer<DisplayContent> implements DisplayManager.DisplayListener {
@@ -1970,6 +1959,7 @@ class RootWindowContainer extends WindowContainer<DisplayContent> implements Dis
 
 а в ActivityTaskManagerService это выглядит следующим образом как мы уже видели, поле mStartingProcessActivities явлыяется
 коллекцией которая хранит ActivityRecord и есть один метод который в него добавляет ActivityRecord - это метод startProcessAsync
+
 ```java
 public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
 ...
@@ -1977,7 +1967,7 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
     /** The starting activities which are waiting for their processes to attach. */
     final ArrayList<ActivityRecord> mStartingProcessActivities = new ArrayList<>();
     RootWindowContainer mRootWindowContainer;
-    
+
     void startProcessAsync(ActivityRecord activity, boolean knownToBeDead, boolean isTop,
                            String hostingType) {
          ...
@@ -1987,10 +1977,12 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
     ...
 }
 ```
+
 Следующая глава статьи будет раскрывать этот момент, где создается ActivityRecord и кто его кладет в ActivityTaskManagerService
 в поле mStartingProcessActivities
 
-### Создание ActivityRecord или получение
+## Пересоздание процесса с сохронением Bundle
+
 ```
 ActivityManagerService.startActivity()
   → ActivityTaskManagerService.startActivityAsUser()
@@ -2009,6 +2001,232 @@ ActivityManagerService.startActivity()
                           → mStartingProcessActivities.add(r) // финальная точка
 ```
 
+ActivityRecord(с Bundle) умеет переживать смерть или прерыванием процесса, подразумевается ситуация, когда приложение находится 
+в фоне и сохраняется в стеке задач. По этому когда пользователь возвращается в приложение, то ActivityManagerService вызывает 
+метод startActivityFromRecents для восстановления процесса и задачи(Task), каждая задача равняется одному активити которая может
+хранить в себе другие задачи которые так же ровняются опредеоенному компоненту
+
+
+```Java
+public class ActivityManagerService extends IActivityManager.Stub {
+
+    @Override
+    public final int startActivityFromRecents(int taskId, Bundle bOptions) {
+        return mActivityTaskManager.startActivityFromRecents(taskId, bOptions);
+    }
+
+}
+```
+
+Метод ActivityManagerService.startActivityFromRecents обращается к ActivityTaskManagerService.startActivityFromRecents
+
+```java
+public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
+
+
+    ActivityTaskSupervisor mTaskSupervisor;
+
+    @Override
+    public final int startActivityFromRecents(int taskId, Bundle bOptions) {
+
+        ...
+            return mTaskSupervisor.startActivityFromRecents(callingPid, callingUid, taskId,
+                    safeOptions);
+
+        ...
+
+    }
+}
+
+```
+```java
+public class ActivityTaskSupervisor implements RecentTasks.Callbacks {
+final ActivityTaskManagerService mService;
+RootWindowContainer mRootWindowContainer;
+
+    int startActivityFromRecents(int callingPid, int callingUid, int taskId,
+                                 SafeActivityOptions options) {
+        final Task task;
+
+        task = mRootWindowContainer.anyTaskForId(taskId, MATCH_ATTACHED_TASK_OR_RECENT_TASKS_AND_RESTORE, activityOptions, ON_TOP);
+
+        if (!mService.mAmInternal.shouldConfirmCredentials(task.mUserId) && task.getRootActivity() != null) {
+            final ActivityRecord targetActivity = task.getTopNonFinishingActivity();
+                ...
+            mService.moveTaskToFrontLocked(...);
+            ...
+            return ActivityManager.START_TASK_TO_FRONT;
+        }
+    }
+
+}
+
+```
+```java
+public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
+
+    void moveTaskToFrontLocked(@Nullable IApplicationThread appThread,
+                               @Nullable String callingPackage, int taskId, ...) {
+
+        final Task task = mRootWindowContainer.anyTaskForId(taskId);
+        ...
+        mTaskSupervisor.findTaskToMoveToFront(task, flags, ...);
+    }
+
+}
+
+```
+```java
+public class ActivityTaskSupervisor implements RecentTasks.Callbacks {
+
+    /**
+     * This doesn't just find a task, it also moves the task to front.
+     */
+    void findTaskToMoveToFront(Task task, int flags, ActivityOptions options, String reason,
+                               boolean forceNonResizeable) {
+        Task currentRootTask = task.getRootTask();
+
+            if (!reparented) {
+                moveHomeRootTaskToFrontIfNeeded(flags, currentRootTask.getDisplayArea(), reason);
+            }
+
+            final ActivityRecord r = task.getTopNonFinishingActivity();
+            currentRootTask.moveTaskToFront(task, false /* noAnimation */, options,
+                    r == null ? null : r.appTimeTracker, reason);
+        ...
+    }
+
+}
+
+```
+```java
+class Task extends TaskFragment {
+
+    final void moveTaskToFront(Task tr, boolean noAnimation, ActivityOptions options,
+                               AppTimeTracker timeTracker, boolean deferResume, String reason) {
+        ...
+        mRootWindowContainer.resumeFocusedTasksTopActivities();
+    }
+
+}
+
+```
+```java
+class RootWindowContainer extends WindowContainer<DisplayContent>
+implements DisplayManager.DisplayListener {
+
+    boolean resumeFocusedTasksTopActivities(
+            Task targetRootTask, ActivityRecord target, ActivityOptions targetOptions,
+            boolean deferPause) {
+
+        for (int displayNdx = getChildCount() - 1; displayNdx >= 0; --displayNdx) {
+            final DisplayContent display = getChildAt(displayNdx);
+            final boolean curResult = result;
+            boolean[] resumedOnDisplay = new boolean[1];
+            final ActivityRecord topOfDisplay = display.topRunningActivity();
+            display.forAllRootTasks(rootTask -> {
+                final ActivityRecord topRunningActivity = rootTask.topRunningActivity();
+                if (!rootTask.isFocusableAndVisible() || topRunningActivity == null) {
+                    return;
+                }
+                if (rootTask == targetRootTask) {
+                    resumedOnDisplay[0] |= curResult;
+                    return;
+                }
+                if (topRunningActivity.isState(RESUMED) && topRunningActivity == topOfDisplay) {
+                    rootTask.executeAppTransition(targetOptions);
+                } else {
+                    resumedOnDisplay[0] |= topRunningActivity.makeActiveIfNeeded(target);
+                }
+            });
+            result |= resumedOnDisplay[0];
+            if (!resumedOnDisplay[0]) {
+
+                final Task focusedRoot = display.getFocusedRootTask();
+                if (focusedRoot != null) {
+                    result |= focusedRoot.resumeTopActivityUncheckedLocked(
+                            target, targetOptions, false /* skipPause */);
+                } else if (targetRootTask == null) {
+                    result |= resumeHomeActivity(null /* prev */, "no-focusable-task",
+                            display.getDefaultTaskDisplayArea());
+                }
+            }
+        }
+
+        return result;
+    }
+
+}
+
+```
+```java
+class Task extends TaskFragment {
+
+    @GuardedBy("mService")
+    boolean resumeTopActivityUncheckedLocked(ActivityRecord prev, ActivityOptions options,
+                                             boolean deferPause) {
+        someActivityResumed = resumeTopActivityInnerLocked(prev, options, deferPause);
+    }
+
+    @GuardedBy("mService")
+    private boolean resumeTopActivityInnerLocked(ActivityRecord prev, ActivityOptions options,
+                                                 boolean deferPause) {
+        final TaskFragment topFragment = topActivity.getTaskFragment();
+        resumed[0] = topFragment.resumeTopActivity(prev, options, deferPause);
+    }
+
+}
+
+```
+```java
+class TaskFragment extends WindowContainer<WindowContainer> {
+
+    final boolean resumeTopActivity(ActivityRecord prev, ActivityOptions options,
+                                    boolean skipPause) {
+        ActivityRecord next = topRunningActivity(true /* focusableOnly */);
+        mTaskSupervisor.startSpecificActivity(next, true, false);
+       ...
+        mTaskSupervisor.startSpecificActivity(next, true, true);
+       ...
+        return true;
+        ..
+    }
+
+}
+```
+```java
+public class ActivityTaskSupervisor implements RecentTasks.Callbacks {
+    ...
+        final ActivityTaskManagerService mService;
+    
+    
+        void startSpecificActivity(ActivityRecord r, boolean andResume, boolean checkConfig) {
+          ...
+            mService.startProcessAsync(r, knownToBeDead, isTop,
+                    isTop ? HostingRecord.HOSTING_TYPE_TOP_ACTIVITY
+                            : HostingRecord.HOSTING_TYPE_ACTIVITY);
+        }
+    }
+}
+```
+
+```java
+public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
+...
+
+    final ArrayList<ActivityRecord> mStartingProcessActivities = new ArrayList<>();
+    RootWindowContainer mRootWindowContainer;
+
+    void startProcessAsync(ActivityRecord activity, boolean knownToBeDead, boolean isTop,
+                           String hostingType) {
+         ...
+        mStartingProcessActivities.add(activity);
+         ...
+    }
+    ...
+}
+```
+
 ```java
 class RootWindowContainer extends WindowContainer<DisplayContent> implements DisplayManager.DisplayListener {
 
@@ -2032,20 +2250,21 @@ class RootWindowContainer extends WindowContainer<DisplayContent> implements Dis
 
 а в ActivityTaskManagerService это выглядит следующим образом как мы уже видели, поле mStartingProcessActivities явлыяется
 коллекцией которая хранит ActivityRecord и есть один метод который в него добавляет ActivityRecord - это метод startProcessAsync
+
 ```java
 public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
 ...
 
-   /** The starting activities which are waiting for their processes to attach. */
-   final ArrayList<ActivityRecord> mStartingProcessActivities = new ArrayList<>();
-   RootWindowContainer mRootWindowContainer;
+    /** The starting activities which are waiting for their processes to attach. */
+    final ArrayList<ActivityRecord> mStartingProcessActivities = new ArrayList<>();
+    RootWindowContainer mRootWindowContainer;
 
-   void startProcessAsync(ActivityRecord activity, boolean knownToBeDead, boolean isTop,
-                          String hostingType) {
+    void startProcessAsync(ActivityRecord activity, boolean knownToBeDead, boolean isTop,
+                           String hostingType) {
          ...
-      mStartingProcessActivities.add(activity);
+        mStartingProcessActivities.add(activity);
          ...
-   }
+    }
     ...
 }
 ```
@@ -2056,12 +2275,12 @@ public class ActivityTaskSupervisor implements RecentTasks.Callbacks {
     final ActivityTaskManagerService mService;
 
 
-   void startSpecificActivity(ActivityRecord r, boolean andResume, boolean checkConfig) {
+    void startSpecificActivity(ActivityRecord r, boolean andResume, boolean checkConfig) {
       ...
-      mService.startProcessAsync(r, knownToBeDead, isTop,
-              isTop ? HostingRecord.HOSTING_TYPE_TOP_ACTIVITY
-                      : HostingRecord.HOSTING_TYPE_ACTIVITY);
-   }
+        mService.startProcessAsync(r, knownToBeDead, isTop,
+                isTop ? HostingRecord.HOSTING_TYPE_TOP_ACTIVITY
+                        : HostingRecord.HOSTING_TYPE_ACTIVITY);
+    }
 }
 ```
 
@@ -2075,7 +2294,7 @@ class TaskFragment extends WindowContainer<WindowContainer> {
         ActivityRecord next = topRunningActivity(true /* focusableOnly */);
         mTaskSupervisor.startSpecificActivity(next, true, false);
        ...
-       mTaskSupervisor.startSpecificActivity(next, true, true);
+        mTaskSupervisor.startSpecificActivity(next, true, true);
        ...
         return true;
         ..
@@ -2086,12 +2305,12 @@ class TaskFragment extends WindowContainer<WindowContainer> {
 ```java
 class Task extends TaskFragment {
 
-   @GuardedBy("mService")
-   boolean resumeTopActivityUncheckedLocked(ActivityRecord prev, ActivityOptions options,
-                                            boolean deferPause) {
-       someActivityResumed = resumeTopActivityInnerLocked(prev, options, deferPause);
-   }
-   
+    @GuardedBy("mService")
+    boolean resumeTopActivityUncheckedLocked(ActivityRecord prev, ActivityOptions options,
+                                             boolean deferPause) {
+        someActivityResumed = resumeTopActivityInnerLocked(prev, options, deferPause);
+    }
+
     @GuardedBy("mService")
     private boolean resumeTopActivityInnerLocked(ActivityRecord prev, ActivityOptions options,
                                                  boolean deferPause) {
@@ -2120,7 +2339,7 @@ class RootWindowContainer extends WindowContainer<DisplayContent>
 
 
 class TaskFragment extends WindowContainer<WindowContainer> {
- @VisibleForTesting
+    @VisibleForTesting
     void completePause(boolean resumeNext, ActivityRecord resuming) {
         // Complete the pausing process of a pausing activity, so it doesn't make sense to
         // operate on non-leaf tasks.
@@ -2128,12 +2347,14 @@ class TaskFragment extends WindowContainer<WindowContainer> {
 
         ActivityRecord prev = mPausingActivity;
 
-            final Task topRootTask = mRootWindowContainer.getTopDisplayFocusedRootTask();
-            if (topRootTask != null && !topRootTask.shouldSleepOrShutDownActivities()) {
-                mRootWindowContainer.resumeFocusedTasksTopActivities(topRootTask, prev);
+        final Task topRootTask = mRootWindowContainer.getTopDisplayFocusedRootTask();
+        if (topRootTask != null && !topRootTask.shouldSleepOrShutDownActivities()) {
+            mRootWindowContainer.resumeFocusedTasksTopActivities(topRootTask, prev);
+        }
     }
 }
 ```
+
 ```java
 class ActivityStarter {
 
@@ -2159,8 +2380,6 @@ class ActivityStarter {
 
 ```
 
-
-
 как вы наверное догадались, ProcessRecord хранит в себе
-все всю информацию о процессе, в том числе массив ActivityRecord, давайте глянем на исходники ProcessRecord 
+все всю информацию о процессе, в том числе массив ActivityRecord, давайте глянем на исходники ProcessRecord
 и метода getWindowProcessController()
