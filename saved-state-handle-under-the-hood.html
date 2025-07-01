@@ -1,0 +1,1528 @@
+<!DOCTYPE html SYSTEM "about:legacy-compat">
+<html lang="en-US" data-preset="contrast" data-primary-color="#1B9F8E" data-link-color="#57B747" data-content-max-width="1600" data-resizable-sidebar="true"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8"><meta charset="UTF-8"><meta name="built-on" content="2025-07-02T00:45:19.097748"><title>SavedStateHandle и Bundle под капотом: как Android сохраняет состояние | suleimanov</title><script type="application/json" id="virtual-toc-data">[{"id":"-19plna_6","level":0,"title":"Базис","anchor":"#-19plna_6"},{"id":"onsaveinstancestate-onrestoreinstancestate","level":0,"title":"onSaveInstanceState / onRestoreInstanceState","anchor":"#onsaveinstancestate-onrestoreinstancestate"},{"id":"saved-state-api","level":0,"title":"Saved State Api","anchor":"#saved-state-api"},{"id":"oncreate","level":0,"title":"Цепочка вызова onCreate","anchor":"#oncreate"},{"id":"bundle","level":0,"title":"Пересоздание процесса с сохронением Bundle","anchor":"#bundle"},{"id":"activityrecord","level":0,"title":"Где и когда создается ActivityRecord в первые","anchor":"#activityrecord"}]</script><script type="application/json" id="topic-shortcuts"></script><link href="https://resources.jetbrains.com/writerside/apidoc/6.22.0-b776/app.css" rel="stylesheet"><link href="static/style.css" rel="stylesheet"><link rel="icon" type="image/png" sizes="16x16" href="https://iili.io/3eop8YX.png"><meta name="image" content=""><!-- Open Graph --><meta property="og:title" content="SavedStateHandle и Bundle под капотом: как Android сохраняет состояние | suleimanov"><meta property="og:description" content=""><meta property="og:image" content=""><meta property="og:site_name" content="suleimanov Help"><meta property="og:type" content="website"><meta property="og:locale" content="en_US"><meta property="og:url" content="writerside-documentation//1.0/saved-state-handle-under-the-hood.html"><!-- End Open Graph --><!-- Twitter Card --><meta name="twitter:card" content="summary_large_image"><meta name="twitter:site" content=""><meta name="twitter:title" content="SavedStateHandle и Bundle под капотом: как Android сохраняет состояние | suleimanov"><meta name="twitter:description" content=""><meta name="twitter:creator" content=""><meta name="twitter:image:src" content=""><!-- End Twitter Card --><!-- Schema.org WebPage --><script type="application/ld+json">{
+    "@context": "http://schema.org",
+    "@type": "WebPage",
+    "@id": "writerside-documentation//1.0/saved-state-handle-under-the-hood.html#webpage",
+    "url": "writerside-documentation//1.0/saved-state-handle-under-the-hood.html",
+    "name": "SavedStateHandle и Bundle под капотом: как Android сохраняет состояние | suleimanov",
+    "description": "",
+    "image": "",
+    "inLanguage":"en-US"
+}</script><!-- End Schema.org --><!-- Schema.org WebSite --><script type="application/ld+json">{
+    "@type": "WebSite",
+    "@id": "writerside-documentation/#website",
+    "url": "writerside-documentation/",
+    "name": "suleimanov Help"
+}</script><!-- End Schema.org --></head><body data-id="saved-state-handle-under-the-hood" data-main-title="SavedStateHandle и Bundle под капотом: как Android сохраняет состояние" data-article-props="{&quot;seeAlsoStyle&quot;:&quot;links&quot;}" data-template="article" data-breadcrumbs="Android"><div class="wrapper"><main class="panel _main"><header class="panel__header"><div class="container"><h3>suleimanov 1.0 Help</h3><div class="panel-trigger"></div></div></header><section class="panel__content"><div class="container"><article class="article" data-shortcut-switcher="inactive"><h1 data-toc="saved-state-handle-under-the-hood" id="saved-state-handle-under-the-hood.md">SavedStateHandle и Bundle под капотом: как Android сохраняет состояние</h1><p id="-19plna_3">Это продолжение трех предыдущих статей.</p><ol class="list _decimal" id="-19plna_4" type="1"><li class="list__item" id="-19plna_12"><p id="-19plna_15">В первой мы разобрали, где в конечном итоге хранится <code class="code" id="-19plna_16">ViewModelStore</code> в случае с <code class="code" id="-19plna_17">Activity</code>,</p></li><li class="list__item" id="-19plna_13"><p id="-19plna_18">Во второй &mdash; как это устроено во <code class="code" id="-19plna_19">Fragment</code>,</p></li><li class="list__item" id="-19plna_14"><p id="-19plna_20">В третьей где хранятся <code class="code" id="-19plna_21">ViewModel</code>-и, когда мы используем <span class="control" id="-19plna_22">Compose</span> (или даже просто <code class="code" id="-19plna_23">View</code>).</p></li></ol><p id="-19plna_5">В этой статье рассмотрим Где хранится SavedStateHandle, проверим SavedStateHandle vs onSaveInstanceState vs ViewModel(ViewModelStore) Поймем связку SavedStateHandle с ViewModel. И узнаем ответ на главный вопрос, где храниться Bundle. Но, как всегда, начнём с базиса.</p><section class="chapter"><h2 id="-19plna_6" data-toc="-19plna_6">Базис</h2><p id="-19plna_24">В статье не будет описания того, как работать с этими API, а будет рассказано о том, как они устроены изнутри, поэтому я буду исходить из того, что вы уже работали с ними. Как всегда, начнём с базиса &mdash; дадим определения для SavedStateHandle, onSaveInstanceState и ViewModel:</p><p id="-19plna_25"><span class="control" id="-19plna_31">ViewModel</span> &mdash; компонент архитектурного паттерна MVVM, предоставленный Google как примитив, позволяющий пережить изменение конфигурации. Изменение конфигурации &mdash; это состояние, из-за которого Activity/Fragment пересоздаётся; именно это состояние может пережить ViewModel. Увы, на этом обязанности ViewModel по хранению данных в контексте Android заканчиваются.</p><p id="-19plna_26">Если же процесс приложения умирает или прерывается, ViewModel не справится; тогда на сцену выходят старые добрые методы onSaveInstanceState/onRestoreInstanceState.</p><p id="-19plna_27"><span class="control" id="-19plna_32">onSaveInstanceState/onRestoreInstanceState</span> &mdash; методы жизненного цикла Activity, Fragment и даже View (да, View тоже может сохранять состояние), которые позволяют сохранять и восстанавливать временное состояние пользовательского интерфейса при изменении конфигурации ( например, при повороте экрана) или при полном уничтожении активности из-за нехватки ресурсов. В onSaveInstanceState данные сохраняются в Bundle, который автоматически передаётся в onRestoreInstanceState при восстановлении активности.</p><p id="-19plna_28">Это базовый механизм для хранения примитивных типов (и их массивов), Parcelable/Serializable и ещё пары нативных Android-типов. Эти методы требуют явного указания того, что именно нужно сохранить, а логика прописывается внутри Activity и Fragment. Большинство архитектурных паттернов (MVI, MVVM) гласят, что View (Fragment/Activity/Compose) должны быть максимально простыми и не содержать никакой логики, кроме отображения данных, поэтому прямое использование этих методов сейчас уступает место Saved State API, которое хорошо интегрируется с ViewModel, наделяя её не только возможностью &laquo;спасать&raquo; данные от изменений конфигурации, но и сохранять сериализуемые данные при уничтожении или остановке процесса по инициативе системы.</p><p id="-19plna_29"><span class="control" id="-19plna_33">Saved State API</span> &mdash; современная альтернатива onSaveInstanceState/onRestoreInstanceState, более гибко управляющая состоянием, особенно в связке с ViewModel. <span class="control" id="-19plna_34">SavedStateHandle</span> &mdash; объект, передаваемый в конструктор ViewModel, который позволяет безопасно сохранять и восстанавливать данные даже после уничтожения процесса. В отличие от статичного onSaveInstanceState, SavedStateHandle также позволяет подписываться на Flow и LiveData тех данных, которые он хранит и восстанавливает. Он автоматически интегрирован с ViewModel и поддерживает сохранение состояния при изменениях конфигурации, а также при полном уничтожении процесса приложения. Дополнительное преимущество &mdash; возможность подписываться на изменения значений в SavedStateHandle и получать реактивное поведение прямо в ViewModel.</p><aside class="prompt" data-type="tip" data-title="" id="-19plna_30"><p>Под &laquo;уничтожением или прерыванием процесса&raquo;, о котором идёт речь в статье, подразумевается ситуация, когда приложение находится в фоне и сохраняется в стеке задач. Обычно это происходит, когда пользователь сворачивает приложение, не закрывая его. Через некоторое время бездействия система может остановить процесс. Не стоит путать это с кейсом, когда пользователь сам вручную закрывает приложение &mdash; это другой сценарий.</p></aside></section><section class="chapter"><h2 id="onsaveinstancestate-onrestoreinstancestate" data-toc="onsaveinstancestate-onrestoreinstancestate">onSaveInstanceState / onRestoreInstanceState</h2><p id="-19plna_35">Давайте также освежим память о методах onSaveInstanceState и onRestoreInstanceState:</p><div class="code-block" data-lang="kotlin">
+class RestoreActivity : AppCompatActivity() {
+
+    private var counter = 0
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        // Восстановление значения при пересоздании
+        counter = savedInstanceState?.getInt(&quot;counter_key&quot;) ?: 0
+    }
+
+    override fun onRestoreInstanceState(savedInstanceState: Bundle) {
+        super.onRestoreInstanceState(savedInstanceState)
+        // Восстановление значения при пересоздании
+        counter = savedInstanceState.getInt(&quot;counter_key&quot;)
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        // Сохраняем значение
+        outState.putInt(&quot;counter_key&quot;, counter)
+        Log.d(&quot;RestoreActivity&quot;, &quot;onSaveInstanceState: Counter saved = $counter&quot;)
+    }
+}
+</div><p id="-19plna_37"><span class="control" id="-19plna_47">onSaveInstanceState</span> &mdash; вызывается для получения состояния Activity перед её уничтожением, чтобы оно могло быть восстановлено в методах <code class="code" id="-19plna_48">onCreate</code> или <code class="code" id="-19plna_49">onRestoreInstanceState</code>. <code class="code" id="-19plna_50">Bundle</code>, заполненный в этом методе, будет передан в оба метода.</p><p id="-19plna_38">Этот метод вызывается до того, как Activity может быть уничтожена, чтобы при повторном создании она могла восстановить своё состояние. Не следует путать его с методами жизненного цикла, такими как <code class="code" id="-19plna_51">onPause</code> (вызывается всегда, вызывается при частичной потере фокуса Activity) или <code class="code" id="-19plna_52">onStop</code> (когда Activity становится невидимой).</p><ul class="list _bullet" id="-19plna_39"><li class="list__item" id="-19plna_53"><p id="-19plna_55"><span class="control" id="-19plna_56">Пример</span>, когда <code class="code" id="-19plna_57">onPause</code> и <code class="code" id="-19plna_58">onStop</code> вызываются, но <code class="code" id="-19plna_59">onSaveInstanceState</code> &mdash; нет: при возвращении из Activity B в Activity A. В этом случае состояние B не требуется восстанавливать, поэтому <code class="code" id="-19plna_60">onSaveInstanceState</code> для B не вызывается.</p></li><li class="list__item" id="-19plna_54"><p id="-19plna_61"><span class="control" id="-19plna_62">Другой пример</span>: если Activity B запускается поверх Activity A, но A остаётся в памяти, то <code class="code" id="-19plna_63">onSaveInstanceState</code> для A также не вызывается, так как Activity остаётся в памяти и не требуется сохранять её состояние.</p></li></ul><p id="-19plna_40">Реализация по умолчанию этого метода автоматически сохраняет большую часть состояния пользовательского интерфейса, <span class="control" id="-19plna_64">вызывая <code class="code" id="-19plna_66">onSaveInstanceState()</code> у каждого <code class="code" id="-19plna_67">View</code> в иерархии, у которого есть ID</span>, а также сохраняет ID элемента, находившегося в фокусе. Восстановление этих данных происходит в стандартной реализации <code class="code" id="-19plna_65">onRestoreInstanceState()</code>. Если вы переопределяете метод для сохранения дополнительной информации, рекомендуется вызвать реализацию по умолчанию через</p><div class="code-block" data-lang="kotlin">
+super.onSaveInstanceState(outState)
+</div><p id="-19plna_42">&mdash; иначе придётся вручную сохранять состояние всех <code class="code" id="-19plna_68">View</code>.</p><p id="-19plna_43">Если метод вызывается, то это произойдёт <span class="control" id="-19plna_69">после <code class="code" id="-19plna_72">onStop</code></span> для приложений, нацеленных на платформы, начиная с Android P. Для более ранних версий Android этот метод будет вызван <span class="control" id="-19plna_70">до <code class="code" id="-19plna_73">onStop</code></span>, и нет никаких гарантий, будет ли он вызван до или после <code class="code" id="-19plna_71">onPause</code>.</p><aside class="prompt" data-type="tip" data-title="Документация гласит:" id="-19plna_44"><p>If called, this method will occur after onStop for applications targeting platforms starting with android.os.Build.VERSION_CODES.P. For applications targeting earlier platform versions this method will occur before onStop and there are no guarantees about whether it will occur before or after onPause.</p></aside><p id="-19plna_45"><span class="control" id="-19plna_74">onRestoreInstanceState</span> &mdash; этот метод вызывается <span class="control" id="-19plna_75">после</span> <code class="code" id="-19plna_76">onStart</code>, когда активность повторно инициализируется из ранее сохранённого состояния, переданного в <code class="code" id="-19plna_77">savedInstanceState</code>. Большинство реализаций используют для восстановления состояния метод <code class="code" id="-19plna_78">onCreate</code>, но иногда бывает удобнее делать это здесь, после того как завершена вся инициализация, или чтобы подклассы могли решить, использовать ли вашу реализацию по умолчанию. Стандартная реализация этого метода восстанавливает состояние представлений (View), которое было ранее заморожено методом <code class="code" id="-19plna_79">onSaveInstanceState</code>. Этот метод вызывается <span class="control" id="-19plna_80">между <code class="code" id="-19plna_84">onStart</code> и <code class="code" id="-19plna_85">onPostCreate</code></span>. Он срабатывает <span class="control" id="-19plna_81">только при повторном создании активности</span>; метод <span class="control" id="-19plna_82">не вызывается</span>, если <code class="code" id="-19plna_83">onStart</code> был вызван по любой другой причине (например, при переходе из фона на передний план).</p><p id="-19plna_46">На этом примере временно забываем о них, чуть позже мы их снова встретим в более низкоуровневых цепочках вызовов.</p></section><section class="chapter"><h2 id="saved-state-api" data-toc="saved-state-api">Saved State Api</h2><aside class="prompt" data-type="note" data-title="" id="-19plna_86"><p>С версии 1.3.0-alpha02 androidx.savedstate:savedstate стала поддерживать Kotlin Multiplatform. Теперь SavedState работает не только на Android (Bundle), но и на iOS, JVM, Linux и macOS Map&lt;String, Any&gt;, сохраняя совместимость.</p></aside><p id="-19plna_87">Что бы понять работу <span class="control" id="-19plna_237">Saved State Api</span> перепишем пример выше с <code class="code" id="-19plna_238">onSaveInstanceState</code> и <code class="code" id="-19plna_239">onRestoreInstanceState</code> используя Saved State Api, делает ровно тоже самое:</p><div class="code-block" data-lang="kotlin">
+class RestoreActivity : AppCompatActivity() {
+
+    private var counter = 0
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+
+        // Восстановление значения при пересоздании
+        counter = savedStateRegistry.consumeRestoredStateForKey(&quot;counter_key&quot;)?.getInt(&quot;counter&quot;, 0) ?: 0
+
+        savedStateRegistry.registerSavedStateProvider(
+            key = &quot;counter_key&quot;,
+            provider = object : SavedStateRegistry.SavedStateProvider {
+                override fun saveState(): SavedState {
+                    return SavedState(bundleOf(&quot;counter&quot; to counter))
+                }
+            }
+        )
+    }
+}
+</div><p id="-19plna_89">Мы вызываем у объекта <code class="code" id="-19plna_240">savedStateRegistry</code> метод <code class="code" id="-19plna_241">registerSavedStateProvider</code> куда передаем <code class="code" id="-19plna_242">key</code> и анонимный объект <code class="code" id="-19plna_243">SavedStateRegistry.SavedStateProvider</code> который возвращает <code class="code" id="-19plna_244">Bundle</code> обернутый в объект <code class="code" id="-19plna_245">SavedState</code>, давайте сейчас же определим что из себя представляет этот тип <code class="code" id="-19plna_246">SavedState</code>, если зайти в исходники, а именно в <code class="code" id="-19plna_247">expect</code> логику, то тип описан следующим образом: <span class="control" id="-19plna_248">androidx.savedstate.SavedState.kt</span>:</p><div class="code-block" data-lang="kotlin">
+/**
+ * An opaque (empty) common type that holds saveable values to be saved and restored by native
+ * platforms that have a concept of System-initiated Process Death.
+ *
+ * That means, the OS will give the chance for the process to keep the state of the application
+ * (normally using a serialization mechanism), and allow the app to restore its state later. That is
+ * commonly referred to as &quot;state restoration&quot;.
+ * ...
+ */
+public expect class SavedState
+</div><p id="-19plna_91">В контексте <code class="code" id="-19plna_249">android</code> нас интересует именно <code class="code" id="-19plna_250">actual</code> реализация, по этому далее специфичная для android <code class="code" id="-19plna_251">actual</code></p><p id="-19plna_92"><span class="control" id="-19plna_252">androidx.savedstate.SavedState.android.kt</span>:</p><div class="code-block" data-lang="kotlin">
+public actual typealias SavedState = android.os.Bundle
+</div><p id="-19plna_94">Как видим в <code class="code" id="-19plna_253">Android</code> нет на самом деле какого-то типа как <code class="code" id="-19plna_254">SavedState</code>, в <code class="code" id="-19plna_255">actual</code> реализаций это просто <code class="code" id="-19plna_256">typealias</code> который ссылается на тот же старый добрый родной класс <code class="code" id="-19plna_257">Bundle</code>, по этому всегда представляйте что там где используется <code class="code" id="-19plna_258">SavedState</code> - на самом деле используется класс <code class="code" id="-19plna_259">Bundle</code>, поэтому ничто не мешает нам отказаться от лишней обёртки и вернуть <code class="code" id="-19plna_260">Bundle</code> напрямую:</p><div class="code-block" data-lang="kotlin">
+savedStateRegistry.registerSavedStateProvider(
+    key = &quot;counter_key&quot;,
+    provider = object : SavedStateRegistry.SavedStateProvider {
+        override fun saveState(): Bundle {
+            return bundleOf(&quot;counter&quot; to counter)
+        }
+    }
+)
+</div><p id="-19plna_96">Раз с этим разобрались, дальше давайте зайдем в исходники метода <code class="code" id="-19plna_261">registerSavedStateProvider</code> и <code class="code" id="-19plna_262">consumeRestoredStateForKey</code>, эти методы вызывается у переменной <code class="code" id="-19plna_263">savedStateRegistry</code> которая имеет тип <code class="code" id="-19plna_264">SavedStateRegistry</code>, давайте быстро узнаем определение этого класса:</p><p id="-19plna_97"><span class="control" id="-19plna_265"><code class="code" id="-19plna_271">SavedStateRegistry</code></span> - управляет сохранением и восстановлением сохранённого состояния, чтобы данные не терялись при пересоздании компонентов. Реализация привязана к <code class="code" id="-19plna_266">SavedStateRegistryImpl</code>, которая отвечает за фактическое хранение и восстановление данных. Интерфейс для подключения компонентов, которые потребляют и вносят данные в сохранённое состояние. Объект имеет такой же жизненный цикл, как и его владелец (<code class="code" id="-19plna_267">Activity</code> или <code class="code" id="-19plna_268">Fragment</code>): когда <code class="code" id="-19plna_269">Activity</code> или <code class="code" id="-19plna_270">Fragment</code> пересоздаются (например, после уничтожения процесса или изменении конфигурации), создаётся новый экземпляр этого объекта.</p><p id="-19plna_98">Но откуда берется <code class="code" id="-19plna_272">savedStateRegistry</code> переменная внутри <code class="code" id="-19plna_273">Activity</code> мы рассмотрим позже, пока достаточно знать что он есть у <code class="code" id="-19plna_274">Activity</code>, далее исходники метода <code class="code" id="-19plna_275">registerSavedStateProvider</code> и <code class="code" id="-19plna_276">consumeRestoredStateForKey</code> принадлежащий классу <code class="code" id="-19plna_277">SavedStateRegistry</code> (expect): <span class="control" id="-19plna_278">androidx.savedstate.SavedStateRegistry.kt</span></p><div class="code-block" data-lang="kotlin">
+public expect class SavedStateRegistry internal constructor(
+    impl: SavedStateRegistryImpl,
+) {
+
+    /** This interface marks a component that contributes to saved state. */
+    public fun interface SavedStateProvider {
+
+        public fun saveState(): SavedState
+    }
+
+    ...
+    public val isRestored: Boolean
+    ...
+    @MainThread
+    public fun consumeRestoredStateForKey(key: String): SavedState?
+    ...
+    @MainThread
+    public fun registerSavedStateProvider(key: String, provider: SavedStateProvider)
+    ...
+    public fun getSavedStateProvider(key: String): SavedStateProvider?
+    ...
+    @MainThread
+    public fun unregisterSavedStateProvider(key: String)
+}
+</div><p id="-19plna_100">Как мы видим на самом деле тут много методов у <code class="code" id="-19plna_279">SavedStateRegistry</code>, для нашей статьи достаточно понимать работу методов <code class="code" id="-19plna_280">registerSavedStateProvider</code> и <code class="code" id="-19plna_281">consumeRestoredStateForKey</code>, но что бы хоть какое-то понимание было, давайте быстро пройдемся по каждому:</p><ol class="list _decimal" id="-19plna_101" type="1"><li class="list__item" id="-19plna_282"><p id="-19plna_288"><span class="control" id="-19plna_289">consumeRestoredStateForKey</span> &mdash; извлекает и удаляет из памяти <code class="code" id="-19plna_290">SavedState</code> (Bundle), который был зарегистрирован с помощью <code class="code" id="-19plna_291">registerSavedStateProvider</code>. При повторном вызове возвращает <code class="code" id="-19plna_292">null</code>.</p></li><li class="list__item" id="-19plna_283"><p id="-19plna_293"><span class="control" id="-19plna_294">registerSavedStateProvider</span> &mdash; регистрирует <code class="code" id="-19plna_295">SavedStateProvider</code> с указанным ключом. Этот провайдер будет использоваться для сохранения состояния при вызове <code class="code" id="-19plna_296">onSaveInstanceState</code>.</p></li><li class="list__item" id="-19plna_284"><p id="-19plna_297"><span class="control" id="-19plna_298">getSavedStateProvider</span> &mdash; возвращает зарегистрированный <code class="code" id="-19plna_299">SavedStateProvider</code> по ключу или <code class="code" id="-19plna_300">null</code>, если он не найден.</p></li><li class="list__item" id="-19plna_285"><p id="-19plna_301"><span class="control" id="-19plna_302">unregisterSavedStateProvider</span> &mdash; удаляет из реестра ранее зарегистрированный <code class="code" id="-19plna_303">SavedStateProvider</code> по переданному ключу.</p></li><li class="list__item" id="-19plna_286"><p id="-19plna_304"><span class="control" id="-19plna_305">SavedStateProvider</span> &mdash; интерфейс, предоставляющий объект <code class="code" id="-19plna_306">SavedState</code> (Bundle) при сохранении состояния.</p></li><li class="list__item" id="-19plna_287"><p id="-19plna_307"><span class="control" id="-19plna_308">isRestored</span> &mdash; возвращает <code class="code" id="-19plna_309">true</code>, если состояние было восстановлено после создания компонента.</p></li></ol><p id="-19plna_102">В <code class="code" id="-19plna_310">expect</code>-версиях отсутствуют реализации &mdash; там только сигнатуры методов. Также мы рассмотрели исходники интерфейса <code class="code" id="-19plna_311">SavedStateProvider</code>, который представляет собой callback для получения <code class="code" id="-19plna_312">Bundle</code>, подлежащего сохранению. Чтобы увидеть реализацию метода <code class="code" id="-19plna_313">registerSavedStateProvider</code>, необходимо найти <span class="control" id="-19plna_314"><code class="code" id="-19plna_317">actual</code>-реализацию</span>, а затем перейти к <code class="code" id="-19plna_315">actual</code>-реализации <code class="code" id="-19plna_316">SavedStateRegistry</code>.</p><p id="-19plna_103"><span class="control" id="-19plna_318">androidx.savedstate.SavedStateRegistry.android.kt</span>:</p><div class="code-block" data-lang="kotlin">
+public actual class SavedStateRegistry internal actual constructor(
+    private val impl: SavedStateRegistryImpl,
+) {
+
+    @get:MainThread
+    public actual val isRestored: Boolean
+        get() = impl.isRestored
+
+    @MainThread
+    public actual fun consumeRestoredStateForKey(key: String): SavedState? =
+        impl.consumeRestoredStateForKey(key)
+
+    @MainThread
+    public actual fun registerSavedStateProvider(key: String, provider: SavedStateProvider) {
+        impl.registerSavedStateProvider(key, provider)
+    }
+
+    public actual fun getSavedStateProvider(key: String): SavedStateProvider? =
+        impl.getSavedStateProvider(key)
+
+    @MainThread
+    public actual fun unregisterSavedStateProvider(key: String) {
+        impl.unregisterSavedStateProvider(key)
+    }
+
+    public actual fun interface SavedStateProvider {
+        public actual fun saveState(): SavedState
+    }
+    ...
+}
+</div><p id="-19plna_105"><code class="code" id="-19plna_319">actual</code> реализация <code class="code" id="-19plna_320">SavedStateRegistry</code> делегирует все вызовы своих методов готовой имплементацией <code class="code" id="-19plna_321">SavedStateRegistryImpl</code>, по этому далее рассмотрим именно <code class="code" id="-19plna_322">SavedStateRegistryImpl</code>:</p><div class="code-block" data-lang="kotlin">
+internal class SavedStateRegistryImpl(
+    private val owner: SavedStateRegistryOwner,
+    internal val onAttach: () -&gt; Unit = {},
+) {
+
+    private val keyToProviders = mutableMapOf&lt;String, SavedStateProvider&gt;()
+    private var restoredState: SavedState? = null
+
+    @MainThread
+    fun consumeRestoredStateForKey(key: String): SavedState? {
+        ...
+        val state = restoredState ?: return null
+
+        val consumed = state.read { if (contains(key)) getSavedState(key) else null }
+        state.write { remove(key) }
+        if (state.read { isEmpty() }) {
+            restoredState = null
+        }
+
+        return consumed
+    }
+
+    @MainThread
+    fun registerSavedStateProvider(key: String, provider: SavedStateProvider) {
+        ..
+        keyToProviders[key] = provider
+        ...
+    }
+    ...
+}
+</div><p id="-19plna_107">Основные методы для сохранения, давайте просто поймем что здесь происходит:</p><ol class="list _decimal" id="-19plna_108" type="1"><li class="list__item" id="-19plna_323"><p id="-19plna_325"><code class="code" id="-19plna_326">consumeRestoredStateForKey</code> - достает значение из <code class="code" id="-19plna_327">restoredState</code> (Bundle) по ключу, после того как достает значение, удаляет из <code class="code" id="-19plna_328">restoredState</code> (Bundle) значение и ключ, <code class="code" id="-19plna_329">restoredState</code> является самым коренным <code class="code" id="-19plna_330">Bundle</code> который внутри себя хранит все другие bundle</p></li><li class="list__item" id="-19plna_324"><p id="-19plna_331"><code class="code" id="-19plna_332">registerSavedStateProvider</code> - просто добавляет объект <code class="code" id="-19plna_333">SavedStateProvider</code> внутрь карты <code class="code" id="-19plna_334">keyToProviders</code></p></li></ol><p id="-19plna_109">Эти методы &mdash; очень верхне уровневые и не раскрывают, как именно в итоге сохраняются данные, поэтому нужно копнуть глубже &mdash; внутри этого же класса <code class="code" id="-19plna_335">SavedStateRegistryImpl</code>:</p><div class="code-block" data-lang="kotlin">
+internal class SavedStateRegistryImpl(
+    private val owner: SavedStateRegistryOwner,
+    internal val onAttach: () -&gt; Unit = {},
+) {
+    private val keyToProviders = mutableMapOf&lt;String, SavedStateProvider&gt;()
+    private var restoredState: SavedState? = null
+
+    @MainThread
+    internal fun performRestore(savedState: SavedState?) {
+        ...
+        restoredState =
+            savedState?.read {
+                if (contains(SAVED_COMPONENTS_KEY)) getSavedState(SAVED_COMPONENTS_KEY) else null
+            }
+        isRestored = true
+    }
+
+    @MainThread
+    internal fun performSave(outBundle: SavedState) {
+        val inState = savedState {
+            restoredState?.let { putAll(it) }
+            synchronized(lock) {
+                for ((key, provider) in keyToProviders) {
+                    putSavedState(key, provider.saveState())
+                }
+            }
+        }
+
+        if (inState.read { !isEmpty() }) {
+            outBundle.write { putSavedState(SAVED_COMPONENTS_KEY, inState) }
+        }
+    }
+
+    private companion object {
+        private const val SAVED_COMPONENTS_KEY =
+            &quot;androidx.lifecycle.BundlableSavedStateRegistry.key&quot;
+    }
+}
+</div><ol class="list _decimal" id="-19plna_111" type="1"><li class="list__item" id="-19plna_336"><p id="-19plna_338"><code class="code" id="-19plna_339">performSave</code> &mdash; вызывается, когда <code class="code" id="-19plna_340">Activity</code> или <code class="code" id="-19plna_341">Fragment</code> переходит в состояние <code class="code" id="-19plna_342">pause</code>-&gt; <code class="code" id="-19plna_343">stop</code>, то есть в момент вызова <code class="code" id="-19plna_344">onSaveInstanceState</code>. Этот метод отвечает за сохранение состояния всех <code class="code" id="-19plna_345">SavedStateProvider</code>, зарегистрированных через <code class="code" id="-19plna_346">registerSavedStateProvider</code>. Внутри метода создается объект <code class="code" id="-19plna_347">inState</code> типа SavedState (по сути, это сам <code class="code" id="-19plna_348">Bundle</code>). Если в restoredState уже есть данные, они добавляются в <code class="code" id="-19plna_349">inState</code>. Затем, в синхронизированном блоке, происходит обход всех зарегистрированных <code class="code" id="-19plna_350">SavedStateProvider</code>, вызывается метод <code class="code" id="-19plna_351">saveState</code> (), и результаты сохраняются в <code class="code" id="-19plna_352">inState</code>. В конце, если <code class="code" id="-19plna_353">inState</code> не пустой, его содержимое записывается в параметр <code class="code" id="-19plna_354">outBundle</code> под ключом <code class="code" id="-19plna_355">SAVED_COMPONENTS_KEY</code>.</p></li><li class="list__item" id="-19plna_337"><p id="-19plna_356"><code class="code" id="-19plna_357">performRestore</code> &mdash; вызывается при создании или восстановлении <code class="code" id="-19plna_358">Activity</code> или <code class="code" id="-19plna_359">Fragment</code>. Этот метод просто читает из <code class="code" id="-19plna_360">savedState</code>значение по ключу <code class="code" id="-19plna_361">SAVED_COMPONENTS_KEY</code>, если оно существует. Найденное значение (вложенный <code class="code" id="-19plna_362">SavedState</code>) сохраняется в переменную <code class="code" id="-19plna_363">restoredState</code>, чтобы потом можно было передать его в соответствующие компоненты.</p></li></ol><p id="-19plna_112">На данный момент мы увидели как работает логика сохранения и регистраций, теперь осталось понять кто же вызывает методы <code class="code" id="-19plna_364">performSave</code> и <code class="code" id="-19plna_365">performRestore</code> и в какой момент.</p><p id="-19plna_113">Этой логикой управляет <code class="code" id="-19plna_366">SavedStateRegistryController</code>, в связи с тем что Saved State Api тоже на <code class="code" id="-19plna_367">KMP</code>, по этому лучше сразу посмотрим actual версию:</p><div class="code-block" data-lang="kotlin">
+public actual class SavedStateRegistryController private actual constructor(
+    private val impl: SavedStateRegistryImpl,
+) {
+
+    public actual val savedStateRegistry: SavedStateRegistry = SavedStateRegistry(impl)
+
+    @MainThread
+    public actual fun performAttach() {
+        impl.performAttach()
+    }
+
+    @MainThread
+    public actual fun performRestore(savedState: SavedState?) {
+        impl.performRestore(savedState)
+    }
+
+    @MainThread
+    public actual fun performSave(outBundle: SavedState) {
+        impl.performSave(outBundle)
+    }
+
+    public actual companion object {
+
+        @JvmStatic
+        public actual fun create(owner: SavedStateRegistryOwner): SavedStateRegistryController {
+            val impl =
+                SavedStateRegistryImpl(
+                    owner = owner,
+                    onAttach = { owner.lifecycle.addObserver(Recreator(owner)) },
+                )
+            return SavedStateRegistryController(impl)
+        }
+    }
+}
+</div><p id="-19plna_115">И видим, что вызовами методов <code class="code" id="-19plna_368">SavedStateRegistryImpl.performSave</code> и <code class="code" id="-19plna_369">SavedStateRegistryImpl.performRestore</code> управляют одноимённые методы из <code class="code" id="-19plna_370">SavedStateRegistryController</code>.</p><p id="-19plna_116">Также видим метод <code class="code" id="-19plna_371">create</code>, который создаёт <code class="code" id="-19plna_372">SavedStateRegistryImpl</code>, передаёт его в конструктор <code class="code" id="-19plna_373">SavedStateRegistryController</code> и возвращает сам <code class="code" id="-19plna_374">SavedStateRegistryController</code>.</p><p id="-19plna_117">Далее остаётся только понять, откуда вызываются сами методы <code class="code" id="-19plna_375">SavedStateRegistryController</code>. В начале статьи мы отложили разбор источника поля <code class="code" id="-19plna_376">savedStateRegistry</code> в <code class="code" id="-19plna_377">Activity</code>. Сейчас самое время разобраться.</p><p id="-19plna_118">Внутри <code class="code" id="-19plna_378">Activity</code> нам доступно поле <code class="code" id="-19plna_379">savedStateRegistry</code>. Это возможно потому, что <code class="code" id="-19plna_380">Activity</code> реализует интерфейс <code class="code" id="-19plna_381">SavedStateRegistryOwner</code>. Если посмотреть исходники, то можно увидеть, что <code class="code" id="-19plna_382">ComponentActivity</code> реализует <code class="code" id="-19plna_383">SavedStateRegistryOwner</code>. На самом деле <code class="code" id="-19plna_384">ComponentActivity</code> реализует множество интерфейсов, но ниже приведён фрагмент с опущенными остальными родителями:</p><div class="code-block" data-lang="kotlin">
+open class ComponentActivity() : ..., SavedStateRegistryOwner, ... {
+
+    private val savedStateRegistryController: SavedStateRegistryController =
+        SavedStateRegistryController.create(this)
+
+    final override val savedStateRegistry: SavedStateRegistry
+        get() = savedStateRegistryController.savedStateRegistry
+}
+</div><p id="-19plna_120"><code class="code" id="-19plna_385">SavedStateRegistryOwner</code> - это просто interface который хранит в себе <code class="code" id="-19plna_386">SavedStateRegistry</code>, его реализует <code class="code" id="-19plna_387">Activity</code>, <code class="code" id="-19plna_388">Fragment</code> и <code class="code" id="-19plna_389">NavBackStackEntry</code>, выглядит он следующим образом:</p><div class="code-block" data-lang="kotlin">
+public interface SavedStateRegistryOwner : androidx.lifecycle.LifecycleOwner {
+    /** The [SavedStateRegistry] owned by this SavedStateRegistryOwner */
+    public val savedStateRegistry: SavedStateRegistry
+}
+</div><p id="-19plna_122"><code class="code" id="-19plna_390">SavedStateRegistry</code> доступен в любом компоненте, реализующем интерфейс <code class="code" id="-19plna_391">SavedStateRegistryOwner</code>. Этим интерфейсом обладают:</p><ul class="list _bullet" id="-19plna_123"><li class="list__item" id="-19plna_392"><p id="-19plna_395"><code class="code" id="-19plna_397">ComponentActivity</code> &mdash; это базовый класс для всех современных <code class="code" id="-19plna_398">Activity</code>.</p><div class="code-block" data-lang="kotlin">
+open class ComponentActivity() : ..., SavedStateRegistryOwner, ... {
+
+    private val savedStateRegistryController: SavedStateRegistryController =
+        SavedStateRegistryController.create(this)
+
+    final override val savedStateRegistry: SavedStateRegistry
+        get() = savedStateRegistryController.savedStateRegistry
+}
+</div></li><li class="list__item" id="-19plna_393"><p id="-19plna_399"><code class="code" id="-19plna_401">Fragment</code> &mdash; любой <code class="code" id="-19plna_402">Fragment</code> также реализует этот интерфейс.</p><div class="code-block" data-lang="java">
+public class Fragment implements ...SavedStateRegistryOwner,...{
+
+    SavedStateRegistryController mSavedStateRegistryController;
+
+    @NonNull
+    @Override
+    public final SavedStateRegistry getSavedStateRegistry() {
+        return mSavedStateRegistryController.getSavedStateRegistry();
+    }
+}
+</div></li><li class="list__item" id="-19plna_394"><p id="-19plna_403"><code class="code" id="-19plna_405">NavBackStackEntry</code> - компонент навигаций из Jetpack Navigation</p><div class="code-block" data-lang="kotlin">
+public expect class NavBackStackEntry : ..., SavedStateRegistryOwner {
+
+    override val savedStateRegistry: SavedStateRegistry
+
+}
+</div></li></ul><p id="-19plna_124">Мы выяснили большую цепочку вызовов, давайте визуально посмотрим:</p><div class="code-block" data-lang="nginx">
+expect -&gt; SavedStateRegistryController.performSave 
+  -&gt; actual SavedStateRegistryController.performSave 
+  -&gt; expect SavedStateRegistry 
+  -&gt; actual SavedStateRegistry 
+  -&gt; SavedStateRegistryImpl.performSave 
+  -&gt; SavedStateProvider.saveState() 
+  -&gt; // Bundle
+</div><p id="-19plna_126">Углубляться в работу <code class="code" id="-19plna_406">Fragment</code> и <code class="code" id="-19plna_407">NavBackStackEntry</code> не будем &mdash; разберёмся только с <code class="code" id="-19plna_408">Activity</code>. На данный момент мы понимаем, что в конечном итоге все вызовы идут в <code class="code" id="-19plna_409">SavedStateRegistryController</code>. Давай посмотрим, как <code class="code" id="-19plna_410">Activity</code> с ним взаимодействует:</p><p id="-19plna_127">Метод <code class="code" id="-19plna_411">performRestore</code> у <code class="code" id="-19plna_412">SavedStateRegistryController</code>, отвечающий за восстановление данных из <code class="code" id="-19plna_413">Bundle</code>, вызывается внутри <code class="code" id="-19plna_414">ComponentActivity.onCreate</code>, а метод <code class="code" id="-19plna_415">performSave</code>, сохраняющий данные в <code class="code" id="-19plna_416">Bundle</code>, &mdash; внутри <code class="code" id="-19plna_417">ComponentActivity.onSaveInstanceState</code>.</p><div class="code-block" data-lang="kotlin">
+open class ComponentActivity() : ..., SavedStateRegistryOwner, ... {
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        savedStateRegistryController.performRestore(savedInstanceState)
+        super.onCreate(savedInstanceState)
+        ...
+    }
+
+    @CallSuper
+    override fun onSaveInstanceState(outState: Bundle) {
+        ...
+        super.onSaveInstanceState(outState)
+        savedStateRegistryController.performSave(outState)
+    }
+}
+</div><p id="-19plna_129">Здесь та самая точка, где <code class="code" id="-19plna_418">onSaveInstanceState</code>/<code class="code" id="-19plna_419">onRestoreInstanceState</code> объединяются с <code class="code" id="-19plna_420">SavedStateRegistryController</code>/<code class="code" id="-19plna_421">SavedStateRegistry</code>.</p><p id="-19plna_130">Теперь переключимся на <code class="code" id="-19plna_422">ViewModel</code> и его <code class="code" id="-19plna_423">SavedStateHandle</code>, чтобы понять, как он вписывается во всю эту логику. Для начала объявим обычную <code class="code" id="-19plna_424">ViewModel</code>, но в конструкторе передадим <code class="code" id="-19plna_425">SavedStateHandle</code>:</p><div class="code-block" data-lang="kotlin">
+class MyViewModel(val savedStateHandle: SavedStateHandle) : ViewModel()
+</div><aside class="prompt" data-type="note" data-title="" id="-19plna_132"><p>Как и говорилось в начале статьи, это не гайд по тому как пользоваться Saved State Api, тут больше ответ на вопрос как это работает под капотом</p></aside><p id="-19plna_133">Далее пробуем инициализировать нашу ViewModel в Activity:</p><div class="code-block" data-lang="kotlin">
+class MainActivity : ComponentActivity() {
+
+    private lateinit var viewModel: MyViewModel
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        setContentView(R.layout.activity_main)
+        viewModel = ViewModelProvider.create(this).get(MyViewModel::class)
+    }
+
+}
+</div><p id="-19plna_135">Тут на первый взгляд можно ожидать, что будет краш при запуске приложения, так как если <code class="code" id="-19plna_426">ViewModel</code> на вход принимает какой-либо параметр, то нужна фабрика <code class="code" id="-19plna_427">ViewModel</code>, он же <code class="code" id="-19plna_428">ViewModelProvider.Factory</code>, где мы вручную должны каким-то образом положить требуемый параметр в конструктор. И в нашем примере конструктор не пустой, но если мы запустим этот код, то никакого краша и ошибки не будет, всё запустится и инициализируется должным образом. Почему так?</p><p id="-19plna_136">Разработчики из google знали что часто понадобиться передавать <code class="code" id="-19plna_429">SavedStateHandle</code> в <code class="code" id="-19plna_430">ViewModel</code>, и что бы разработчикам не приходилось каждый раз создавать фабрику для передачи - имеется готовая фабрика которая работает под капотом, так же имеются готовые классы вроде</p><p id="-19plna_137"><code class="code" id="-19plna_431">AbstractSavedStateViewModelFactory</code> - начиная с lifecycle-viewmodel-savedstate-android-<span class="control" id="-19plna_432">2.9.0</span> - обьявлен устаревшим <code class="code" id="-19plna_433">SavedStateViewModelFactory</code> - актуален на данный момент для создания ViewModel с SavedStateHandle</p><p id="-19plna_138">Давайте теперь посмотрим как это работает на уровне <code class="code" id="-19plna_434">Activity</code>, логику <code class="code" id="-19plna_435">ViewModelProvider/ViewModel</code> мы уже рассматривали в прошлых статьях, сейчас просто пройдемся по интересующей нас теме, когда мы обращаемся к <code class="code" id="-19plna_436">ViewModelProvider.create</code>:</p><div class="code-block" data-lang="kotlin">
+public expect class ViewModelProvider {
+    public companion object {
+        ...
+        public fun create(
+            owner: ViewModelStoreOwner,
+            factory: Factory = ViewModelProviders.getDefaultFactory(owner),
+            extras: CreationExtras = ViewModelProviders.getDefaultCreationExtras(owner),
+        ): ViewModelProvider
+
+    }
+}
+</div><p id="-19plna_140">То видим что в качестве factory идет обращение к методу <code class="code" id="-19plna_437">ViewModelProviders.getDefaultFactory(owner)</code>, посмотрим его исходники тоже:</p><div class="code-block" data-lang="kotlin">
+internal object ViewModelProviders {
+    internal fun getDefaultFactory(owner: ViewModelStoreOwner): ViewModelProvider.Factory =
+        if (owner is HasDefaultViewModelProviderFactory) {
+            owner.defaultViewModelProviderFactory
+        } else {
+            DefaultViewModelProviderFactory
+        }
+}
+</div><aside class="prompt" data-type="note" data-title="" id="-19plna_142"><p id="-19plna_438">ViewModelProvider<span class="control" id="-19plna_439">s</span> &mdash; это утилитный класс, не стоит путать его с <code class="code" id="-19plna_440">ViewModelProvider</code>.</p></aside><p id="-19plna_143">В этом методе нас интересует проверка на <code class="code" id="-19plna_441">is HasDefaultViewModelProviderFactory</code>:</p><div class="code-block" data-lang="kotlin">
+if (owner is HasDefaultViewModelProviderFactory) {
+    owner.defaultViewModelProviderFactory
+}
+</div><p id="-19plna_145">Если <code class="code" id="-19plna_442">owner</code> (<code class="code" id="-19plna_443">ViewModelStoreOwner</code>, например <code class="code" id="-19plna_444">Activity</code> или <code class="code" id="-19plna_445">Fragment</code>) реализует интерфейс <code class="code" id="-19plna_446">HasDefaultViewModelProviderFactory</code>, то у него берётся поле <code class="code" id="-19plna_447">defaultViewModelProviderFactory</code>. Интерфейс <code class="code" id="-19plna_448">HasDefaultViewModelProviderFactory</code> выглядит следующим образом: <span class="control" id="-19plna_449">androidx.lifecycle.HasDefaultViewModelProviderFactory.android.kt</span></p><div class="code-block" data-lang="kotlin">
+public interface HasDefaultViewModelProviderFactory {
+
+    public val defaultViewModelProviderFactory: ViewModelProvider.Factory
+
+    public val defaultViewModelCreationExtras: CreationExtras
+        get() = CreationExtras.Empty
+}
+</div><p id="-19plna_147">Реализация интерфейса <code class="code" id="-19plna_450">HasDefaultViewModelProviderFactory</code> в <code class="code" id="-19plna_451">Activity</code>:</p><div class="code-block" data-lang="kotlin">
+open class ComponentActivity() : ..., SavedStateRegistryOwner, HasDefaultViewModelProviderFactory, ... {
+    ...
+    override val defaultViewModelProviderFactory: ViewModelProvider.Factory by lazy {
+        SavedStateViewModelFactory(application, this, if (intent != null) intent.extras else null)
+    }
+
+    @get:CallSuper
+    override val defaultViewModelCreationExtras: CreationExtras
+        /**
+         * {@inheritDoc}
+         *
+         * The extras of [getIntent] when this is first called will be used as the defaults to any
+         * [androidx.lifecycle.SavedStateHandle] passed to a view model created using this extra.
+         */
+        get() {
+            val extras = MutableCreationExtras()
+            if (application != null) {
+                extras[APPLICATION_KEY] = application
+            }
+            extras[SAVED_STATE_REGISTRY_OWNER_KEY] = this
+            extras[VIEW_MODEL_STORE_OWNER_KEY] = this
+            val intentExtras = intent?.extras
+            if (intentExtras != null) {
+                extras[DEFAULT_ARGS_KEY] = intentExtras
+            }
+            return extras
+        }
+    ...
+}
+</div><p id="-19plna_149">Тут происходят два очень важных момента:</p><ol class="list _decimal" id="-19plna_150" type="1"><li class="list__item" id="-19plna_452"><p id="-19plna_454"><code class="code" id="-19plna_455">defaultViewModelProviderFactory</code> &mdash; в качестве фабрики по умолчанию используется <code class="code" id="-19plna_456">SavedStateViewModelFactory</code>.</p></li><li class="list__item" id="-19plna_453"><p id="-19plna_457"><code class="code" id="-19plna_458">defaultViewModelCreationExtras</code> &mdash; в <code class="code" id="-19plna_459">CreationExtras</code> кладётся <code class="code" id="-19plna_460">SavedStateRegistryOwner</code> под ключом <code class="code" id="-19plna_461">SAVED_STATE_REGISTRY_OWNER_KEY</code> и <code class="code" id="-19plna_462">ViewModelStoreOwner</code> под ключом <code class="code" id="-19plna_463">VIEW_MODEL_STORE_OWNER_KEY</code>.</p></li></ol><p id="-19plna_151">Это ключевая часть того как в итоге <code class="code" id="-19plna_464">SavedStateHandle</code> подключается к <code class="code" id="-19plna_465">ViewModel</code> и к <code class="code" id="-19plna_466">SavedStateRegistryOwner</code></p><p id="-19plna_152">Чтобы понять, как <code class="code" id="-19plna_467">SavedStateHandle</code> создаётся и восстанавливается для <code class="code" id="-19plna_468">ViewModel</code>, давайте разберёмся, что происходит в <code class="code" id="-19plna_469">SavedStateViewModelFactory</code></p><p id="-19plna_153"><span class="control" id="-19plna_470">androidx.lifecycle.SavedStateViewModelFactory.android.kt:</span></p><div class="code-block" data-lang="kotlin">
+public actual class SavedStateViewModelFactory :
+    ViewModelProvider.OnRequeryFactory, ViewModelProvider.Factory {
+
+    override fun &lt;T : ViewModel&gt; create(modelClass: Class&lt;T&gt;, extras: CreationExtras): T {
+        ...
+        return if (
+            extras[SAVED_STATE_REGISTRY_OWNER_KEY] != null &amp;&amp;
+            extras[VIEW_MODEL_STORE_OWNER_KEY] != null
+        ) {
+            ...
+            newInstance(modelClass, constructor, extras.createSavedStateHandle())
+            ...
+        }
+        ...
+    }
+}
+
+internal fun &lt;T : ViewModel?&gt; newInstance(
+    modelClass: Class&lt;T&gt;,
+    constructor: Constructor&lt;T&gt;,
+    vararg params: Any
+): T {
+    return try {
+        constructor.newInstance(*params)
+    }
+    ...
+}
+</div><p id="-19plna_155">Тут сокращена логика из исходников, чтобы сосредоточиться на главном. Внутри метода <code class="code" id="-19plna_471">create</code> у фабрики проверяется, содержат ли <code class="code" id="-19plna_472">extras</code>поля с ключами <code class="code" id="-19plna_473">SAVED_STATE_REGISTRY_OWNER_KEY</code> и <code class="code" id="-19plna_474">VIEW_MODEL_STORE_OWNER_KEY</code>. Если содержат &mdash; вызывается метод <code class="code" id="-19plna_475">newInstance</code>, который через рефлексию вызывает конструктор и передаёт параметры, одним из которых является <code class="code" id="-19plna_476">SavedStateHandle</code>.</p><p id="-19plna_156">Но нас интересует другой момент. Обратим внимание на вызов <code class="code" id="-19plna_477">createSavedStateHandle()</code>:</p><div class="code-block" data-lang="kotlin">
+newInstance(modelClass, constructor, extras.createSavedStateHandle())
+</div><p id="-19plna_158">Что происходит внутри <code class="code" id="-19plna_478">createSavedStateHandle()</code>? Чтобы понять, как создаётся <code class="code" id="-19plna_479">SavedStateHandle</code>, нужно заглянуть в исходный код этого метода:</p><p id="-19plna_159"><span class="control" id="-19plna_480">androidx.lifecycle.SavedStateHandleSupport.kt:</span></p><div class="code-block" data-lang="kotlin">
+@MainThread
+public fun CreationExtras.createSavedStateHandle(): SavedStateHandle {
+    val savedStateRegistryOwner =
+        this[SAVED_STATE_REGISTRY_OWNER_KEY]
+            ?: throw IllegalArgumentException(
+                &quot;CreationExtras must have a value by `SAVED_STATE_REGISTRY_OWNER_KEY`&quot;
+            )
+    val viewModelStateRegistryOwner =
+        this[VIEW_MODEL_STORE_OWNER_KEY]
+            ?: throw IllegalArgumentException(
+                &quot;CreationExtras must have a value by `VIEW_MODEL_STORE_OWNER_KEY`&quot;
+            )
+
+    val defaultArgs = this[DEFAULT_ARGS_KEY]
+    val key =
+        this[VIEW_MODEL_KEY]
+            ?: throw IllegalArgumentException(
+                &quot;CreationExtras must have a value by `VIEW_MODEL_KEY`&quot;
+            )
+    return createSavedStateHandle(
+        savedStateRegistryOwner,
+        viewModelStateRegistryOwner,
+        key,
+        defaultArgs
+    )
+}
+</div><p id="-19plna_161">Здесь из CreationExtras извлекаются три ключевых объекта:</p><ol class="list _decimal" id="-19plna_162" type="1"><li class="list__item" id="-19plna_481"><p id="-19plna_484">savedStateRegistryOwner &mdash; ссылка на SavedStateRegistry для управления состоянием.</p></li><li class="list__item" id="-19plna_482"><p id="-19plna_485">viewModelStateRegistryOwner &mdash; ссылка на ViewModelStore для привязки к жизненному циклу.</p></li><li class="list__item" id="-19plna_483"><p id="-19plna_486">defaultArgs &mdash; начальные параметры, если они были переданы.</p></li></ol><p id="-19plna_163">Все эти зависимости передаются в другой метод <code class="code" id="-19plna_487">createSavedStateHandle</code>, который как раз и занимается созданием или восстановлением SavedStateHandle для данной ViewModel.</p><p id="-19plna_164"><span class="control" id="-19plna_488">androidx.lifecycle.SavedStateHandleSupport.kt:</span></p><div class="code-block" data-lang="kotlin">
+private fun createSavedStateHandle(
+    savedStateRegistryOwner: SavedStateRegistryOwner,
+    viewModelStoreOwner: ViewModelStoreOwner,
+    key: String,
+    defaultArgs: SavedState?
+): SavedStateHandle {
+    val provider = savedStateRegistryOwner.savedStateHandlesProvider
+    val viewModel = viewModelStoreOwner.savedStateHandlesVM
+    return viewModel.handles[key]
+        ?: SavedStateHandle.createHandle(provider.consumeRestoredStateForKey(key), defaultArgs)
+            .also { viewModel.handles[key] = it }
+}
+</div><p id="-19plna_166">Тут сначала ищется нужный <code class="code" id="-19plna_489">SavedStateHandle</code> внутри <code class="code" id="-19plna_490">SavedStateHandlesVM</code>. Если он не найден &mdash; создаётся новый, сохраняется в <code class="code" id="-19plna_491">SavedStateHandlesVM</code>, а функция <code class="code" id="-19plna_492">createSavedStateHandle</code> возвращает управление обратно в <code class="code" id="-19plna_493">CreationExtras.createSavedStateHandle()</code>, которую мы уже видели. В конечном итоге управление возвращается в фабрику, таким образом создаётся <code class="code" id="-19plna_494">SavedStateHandle</code> для конкретной <code class="code" id="-19plna_495">ViewModel</code>.</p><p id="-19plna_167">Также в этом методе видим вызовы вроде <code class="code" id="-19plna_496">savedStateRegistryOwner.savedStateHandlesProvider</code> и <code class="code" id="-19plna_497">viewModelStoreOwner.savedStateHandlesVM</code>.</p><p id="-19plna_168">Теперь посмотрим, как это связано с провайдером. В коде вызывается <code class="code" id="-19plna_498">savedStateRegistryOwner.savedStateHandlesProvider</code>. На самом деле это просто extension свойство, которая вытаскивает объект (<code class="code" id="-19plna_499">SavedStateProvider</code>) из <code class="code" id="-19plna_500">SavedStateRegistry</code>.</p><p id="-19plna_169">Этот провайдер отвечает за доступ ко всем сохранённым состояниям (<code class="code" id="-19plna_501">SavedStateHandle</code>), привязанным к разным <code class="code" id="-19plna_502">ViewModel</code>. Перейдем к провайдеру: <code class="code" id="-19plna_503">savedStateHandlesProvider</code></p><p id="-19plna_170"><span class="control" id="-19plna_504">androidx.lifecycle.SavedStateHandleSupport.kt:</span></p><div class="code-block" data-lang="kotlin">
+internal val SavedStateRegistryOwner.savedStateHandlesProvider: SavedStateHandlesProvider
+get() =
+    savedStateRegistry.getSavedStateProvider(SAVED_STATE_KEY) as? SavedStateHandlesProvider
+        ?: throw IllegalStateException(
+            &quot;enableSavedStateHandles() wasn't called &quot; +
+                    &quot;prior to createSavedStateHandle() call&quot;
+        )
+
+internal class SavedStateHandlesProvider(
+    private val savedStateRegistry: SavedStateRegistry,
+    viewModelStoreOwner: ViewModelStoreOwner
+) : SavedStateRegistry.SavedStateProvider {
+    private var restored = false
+    private var restoredState: SavedState? = null
+
+    private val viewModel by lazy { viewModelStoreOwner.savedStateHandlesVM }
+
+    override fun saveState(): SavedState {
+        return savedState {
+            restoredState?.let { putAll(it) }
+            viewModel.handles.forEach { (key, handle) -&gt;
+                val savedState = handle.savedStateProvider().saveState()
+                if (savedState.read { !isEmpty() }) {
+                    putSavedState(key, savedState)
+                }
+            }
+            restored = false
+        }
+    }
+
+    fun performRestore() {
+        ...
+    }
+
+    fun consumeRestoredStateForKey(key: String): SavedState? {
+        ...
+    }
+}
+</div><p id="-19plna_172"><code class="code" id="-19plna_505">SavedStateHandlesProvider</code> &mdash; это прослойка между <code class="code" id="-19plna_506">SavedStateRegistry</code> и <code class="code" id="-19plna_507">SavedStateHandle</code>, обеспечивающая централизованное сохранение и восстановление состояний <code class="code" id="-19plna_508">ViewModel</code>. В методе <code class="code" id="-19plna_509">saveState()</code> собираются все актуальные состояния из <code class="code" id="-19plna_510">viewModel.handles</code>, добавляется возможное ранее восстановленное состояние, и итог сохраняется в <code class="code" id="-19plna_511">SavedStateRegistry</code>.</p><p id="-19plna_173">Для выборочного восстановления используется метод <code class="code" id="-19plna_512">consumeRestoredStateForKey()</code>, позволяющий получить состояние по ключу без необходимости загружать всё сразу. Восстановление и подготовка состояний происходят в <code class="code" id="-19plna_513">performRestore()</code>.</p><p id="-19plna_174">По сути, <code class="code" id="-19plna_514">SavedStateHandlesProvider</code> управляет жизненным циклом всех <code class="code" id="-19plna_515">SavedStateHandle</code> в рамках владельца состояния, поддерживая логику ленивого восстановления и гарантируя корректное сохранение после процесса или конфигурационных изменений.</p><p id="-19plna_175"><span class="control" id="-19plna_516">Взаимодействие с <code class="code" id="-19plna_517">SavedStateHandlesVM</code>:</span></p><p id="-19plna_176">Теперь перейдём к тому, как данные хранятся внутри <code class="code" id="-19plna_518">ViewModel</code>. <code class="code" id="-19plna_519">savedStateHandlesVM</code> &mdash; это расширение, которое создаёт или восстанавливает объект <code class="code" id="-19plna_520">SavedStateHandlesVM</code>, хранящий в себе Map из ключей на <code class="code" id="-19plna_521">SavedStateHandle</code>:</p><div class="code-block" data-lang="kotlin">
+internal val ViewModelStoreOwner.savedStateHandlesVM: SavedStateHandlesVM
+get() =
+    ViewModelProvider.create(
+        owner = this,
+        factory =
+            object : ViewModelProvider.Factory {
+                override fun &lt;T : ViewModel&gt; create(
+                    modelClass: KClass&lt;T&gt;,
+                    extras: CreationExtras
+                ): T {
+                    @Suppress(&quot;UNCHECKED_CAST&quot;) return SavedStateHandlesVM() as T
+                }
+            }
+    )[VIEWMODEL_KEY, SavedStateHandlesVM::class]
+
+internal class SavedStateHandlesVM : ViewModel() {
+    val handles = mutableMapOf&lt;String, SavedStateHandle&gt;()
+}
+</div><p id="-19plna_178">Здесь создаётся объект <code class="code" id="-19plna_522">SavedStateHandlesVM</code>, внутри которого поддерживается <code class="code" id="-19plna_523">Map</code>, связывающая ключи с объектами <code class="code" id="-19plna_524">SavedStateHandle</code>. <code class="code" id="-19plna_525">SavedStateHandlesVM</code> нужен для того, чтобы хранить и управлять всеми <code class="code" id="-19plna_526">SavedStateHandle</code> всех <code class="code" id="-19plna_527">ViewModel</code> в рамках одного <code class="code" id="-19plna_528">ViewModelStoreOwner</code> и <code class="code" id="-19plna_529">SavedStateRegistryOwner</code>.</p><p id="-19plna_179"><code class="code" id="-19plna_530">SavedStateHandlesProvider</code> &mdash; класс, реализующий интерфейс <code class="code" id="-19plna_531">SavedStateProvider</code>. Когда <code class="code" id="-19plna_532">SavedStateController</code> вызывает <code class="code" id="-19plna_533">performSave</code>, он также обращается к <code class="code" id="-19plna_534">SavedStateHandlesProvider</code> и вызывает его метод <code class="code" id="-19plna_535">saveState</code>. Далее он кладёт все существующие <code class="code" id="-19plna_536">SavedStateHandle</code> в объект <code class="code" id="-19plna_537">SavedState</code> (<code class="code" id="-19plna_538">Bundle</code>) и возвращает его.</p><p id="-19plna_180">Но чтобы весь этот процесс работал, необходимо зарегистрировать <code class="code" id="-19plna_539">SavedStateHandlesProvider</code> в <code class="code" id="-19plna_540">SavedStateRegistry</code>, однако пока что в коде мы не встретили блок, отвечающий за регистрацию провайдера, то есть вызов метода: <code class="code" id="-19plna_541">savedStateRegistry.registerSavedStateProvider(...)</code></p><p id="-19plna_181">На самом деле такая логика есть, и она триггерится внутри <code class="code" id="-19plna_542">ComponentActivity</code>, <code class="code" id="-19plna_543">Fragment</code> и <code class="code" id="-19plna_544">NavBackStackEntry</code>, то есть во всех <code class="code" id="-19plna_545">SavedStateRegistryOwner</code>. Давайте просто глянем, как это вызывается в <code class="code" id="-19plna_546">ComponentActivity</code>:</p><div class="code-block" data-lang="kotlin">
+open class ComponentActivity() : ..., SavedStateRegistryOwner, ... {
+
+    init {
+        ...
+        enableSavedStateHandles()
+        ...
+    }
+}
+</div><p id="-19plna_183">Видим вызов некого метода <code class="code" id="-19plna_547">enableSavedStateHandles</code> &mdash; само название звучит заманчиво. Далее &mdash; исходники метода <code class="code" id="-19plna_548">enableSavedStateHandles</code>:</p><div class="code-block" data-lang="kotlin">
+@MainThread
+public fun &lt;T&gt; T.enableSavedStateHandles() where T : SavedStateRegistryOwner, T : ViewModelStoreOwner {
+    ...
+    if (savedStateRegistry.getSavedStateProvider(SAVED_STATE_KEY) == null) {
+        val provider = SavedStateHandlesProvider(savedStateRegistry, this)
+        savedStateRegistry.registerSavedStateProvider(SAVED_STATE_KEY, provider)
+        lifecycle.addObserver(SavedStateHandleAttacher(provider))
+    }
+}
+</div><p id="-19plna_185"><code class="code" id="-19plna_549">enableSavedStateHandles</code> &mdash; это типизированный метод, который требует, чтобы вызывающая область одновременно являлась и <code class="code" id="-19plna_550">SavedStateRegistryOwner</code>, и <code class="code" id="-19plna_551">ViewModelStoreOwner</code>. <code class="code" id="-19plna_552">ComponentActivity</code>/<code class="code" id="-19plna_553">Fragment</code>/<code class="code" id="-19plna_554">NavBackStackEntry</code> идеально подходят под это &mdash; все трое реализуют оба интерфейса.</p><p id="-19plna_186">Давайте вкратце поймём, что происходит в этом методе. Для начала у <code class="code" id="-19plna_555">SavedStateRegistry</code> запрашивается сохранённый <code class="code" id="-19plna_556">provider</code> (<code class="code" id="-19plna_557">SavedStateProvider</code>) по ключу <code class="code" id="-19plna_558">SAVED_STATE_KEY</code>. Это ключ для хранения <code class="code" id="-19plna_559">SavedStateHandlesProvider</code> (он же <code class="code" id="-19plna_560">SavedStateProvider</code>).</p><p id="-19plna_187">Если по ключу ничего не найдено, то есть <code class="code" id="-19plna_561">null</code>, это означает, что <code class="code" id="-19plna_562">provider</code> ещё не был зарегистрирован. Тогда создаётся объект <code class="code" id="-19plna_563">SavedStateHandlesProvider</code> (он же <code class="code" id="-19plna_564">SavedStateProvider</code>) и регистрируется в <code class="code" id="-19plna_565">savedStateRegistry</code>.</p><p id="-19plna_188">Мы подробно разобрали, как механизм <code class="code" id="-19plna_566">SavedStateHandle</code> автоматически создаётся и подключается к <code class="code" id="-19plna_567">ViewModel</code>. Это достигается за счёт встроенного механизма фабрики <code class="code" id="-19plna_568">SavedStateViewModelFactory</code>, которая при создании ViewModel извлекает необходимые зависимости из объекта <code class="code" id="-19plna_569">CreationExtras</code>. Эти зависимости включают в себя:</p><ol class="list _decimal" id="-19plna_189" type="1"><li class="list__item" id="-19plna_570"><p id="-19plna_573"><span class="control" id="-19plna_574">SavedStateRegistryOwner</span> &mdash; для управления сохранением и восстановлением состояния.</p></li><li class="list__item" id="-19plna_571"><p id="-19plna_575"><span class="control" id="-19plna_576">ViewModelStoreOwner</span> &mdash; для привязки жизненного цикла ViewModel.</p></li><li class="list__item" id="-19plna_572"><p id="-19plna_577"><span class="control" id="-19plna_578">DefaultArgs</span> &mdash; начальные параметры, если они были переданы.</p></li></ol><p id="-19plna_190">В момент инициализации ViewModel, фабрика <code class="code" id="-19plna_579">SavedStateViewModelFactory</code> через метод <code class="code" id="-19plna_580">createSavedStateHandle</code> формирует объект <code class="code" id="-19plna_581">SavedStateHandle</code>. Этот объект связывается с <code class="code" id="-19plna_582">SavedStateRegistry</code> и регистрируется в нём посредством специального провайдера &mdash; <code class="code" id="-19plna_583">SavedStateHandlesProvider</code> (SavedStateProvider).</p><p id="-19plna_191">Механизм регистрации провайдера запускается автоматически при создании <code class="code" id="-19plna_584">ComponentActivity</code>, <code class="code" id="-19plna_585">Fragment</code> или <code class="code" id="-19plna_586">NavBackStackEntry</code>. Это обеспечивается вызовом метода <code class="code" id="-19plna_587">enableSavedStateHandles</code>, который регистрирует провайдер в <code class="code" id="-19plna_588">SavedStateRegistry</code> под ключом <code class="code" id="-19plna_589">SAVED_STATE_KEY</code>. В дальнейшем, при вызове <code class="code" id="-19plna_590">onSaveInstanceState</code>, этот провайдер сохраняет все текущие состояния из SavedStateHandle, привязанные к ключам <code class="code" id="-19plna_591">ViewModel</code>.</p><p id="-19plna_192">Таким образом, когда компонент пересоздаётся (например, при смене ориентации экрана или в случае уничтожения и восстановления Activity), механизм восстановления срабатывает автоматически. <code class="code" id="-19plna_592">SavedStateRegistry</code> восстанавливает состояние из провайдера, а <code class="code" id="-19plna_593">SavedStateHandle</code> вновь связывается с ViewModel, обеспечивая прозрачную работу с сохранёнными данными.</p><p id="-19plna_193">Это позволяет нам не заботиться о ручной передаче сохранённого состояния при каждом пересоздании ViewModel. Android-фреймворк делает это за нас, используя мощный механизм фабрик и хранилищ состояний, что делает <code class="code" id="-19plna_594">SavedStateHandle</code> удобным и надежным инструментом для управления состоянием внутри ViewModel.</p><p id="-19plna_194">На текущий момент мы понимаем, как <code class="code" id="-19plna_595">SavedStateHandle</code> работает в связке с <code class="code" id="-19plna_596">ViewModel</code> и как он в итоге соединяется с <code class="code" id="-19plna_597">SavedStateRegistry</code>. Также до этого мы узнали, как работают сам <code class="code" id="-19plna_598">SavedStateRegistry</code> и <code class="code" id="-19plna_599">SavedStateRegistryController</code>, и увидели их связь с методами <code class="code" id="-19plna_600">onSaveInstanceState</code> и <code class="code" id="-19plna_601">onRestoreInstanceState</code>.</p><p id="-19plna_195">Оказалось, что и <code class="code" id="-19plna_602">Saved State API</code>, и древние методы <code class="code" id="-19plna_603">onSaveInstanceState</code>/<code class="code" id="-19plna_604">onRestoreInstanceState</code> в конечном итоге работают по одному и тому же пути. Давайте вернёмся к точке, где они встречаются. Далее &mdash; код, который мы уже видели:</p><div class="code-block" data-lang="kotlin">
+open class ComponentActivity() : ..., SavedStateRegistryOwner, ... {
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        savedStateRegistryController.performRestore(savedInstanceState)
+        super.onCreate(savedInstanceState)
+        ...
+    }
+
+    @CallSuper
+    override fun onSaveInstanceState(outState: Bundle) {
+        ...
+        super.onSaveInstanceState(outState)
+        savedStateRegistryController.performSave(outState)
+    }
+}
+</div><p id="-19plna_197">То есть в стандартной практике при использовании механизма сохранения состояния применяются два метода:</p><ul class="list _bullet" id="-19plna_198"><li class="list__item" id="-19plna_605"><p id="-19plna_607"><code class="code" id="-19plna_608">onCreate</code> &mdash; получает на вход параметр <code class="code" id="-19plna_609">savedInstanceState</code> типа <code class="code" id="-19plna_610">Bundle</code>. Именно в этом методе читаются сохранённые значения.</p></li><li class="list__item" id="-19plna_606"><p id="-19plna_611"><code class="code" id="-19plna_612">onSaveInstanceState</code> &mdash; получает на вход параметр <code class="code" id="-19plna_613">outState</code> типа <code class="code" id="-19plna_614">Bundle</code>. В этот параметр записываются значения, которые должны быть сохранены.</p></li></ul><p id="-19plna_199">Давайте разберёмся, каким образом вся эта конструкция работает: как значения, сохранённые в <code class="code" id="-19plna_615">outState</code> метода <code class="code" id="-19plna_616">onSaveInstanceState</code>, переживают изменение конфигурации и даже смерть процесса, и как эти сохранённые данные возвращаются обратно в <code class="code" id="-19plna_617">onCreate</code>.</p><p id="-19plna_200">Посмотрим на реализацию метода <code class="code" id="-19plna_618">onSaveInstanceState</code> в <code class="code" id="-19plna_619">super</code>, то есть в самом классе <code class="code" id="-19plna_620">Activity</code>:</p><div class="code-block" data-lang="java">
+public class Activity extends ContextThemeWrapper ...{
+
+final void performSaveInstanceState(@NonNull Bundle outState) {
+       ...
+    onSaveInstanceState(outState);
+       ...
+}
+
+protected void onSaveInstanceState(@NonNull Bundle outState) {
+       ...
+}
+}
+</div><p id="-19plna_202">Всё, что происходит внутри этого метода, нас сейчас не волнует. Главное, что <code class="code" id="-19plna_621">onSaveInstanceState</code> вызывает другой финальный метод &mdash; <code class="code" id="-19plna_622">performSaveInstanceState</code>.</p><p id="-19plna_203">Теперь давайте поймём, кто вызывает <code class="code" id="-19plna_623">performSaveInstanceState</code>. Этот вызов инициируется классом <code class="code" id="-19plna_624">Instrumentation</code>:</p><p id="-19plna_204"><span class="control" id="-19plna_625">android.app.Instrumentation.java:</span></p><div class="code-block" data-lang="java">
+
+@android.ravenwood.annotation.RavenwoodKeepPartialClass
+public class Instrumentation {
+   ...
+
+    public void callActivityOnSaveInstanceState(@NonNull Activity activity,
+                                                @NonNull Bundle outState) {
+        activity.performSaveInstanceState(outState);
+    }
+   ...
+}
+</div><aside class="prompt" data-type="note" data-title="Официальная документация гласит следующее об этом классе:" id="-19plna_206"><p>Base class for implementing application instrumentation code. When running with instrumentation turned on, this class will be instantiated for you before any of the application code, allowing you to monitor all of the interaction the system has with the application. An Instrumentation implementation is described to the system through an AndroidManifest.xml's </p><p> tag.</p></aside><p id="-19plna_207">Теперь нужно понять, кто же вызывает <code class="code" id="-19plna_627">Instrumentation.callActivityOnSaveInstanceState</code>? И тут мы встречаем <code class="code" id="-19plna_628">ActivityThread</code>:</p><div class="code-block" data-lang="java">
+public final class ActivityThread extends ClientTransactionHandler implements ActivityThreadInternal {
+    ...
+
+    private void callActivityOnSaveInstanceState(ActivityClientRecord r) {
+        r.state = new Bundle();
+        r.state.setAllowFds(false);
+        if (r.isPersistable()) {
+            r.persistentState = new PersistableBundle();
+            mInstrumentation.callActivityOnSaveInstanceState(
+                    r.activity, r.state,
+                    r.persistentState
+            );
+        } else {
+            mInstrumentation.callActivityOnSaveInstanceState(r.activity, r.state);
+        }
+    }
+   ...
+}
+</div><p id="-19plna_209">Что здесь происходит? <code class="code" id="-19plna_629">callActivityOnSaveInstanceState</code> на вход принимает параметр <code class="code" id="-19plna_630">r</code> типа <code class="code" id="-19plna_631">ActivityClientRecord</code>. У этого класса есть поле <code class="code" id="-19plna_632">state</code>, которое является <code class="code" id="-19plna_633">Bundle</code>. Ему присваивается новый объект <code class="code" id="-19plna_634">Bundle</code>.</p><p id="-19plna_210">Класс <code class="code" id="-19plna_635">ActivityClientRecord</code> мы уже встречали, когда рассматривали <code class="code" id="-19plna_636">ViewModelStore</code>. <code class="code" id="-19plna_637">ActivityClientRecord</code> представляет собой запись активности и используется для хранения всей информации, связанной с реальным экземпляром активности. Это своего рода структура данных для учёта активности в процессе выполнения приложения.</p><p id="-19plna_211">Основные поля класса <code class="code" id="-19plna_638">ActivityClientRecord</code>:</p><ul class="list _bullet" id="-19plna_212"><li class="list__item" id="-19plna_639"><p id="-19plna_647"><code class="code" id="-19plna_648">state</code> &mdash; объект <code class="code" id="-19plna_649">Bundle</code>, содержащий сохраненное состояние активности. Да, да, это тот самый Bundle который мы получаем в методе <code class="code" id="-19plna_650">onCreate</code>, <code class="code" id="-19plna_651">onRestoreInstanceState</code> и <code class="code" id="-19plna_652">onSaveInstanceState</code></p></li><li class="list__item" id="-19plna_640"><p id="-19plna_653"><code class="code" id="-19plna_654">lastNonConfigurationInstances</code> &mdash; объект <code class="code" id="-19plna_655">Activity#NonConfigurationInstance</code>, в котором хранится <code class="code" id="-19plna_656">ComponentActivity#NonConfigurationInstances</code> в котором хранится<code class="code" id="-19plna_657">ViewModelStore</code>.</p></li><li class="list__item" id="-19plna_641"><p id="-19plna_658"><code class="code" id="-19plna_659">intent</code> &mdash; объект <code class="code" id="-19plna_660">Intent</code>, представляющий намерение запуска активности.</p></li><li class="list__item" id="-19plna_642"><p id="-19plna_661"><code class="code" id="-19plna_662">window</code> &mdash; объект <code class="code" id="-19plna_663">Window</code>, связанный с активностью.</p></li><li class="list__item" id="-19plna_643"><p id="-19plna_664"><code class="code" id="-19plna_665">activity</code> &mdash; сам объект <code class="code" id="-19plna_666">Activity</code>.</p></li><li class="list__item" id="-19plna_644"><p id="-19plna_667"><code class="code" id="-19plna_668">parent</code> &mdash; родительская активность (если есть).</p></li><li class="list__item" id="-19plna_645"><p id="-19plna_669"><code class="code" id="-19plna_670">createdConfig</code> &mdash; объект <code class="code" id="-19plna_671">Configuration</code>, содержащий настройки, примененные при создании активности.</p></li><li class="list__item" id="-19plna_646"><p id="-19plna_672"><code class="code" id="-19plna_673">overrideConfig</code> &mdash; объект <code class="code" id="-19plna_674">Configuration</code>, содержащий текущие настройки активности.</p></li></ul><p id="-19plna_213">Пока что не будем отвлекаться, и узнаем кто же вызывает <code class="code" id="-19plna_675">callActivityOnSaveInstanceState</code>:</p><div class="code-block" data-lang="java">
+public final class ActivityThread extends ClientTransactionHandler implements ActivityThreadInternal {
+
+    private void callActivityOnStop(ActivityClientRecord r, boolean saveState, String reason) {
+        final boolean shouldSaveState = saveState &amp;&amp; !r.activity.mFinished &amp;&amp; r.state == null
+                &amp;&amp; !r.isPreHoneycomb();
+        final boolean isPreP = r.isPreP();
+        if (shouldSaveState &amp;&amp; isPreP) {
+            callActivityOnSaveInstanceState(r);
+        }
+        ...
+    }
+
+    private Bundle performPauseActivity(ActivityClientRecord r, boolean finished, String reason,
+                                        PendingTransactionActions pendingActions) {
+       ...
+        final boolean shouldSaveState = !r.activity.mFinished &amp;&amp; r.isPreHoneycomb();
+        if (shouldSaveState) {
+            callActivityOnSaveInstanceState(r);
+        }
+       ...
+    }
+}
+</div><p id="-19plna_215">Метод callActivityOnStop определяет, нужно ли сохранять состояние активности перед остановкой. Проверяется флаг saveState, активность не должна быть завершена (!mFinished), состояние (r.state) должно быть ещё не сохранено, и версия должна быть до Honeycomb (!isPreHoneycomb()). Если все условия выполняются и версия до Android P (isPreP()), вызывается callActivityOnSaveInstanceState, чтобы создать и заполнить Bundle</p><p id="-19plna_216">Метод performPauseActivity проверяет, нужно ли сохранить состояние перед паузой. Здесь условия упрощены: активность не должна быть завершена, версия &mdash; до Honeycomb. Если да, то снова вызывается callActivityOnSaveInstanceState для формирования Bundle.</p><div class="code-block" data-lang="java">
+public final class ActivityThread extends ClientTransactionHandler implements ActivityThreadInternal {
+
+    private void performStopActivityInner(ActivityClientRecord r, StopInfo info,
+                                          boolean saveState, boolean finalStateRequest, String reason) {
+      ...
+        callActivityOnStop(r, saveState, reason);
+    }
+
+    private void handleRelaunchActivityInner(@NonNull ActivityClientRecord r,...) {
+       ...
+        if (!r.stopped) {
+            callActivityOnStop(r, true /* saveState */, reason);
+        }
+       ...
+    }
+}
+</div><p id="-19plna_218">performStopActivityInner используется при полной остановке активности. Внутри сразу вызывается callActivityOnStop, который проверяет и, если нужно, инициирует сохранение состояния. Это гарантирует, что состояние активности попадёт в Bundle до того, как активность будет остановлена и уничтожена.</p><p id="-19plna_219">В handleRelaunchActivityInner вызывается callActivityOnStop, если активность ещё не остановлена (!r.stopped). Это важно при пересоздании активности (например, при изменении конфигурации), чтобы сохранить состояние до пересоздания.</p><div class="code-block" data-lang="java">
+public final class ActivityThread extends ClientTransactionHandler implements ActivityThreadInternal {
+    @Override
+    public void handleRelaunchActivity(@NonNull ActivityClientRecord tmp,
+                                       @NonNull PendingTransactionActions pendingActions) {
+      ...
+        handleRelaunchActivityInner(r, tmp.pendingResults, tmp.pendingIntents,
+                pendingActions, tmp.startsNotResumed, tmp.overrideConfig, tmp.mActivityWindowInfo,
+                &quot;handleRelaunchActivity&quot;);
+    }
+
+
+    @Override
+    public void handleStopActivity(ActivityClientRecord r,
+                                   PendingTransactionActions pendingActions, boolean finalStateRequest, String reason) {
+      ...
+        performStopActivityInner(r, stopInfo, true /* saveState */, finalStateRequest,
+                reason);
+      ...
+    }
+}
+</div><p id="-19plna_221">handleRelaunchActivity &mdash; внешний метод, который вызывает handleRelaunchActivityInner. Используется для обработки полного пересоздания активности. Все проверки и логика сохранения состояния уже находятся внутри handleRelaunchActivityInner.</p><p id="-19plna_222">handleStopActivity вызывает performStopActivityInner, передавая туда флаг saveState = true, чтобы принудительно сохранить состояние перед окончательной остановкой. Это используется, например, при закрытии приложения или выгрузке активности системой.</p><p id="-19plna_223">Последующие вызовы методов <code class="code" id="-19plna_676">performStopActivity</code> и <code class="code" id="-19plna_677">handleRelaunchActivity</code> упираются в классы <code class="code" id="-19plna_678">ActivityRelaunchItem.execute()</code> и <code class="code" id="-19plna_679">StopActivityItem.execute()</code>. Метод <code class="code" id="-19plna_680">performStopActivity</code> вызывается из <code class="code" id="-19plna_681">StopActivityItem.execute()</code>, а <code class="code" id="-19plna_682">handleRelaunchActivity</code> &mdash; из <code class="code" id="-19plna_683">ActivityRelaunchItem.execute()</code>.</p><div class="code-block" data-lang="java">
+public class StopActivityItem extends ActivityLifecycleItem {
+    @Override
+    public void execute(@NonNull ClientTransactionHandler client, @NonNull ActivityClientRecord r,
+                        @NonNull PendingTransactionActions pendingActions) {
+        client.handleStopActivity(r, pendingActions,
+                true /* finalStateRequest */, &quot;STOP_ACTIVITY_ITEM&quot;);
+        Trace.traceEnd(TRACE_TAG_ACTIVITY_MANAGER);
+    }
+}
+</div><p id="-19plna_225">В методе <code class="code" id="-19plna_684">StopActivityItem.execute</code> видим вызов <code class="code" id="-19plna_685">client.handleStopActivity</code>. Так как <code class="code" id="-19plna_686">client</code> &mdash; это <code class="code" id="-19plna_687">ClientTransactionHandler</code>, а <code class="code" id="-19plna_688">ActivityThread</code> наследуется от него, фактически здесь вызывается <code class="code" id="-19plna_689">ActivityThread.handleStopActivity</code>.</p><div class="code-block" data-lang="java">
+public class ActivityRelaunchItem extends ActivityTransactionItem {
+    @Override
+    public void execute(@NonNull ClientTransactionHandler client, @NonNull ActivityClientRecord r,
+                        @NonNull PendingTransactionActions pendingActions) {
+        client.handleRelaunchActivity(mActivityClientRecord, pendingActions);
+    }
+}
+</div><p id="-19plna_227">В методе <code class="code" id="-19plna_690">ActivityRelaunchItem.execute</code> видим вызов <code class="code" id="-19plna_691">client.handleRelaunchActivity</code>. По той же логике, фактически вызывается <code class="code" id="-19plna_692">ActivityThread.handleRelaunchActivity</code>.</p><p id="-19plna_228">На данный момент мы выследили следующую цепочку вызовов:</p><p id="-19plna_229"><code class="code" id="-19plna_693">StopActivityItem.execute</code> &rarr; <code class="code" id="-19plna_694">ActivityThread.handleStopActivity</code> &rarr; <code class="code" id="-19plna_695">ActivityThread.performStopActivityInner</code> &rarr; <code class="code" id="-19plna_696">ActivityThread.callActivityOnStop</code> &rarr; <code class="code" id="-19plna_697">ActivityThread.callActivityOnSaveInstanceState</code> &rarr; <code class="code" id="-19plna_698">Instrumentation.callActivityOnSaveInstanceState</code> &rarr; <code class="code" id="-19plna_699">Activity.performSaveInstanceState</code> &rarr; <code class="code" id="-19plna_700">Activity.onSaveInstanceState</code>.</p><p id="-19plna_230">Это ключевая цепочка, которая обеспечивает сохранение состояния <code class="code" id="-19plna_701">Activity</code> при изменениях конфигурации или её завершении. Обратим внимание, что вызов <code class="code" id="-19plna_702">callActivityOnSaveInstanceState</code> из <code class="code" id="-19plna_703">Instrumentation</code> &mdash; это как раз та точка, где система передаёт управление обратно в <code class="code" id="-19plna_704">Activity</code>, вызывая метод <code class="code" id="-19plna_705">performSaveInstanceState</code>, который инициирует сохранение всех данных в объект <code class="code" id="-19plna_706">Bundle</code>.</p><p id="-19plna_231">Параллельно, в случае изменения конфигурации или пересоздания активности, запускается другая цепочка:</p><p id="-19plna_232"><code class="code" id="-19plna_707">ActivityRelaunchItem.execute</code> &rarr; <code class="code" id="-19plna_708">ActivityThread.handleRelaunchActivity</code> &rarr; <code class="code" id="-19plna_709">ActivityThread.handleRelaunchActivityInner</code> &rarr; <code class="code" id="-19plna_710">ActivityThread.callActivityOnStop</code> &rarr; <code class="code" id="-19plna_711">ActivityThread.callActivityOnSaveInstanceState</code> &rarr; <code class="code" id="-19plna_712">Instrumentation.callActivityOnSaveInstanceState</code> &rarr; <code class="code" id="-19plna_713">Activity.performSaveInstanceState</code> &rarr; <code class="code" id="-19plna_714">Activity.onSaveInstanceState</code>.</p><p id="-19plna_233">Эти две цепочки работают независимо, но сходятся в методе <code class="code" id="-19plna_715">callActivityOnStop</code>, который гарантирует сохранение данных в <code class="code" id="-19plna_716">Bundle</code> перед тем, как <code class="code" id="-19plna_717">Activity</code> будет остановлена или пересоздана.</p><p id="-19plna_234">Далее, сформированный объект <code class="code" id="-19plna_718">Bundle</code>, содержащий состояние <code class="code" id="-19plna_719">Activity</code>, сохраняется в объекте <code class="code" id="-19plna_720">ActivityClientRecord</code>. Этот объект представляет собой структуру данных, хранящую всю необходимую информацию о <code class="code" id="-19plna_721">Activity</code> во время её жизненного цикла. Именно в поле <code class="code" id="-19plna_722">state</code> этого класса система сохраняет переданный <code class="code" id="-19plna_723">Bundle</code>, чтобы при пересоздании активности восстановить её состояние. <code class="code" id="-19plna_724">ActivityClientRecord</code> существует в процессе всех вызовов цепочки, перед тем как <code class="code" id="-19plna_725">Activity</code> перейдёт в состояние STOP. Внутри метода <code class="code" id="-19plna_726">ActivityThread.callActivityOnSaveInstanceState</code> полю <code class="code" id="-19plna_727">ActivityClientRecord.state</code> присваивается новый <code class="code" id="-19plna_728">Bundle</code>, в который активити и фрагменты кладут всё нужное &mdash; от состояния иерархий <code class="code" id="-19plna_729">View</code> до любых данных, которые разработчик решил сохранить.</p><p id="-19plna_235">Таким образом, мы видим, что эта цепочка запускается не из самой <code class="code" id="-19plna_730">Activity</code>, а из внутренней логики Android через <code class="code" id="-19plna_731">ActivityThread</code>. Это ещё раз подтверждает, что все жизненные циклы управляются системой через единый механизм клиент-серверных транзакций, а <code class="code" id="-19plna_732">ActivityThread</code> выполняет роль посредника, координирующего вызовы между <code class="code" id="-19plna_733">Activity</code> и системой.</p><p id="-19plna_236">Важный момент здесь &mdash; откуда берётся <code class="code" id="-19plna_734">ActivityClientRecord</code> и как его внутренний <code class="code" id="-19plna_735">Bundle</code> переживает смерть процесса. В случае сохранения между PAUSE/STOP мы увидели, где создаётся чистый <code class="code" id="-19plna_736">Bundle</code>, в который можно сохранять данные. Здесь особых секретов нет. Но то, как этот сохранённый <code class="code" id="-19plna_737">Bundle</code> внутри <code class="code" id="-19plna_738">ActivityClientRecord</code> переживает смерть системы и затем возвращается в <code class="code" id="-19plna_739">Activity.onCreate</code>, мы ещё не знаем. Следующая глава раскроет этот момент.</p></section><section class="chapter"><h2 id="oncreate" data-toc="oncreate">Цепочка вызова onCreate</h2><p id="-19plna_740">Начнем наше движение с самого низа &mdash; с метода <code class="code" id="-19plna_751">onCreate</code>. Как видно из кода, его вызов происходит внутри метода <code class="code" id="-19plna_752">performCreate</code>, который, в свою очередь, вызывается из метода <code class="code" id="-19plna_753">callActivityOnCreate</code> класса <code class="code" id="-19plna_754">Instrumentation</code>.</p><div class="code-block" data-lang="java">
+public class Activity extends ContextThemeWrapper ...{
+
+public void onCreate(@Nullable Bundle savedInstanceState, @Nullable PersistableBundle persistentState) {
+    onCreate(savedInstanceState);
+}
+
+@MainThread
+@CallSuper
+protected void onCreate(@Nullable Bundle savedInstanceState) {
+            ...
+}
+
+final void performCreate(Bundle icicle) {
+    performCreate(icicle, null);
+}
+
+@UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
+final void performCreate(Bundle icicle, PersistableBundle persistentState) {
+            ...
+    if (persistentState != null) {
+        onCreate(icicle, persistentState);
+    } else {
+        onCreate(icicle);
+    }
+            ...
+}
+}
+</div><p id="-19plna_742">Метод <code class="code" id="-19plna_755">performCreate</code> является связующим звеном между логикой вызова <code class="code" id="-19plna_756">onCreate</code> и более низкоуровневыми компонентами системы. Сам же вызов <code class="code" id="-19plna_757">performCreate</code> осуществляется в классе <code class="code" id="-19plna_758">Instrumentation</code>:</p><div class="code-block" data-lang="java">
+public class Instrumentation {
+    ...
+
+    public void callActivityOnCreate(Activity activity, Bundle icicle) {
+        ...
+        activity.performCreate(icicle);
+        ...
+    }
+}
+</div><p id="-19plna_744">Класс <code class="code" id="-19plna_759">Instrumentation</code> управляет жизненным циклом <code class="code" id="-19plna_760">Activity</code> и вызывает <code class="code" id="-19plna_761">performCreate</code>, передавая ему объект <code class="code" id="-19plna_762">Bundle</code> для восстановления состояния. Теперь поднимемся выше. Кто же вызывает <code class="code" id="-19plna_763">callActivityOnCreate</code>? За это отвечает метод <code class="code" id="-19plna_764">performLaunchActivity</code> в классе <code class="code" id="-19plna_765">ActivityThread</code>:</p><div class="code-block" data-lang="java">
+public final class ActivityThread extends ClientTransactionHandler implements ActivityThreadInternal {
+
+    private Activity performLaunchActivity(ActivityClientRecord r, Intent customIntent) {
+        ...
+        if (r.isPersistable()) {
+            mInstrumentation.callActivityOnCreate(activity, r.state, r.persistentState);
+        } else {
+            mInstrumentation.callActivityOnCreate(activity, r.state);
+        }
+        ...
+    }
+}
+</div><p id="-19plna_746">Здесь мы видим, что в зависимости от состояния активности (сохранено ли оно в <code class="code" id="-19plna_766">PersistentState</code>), <code class="code" id="-19plna_767">callActivityOnCreate</code> вызывается с разным количеством параметров, но всегда через <code class="code" id="-19plna_768">Instrumentation</code>.</p><p id="-19plna_747">Далее, этот метод <code class="code" id="-19plna_769">performLaunchActivity</code> вызывается из метода <code class="code" id="-19plna_770">handleLaunchActivity</code> того же класса:</p><div class="code-block" data-lang="java">
+public final class ActivityThread extends ClientTransactionHandler implements ActivityThreadInternal {
+
+    @Override
+    public Activity handleLaunchActivity(ActivityClientRecord r, ...) {
+    ...
+        final Activity a = performLaunchActivity(r, customIntent);
+    ...
+    }
+}
+</div><section class="chapter"><h3 id="activity_1" data-toc="activity_1">Перезапуск Activity при релаунче (например, при повороте экрана)</h3><p id="-19plna_771">При пересоздании Activity, например, при повороте экрана, срабатывает метод <code class="code" id="-19plna_777">handleRelaunchActivity</code>:</p><div class="code-block" data-lang="java">
+public final class ActivityThread extends ClientTransactionHandler implements ActivityThreadInternal {
+
+    @Override
+    public void handleRelaunchActivity(@NonNull ActivityClientRecord tmp,
+                                       @NonNull PendingTransactionActions pendingActions) {
+        ...
+        handleRelaunchActivityInner(r, tmp.pendingResults, tmp.pendingIntents,
+                pendingActions, tmp.startsNotResumed, tmp.overrideConfig, tmp.mActivityWindowInfo,
+                &quot;handleRelaunchActivity&quot;);
+    }
+
+    private void handleRelaunchActivityInner(@NonNull ActivityClientRecord r,...) {
+    ....
+        handleLaunchActivity(r, pendingActions, mLastReportedDeviceId, customIntent);
+    }
+}
+</div><p id="-19plna_773">Вызов метода handleRelaunchActivity иницирует класс команда/транзакция <code class="code" id="-19plna_778">ActivityRelaunchItem</code>, которая действует как маркер для того, чтобы выполнить перезапуск с сохранением состояния:</p><div class="code-block" data-lang="java">
+public class ActivityRelaunchItem extends ActivityTransactionItem {
+
+    @Override
+    public void execute(@NonNull ClientTransactionHandler client, @NonNull ActivityClientRecord r,
+                        @NonNull PendingTransactionActions pendingActions) {
+        ...
+        client.handleRelaunchActivity(mActivityClientRecord, pendingActions);
+        ...
+    }
+}
+
+</div><p id="-19plna_775">Эта команда инициирует следующую цепочку вызовов:</p><p id="-19plna_776"><code class="code" id="-19plna_779">ActivityRelaunchItem.execute</code> &rarr; <code class="code" id="-19plna_780">handleRelaunchActivity</code> &rarr; <code class="code" id="-19plna_781">handleRelaunchActivityInner</code> &rarr; <code class="code" id="-19plna_782">handleLaunchActivity</code> &rarr; <code class="code" id="-19plna_783">performLaunchActivity</code> &rarr; <code class="code" id="-19plna_784">callActivityOnCreate</code> &rarr; <code class="code" id="-19plna_785">performCreate</code> &rarr; <code class="code" id="-19plna_786">onCreate</code>.</p></section><section class="chapter"><h3 id="activity" data-toc="activity">Создание Activity после уничтожения процесса или при первом запуске</h3><p id="-19plna_787">В случае, если процесс был уничтожен или это первый запуск <code class="code" id="-19plna_853">Activity</code>, используется другая команда &mdash; <code class="code" id="-19plna_854">LaunchActivityItem</code>. Она запускает аналогичную, но отдельную цепочку вызовов:</p><div class="code-block" data-lang="java">
+public class LaunchActivityItem extends ClientTransactionItem {
+
+    @Nullable
+    private final Bundle mState;
+
+    @Nullable
+    private final PersistableBundle mPersistentState;
+
+    public LaunchActivityItem(
+            // остальные параметры
+            @Nullable Bundle state,
+            @Nullable PersistableBundle persistentState,
+            // остальные параметры
+    ) {
+        this(
+                // передаваемые аргументы до
+                state != null ? new Bundle(state) : null,
+                persistentState != null ? new PersistableBundle(persistentState) : null,
+                // оставшиеся аргументы
+        );
+    ...
+    }
+
+
+    @Override
+    public void execute(@NonNull ClientTransactionHandler client,
+                        @NonNull PendingTransactionActions pendingActions) {
+        ...
+        ActivityClientRecord r = new ActivityClientRecord(...,mState, mPersistentState, ...);
+        client.handleLaunchActivity(r, pendingActions, mDeviceId, null /* customIntent */);
+        ...
+    }
+}
+
+</div><p id="-19plna_789">Цепочка выглядит так: <code class="code" id="-19plna_855">LaunchActivityItem.execute</code> &rarr; <code class="code" id="-19plna_856">ActivityThread.handleLaunchActivity</code> &rarr; <code class="code" id="-19plna_857">ActivityThread.performLaunchActivity</code> &rarr; <code class="code" id="-19plna_858">ActivityThread.callActivityOnCreate</code> &rarr; <code class="code" id="-19plna_859">ActivityperformCreate</code> &rarr; <code class="code" id="-19plna_860">ActivityonCreate</code>.</p><p id="-19plna_790">Следует запомнить важную вещь, прежде чем подниматься выше, нужно понимать что <code class="code" id="-19plna_861">LaunchActivityItem</code> &mdash; это транзакция, которая в своём конструкторе принимает<code class="code" id="-19plna_862">Bundle</code> и <code class="code" id="-19plna_863">PersistableBundle</code> (последний мы рассматривать не будем). Класс <code class="code" id="-19plna_864">LaunchActivityItem</code> наследуется от <code class="code" id="-19plna_865">ClientTransactionItem</code>.</p><p id="-19plna_791"><code class="code" id="-19plna_866">ClientTransactionItem</code> &mdash; это абстрактный базовый класс, от которого наследуются все транзакции, связанные с жизненным циклом <code class="code" id="-19plna_867">Activity</code>. В него входят <code class="code" id="-19plna_868">LaunchActivityItem</code>, <code class="code" id="-19plna_869">ActivityRelaunchItem</code>, <code class="code" id="-19plna_870">ResumeActivityItem</code> (последние &mdash; <span class="control" id="-19plna_871">не прямые</span>, а транзитивные наследники) и другие элементы, участвующие в управлении состоянием <code class="code" id="-19plna_872">Activity</code>.</p><p id="-19plna_792">Мы увидели что создание ActivityClientRecord происходит в <code class="code" id="-19plna_873">LaunchActivityItem.execute</code>, но она использует готовые данные которые бьли переданы ей в конструктор при созданий.</p><p id="-19plna_793">Наша цель дальше &mdash; выяснить два момента:</p><ol class="list _decimal" id="-19plna_794" type="1"><li class="list__item" id="-19plna_874"><p id="-19plna_876"><span class="control" id="-19plna_877">Кто создаёт <code class="code" id="-19plna_878">LaunchActivityItem</code> и передаёт в него <code class="code" id="-19plna_879">Bundle</code></span>, который как раз и переживает смерть или остановку процесса.</p></li><li class="list__item" id="-19plna_875"><p id="-19plna_880"><span class="control" id="-19plna_881">Кто вызывает метод <code class="code" id="-19plna_888">execute</code> у <code class="code" id="-19plna_889">LaunchActivityItem</code></span> и запускает описанную выше цепочку вызовов : <code class="code" id="-19plna_882">LaunchActivityItem.execute</code> &rarr; <code class="code" id="-19plna_883">handleLaunchActivity</code> &rarr; <code class="code" id="-19plna_884">performLaunchActivity</code> &rarr; <code class="code" id="-19plna_885">callActivityOnCreate</code> &rarr; <code class="code" id="-19plna_886">performCreate</code> &rarr; <code class="code" id="-19plna_887">onCreate</code>.</p></li></ol><p id="-19plna_795">И так идем дальше, выше вызова <code class="code" id="-19plna_890">LaunchActivityItem.execute</code>, стоит класс <code class="code" id="-19plna_891">TransactionExecutor</code></p><div class="code-block" data-lang="java">
+public class TransactionExecutor {
+
+    private final ClientTransactionHandler mTransactionHandler;
+
+    public TransactionExecutor(@NonNull ClientTransactionHandler clientTransactionHandler) {
+        mTransactionHandler = clientTransactionHandler;
+    }
+
+    public void execute(@NonNull ClientTransaction transaction) {
+        ...
+        executeTransactionItems(transaction);
+        ...
+    }
+
+    public void executeTransactionItems(@NonNull ClientTransaction transaction) {
+        final List&lt;ClientTransactionItem&gt; items = transaction.getTransactionItems();
+        final int size = items.size();
+        for (int i = 0; i &lt; size; i++) {
+            final ClientTransactionItem item = items.get(i);
+            if (item.isActivityLifecycleItem()) {
+                executeLifecycleItem(transaction, (ActivityLifecycleItem) item);
+            } else {
+                executeNonLifecycleItem(transaction, item,
+                        shouldExcludeLastLifecycleState(items, i));
+            }
+        }
+    }
+
+    private void executeLifecycleItem(@NonNull ClientTransaction transaction,
+                                      @NonNull ActivityLifecycleItem lifecycleItem) {
+        ...
+        lifecycleItem.execute(mTransactionHandler, mPendingActions);
+                ...
+    }
+
+    private void executeNonLifecycleItem(@NonNull ClientTransaction transaction,
+                                         @NonNull ClientTransactionItem item, boolean shouldExcludeLastLifecycleState) {
+        ...
+        item.execute(mTransactionHandler, mPendingActions);
+        ...
+    }
+}
+</div><p id="-19plna_797"><code class="code" id="-19plna_892">TransactionExecutor</code> - это как раз класс который работает со всеми транзакциями, то есть с ClientTransactionItem, и ClientTransaction - который является массивом или очередью которая хранит ClientTransactionItem-ы,</p><p id="-19plna_798">Конструктор <code class="code" id="-19plna_893">TransactionExecutor</code> принимает на вход <code class="code" id="-19plna_894">ClientTransactionHandler</code>, если вы не забыли, то ActivityThread реализует абстрактный класс <code class="code" id="-19plna_895">ClientTransactionHandler</code>, по этому фактический в конструктор <code class="code" id="-19plna_896">TransactionExecutor</code> прилетает ActivityThread.</p><p id="-19plna_799">У <code class="code" id="-19plna_897">TransactionExecutor</code> есть метод <code class="code" id="-19plna_898">execute</code> который вызывает другой метод <code class="code" id="-19plna_899">executeTransactionItems</code>, <code class="code" id="-19plna_900">executeTransactionItems</code> - в свою очередь пробегается по всем элемента внутри очереди транзакций, то есть в <code class="code" id="-19plna_901">ClientTransaction</code>, и в итоге определяет какой метод вызывать, <code class="code" id="-19plna_902">executeNonLifecycleItem</code> или <code class="code" id="-19plna_903">executeLifecycleItem</code>.</p><p id="-19plna_800">Различие этих методов в том, что <code class="code" id="-19plna_904">executeLifecycleItem</code> вызывается для транзакций, представляющих этапы жизненного цикла активности &mdash; такие как <code class="code" id="-19plna_905">ResumeActivityItem</code>, <code class="code" id="-19plna_906">PauseActivityItem</code>, <code class="code" id="-19plna_907">StopActivityItem</code>, <code class="code" id="-19plna_908">DestroyActivityItem</code>. Эти элементы отвечают за переходы между состояниями уже существующей <code class="code" id="-19plna_909">Activity</code>. Их назначение &mdash; вызвать соответствующие колбэки (<code class="code" id="-19plna_910">onPause</code>, <code class="code" id="-19plna_911">onStop</code>, и так далее) на объекте активности, который уже был создан и существует в памяти.</p><p id="-19plna_801">С другой стороны, <code class="code" id="-19plna_912">executeNonLifecycleItem</code> используется для выполнения транзакций, которые <span class="control" id="-19plna_913">не</span> относятся к жизненному циклу. Главный представитель &mdash; <code class="code" id="-19plna_914">LaunchActivityItem</code>, который отвечает за создание <code class="code" id="-19plna_915">Activity</code> с нуля. Это может происходить либо при первом запуске <code class="code" id="-19plna_916">Activity</code>, либо после того, как система уничтожила процесс, и теперь восстанавливает его. Внутри <code class="code" id="-19plna_917">executeNonLifecycleItem</code> вызывается <code class="code" id="-19plna_918">item.execute(...)</code>, который, в случае <code class="code" id="-19plna_919">LaunchActivityItem</code>, инициирует полную цепочку создания: от <code class="code" id="-19plna_920">ActivityClientRecord</code> до вызова <code class="code" id="-19plna_921">onCreate</code>.</p><p id="-19plna_802">Внутри <code class="code" id="-19plna_922">LaunchActivityItem</code>, в методе <code class="code" id="-19plna_923">executeNonLifecycleItem</code>, мы видим, что у <code class="code" id="-19plna_924">item</code> (экземпляр <code class="code" id="-19plna_925">ClientTransactionItem</code>) вызывается метод <code class="code" id="-19plna_926">execute</code>, которому передаются <code class="code" id="-19plna_927">ClientTransactionHandler</code> и <code class="code" id="-19plna_928">PendingTransactionActions</code>. Фактически в этот момент вызывается метод <code class="code" id="-19plna_929">execute</code> у <code class="code" id="-19plna_930">LaunchActivityItem</code>. Не забываем, что <code class="code" id="-19plna_931">LaunchActivityItem</code> наследуется от <code class="code" id="-19plna_932">ClientTransactionItem</code>.</p><p id="-19plna_803">Теперь разберёмся, кто вызывает метод <code class="code" id="-19plna_933">execute</code> у <code class="code" id="-19plna_934">TransactionExecutor</code>. Это делает внутренний класс <code class="code" id="-19plna_935">H</code>, являющийся <code class="code" id="-19plna_936">Handler</code>-ом:</p><div class="code-block" data-lang="java">
+public final class ActivityThread extends ClientTransactionHandler implements ActivityThreadInternal {
+
+    final H mH = new H();
+    private final TransactionExecutor mTransactionExecutor = new TransactionExecutor(this);
+
+    class H extends Handler {
+
+        public void handleMessage(Message msg) {
+            switch (msg.what) {
+                ...
+                case EXECUTE_TRANSACTION:
+                    final ClientTransaction transaction = (ClientTransaction) msg.obj;
+                    final ClientTransactionListenerController controller = ClientTransactionListenerController.getInstance();
+                    controller.onClientTransactionStarted();
+                    try {
+                        mTransactionExecutor.execute(transaction);
+                    } finally {
+                        controller.onClientTransactionFinished();
+                    }
+                    ...
+                ...
+            }
+        }
+    }
+}
+</div><p id="-19plna_805">Напомним, что <code class="code" id="-19plna_937">ClientTransactionHandler</code> &mdash; это абстрактный класс, от которого наследуется <code class="code" id="-19plna_938">ActivityThread</code>. Далее мы видим, что создаётся объект <code class="code" id="-19plna_939">H</code>, а также <code class="code" id="-19plna_940">TransactionExecutor</code>, которому в качестве аргумента передаётся <code class="code" id="-19plna_941">this</code>, то есть <code class="code" id="-19plna_942">ActivityThread</code>, реализующий <code class="code" id="-19plna_943">ClientTransactionHandler</code>.</p><p id="-19plna_806">Теперь обратим внимание на реализацию <code class="code" id="-19plna_944">handleMessage</code> внутри класса <code class="code" id="-19plna_945">H</code>: когда приходит сообщение с типом <code class="code" id="-19plna_946">EXECUTE_TRANSACTION</code>, из объекта <code class="code" id="-19plna_947">Message</code> извлекается <code class="code" id="-19plna_948">ClientTransaction</code>, содержащий в себе список (<code class="code" id="-19plna_949">List</code>) транзакций. Затем вызывается метод <code class="code" id="-19plna_950">execute</code> у <code class="code" id="-19plna_951">TransactionExecutor</code>, что и запускает выполнение транзакции.</p><p id="-19plna_807">Сам метод handleMessage у класса H вызывает методы из самого класса ActivityThread:</p><div class="code-block" data-lang="java">
+public final class ActivityThread extends ClientTransactionHandler implements ActivityThreadInternal {
+
+    final H mH = new H();
+
+    void sendMessage(int what, Object obj) {
+        sendMessage(what, obj, 0, 0, false);
+    }
+
+    private void sendMessage(int what, Object obj, int arg1) {
+        sendMessage(what, obj, arg1, 0, false);
+    }
+
+    private void sendMessage(int what, Object obj, int arg1, int arg2) {
+        sendMessage(what, obj, arg1, arg2, false);
+    }
+
+    private void sendMessage(int what, Object obj, int arg1, int arg2, boolean async) {
+        ...
+        mH.sendMessage(msg);
+    }
+}
+</div><p id="-19plna_809">Видим что последний метод sendMessage и вызывает у класса H метод sendMessage, так как класс H наследуетсч от класса Handler, то у него есть метод sendMessage и вызывает метод handleMessage, надо понять кто вызывает sendMessage у ActivityThread,</p><div class="code-block" data-lang="java">
+public final class ActivityThread extends ClientTransactionHandler implements ActivityThreadInternal {
+
+    void sendMessage(int what, Object obj) {
+        sendMessage(what, obj, 0, 0, false);
+    }
+
+    private class ApplicationThread extends IApplicationThread.Stub {
+
+        @Override
+        public void scheduleTransaction(ClientTransaction transaction) throws RemoteException {
+            ActivityThread.this.scheduleTransaction(transaction);
+        }
+    }
+}
+</div><p id="-19plna_811">Этим занимается ApplicationThread, каким образом вызов метода ActivityThread.scheduleTransaction вызывает ActivityThread.sendMessage?</p><p id="-19plna_812">Дело в том что ActivityThread наследуется от ClientTransactionHandler, а ClientTransactionHandler выглядит следующим образом:</p><div class="code-block" data-lang="java">
+public abstract class ClientTransactionHandler {
+
+    void scheduleTransaction(ClientTransaction transaction) {
+        transaction.preExecute(this);
+        sendMessage(ActivityThread.H.EXECUTE_TRANSACTION, transaction);
+    }
+
+    abstract void sendMessage(int what, Object obj);
+
+}
+</div><p id="-19plna_814">Получается у ApplicationThread вызывается метод scheduleTransaction, он вызывает у ActivityThread метод scheduleTransaction который он унаследовал от ClientTransactionHandler, внутри метода scheduleTransaction у ClientTransactionHandler мы видим что он вызывает метод sendMessage с двумя параметрами, ActivityThread как раз переопредляет этот метод, и далее вызов идет в H.sendMessage.</p><p id="-19plna_815">ApplicationThread - это Proxy который реализует AIDL интерфейс, этот класс отвечает за многие планирования, например сервисы, receiver или binding Application. Так же заметьте что он реализует IApplicationThread.Stub, то есть фактический сам AIDL интерфейс IApplicationThread</p><p id="-19plna_816">Дальше поймем откуда происходит вызов метода ApplicationThread.scheduleTransaction, и вуаля, этим занимается класс:</p><div class="code-block" data-lang="java">
+public class ClientTransaction implements Parcelable, ObjectPoolItem {
+
+    private IApplicationThread mClient;
+
+    public void schedule() throws RemoteException {
+        mClient.scheduleTransaction(this);
+    }
+}
+</div><p id="-19plna_818">Он вызывает у ApplicationThread.scheduleTransaction передавая себя, тем самым запланируя себя и свои внутренние транзакций на выполнение, IApplicationThread это и есть класс ActivityThread.ApplicationThread, далее отследим вызов метода ClientTransaction.schedule(), встречайте еще один класс,</p><div class="code-block" data-lang="java">
+class ClientLifecycleManager {
+
+    void scheduleTransactionItems(@NonNull IApplicationThread client,
+                                  boolean shouldDispatchImmediately,
+                                  @NonNull ClientTransactionItem... items) throws RemoteException {
+        ...
+        final ClientTransaction clientTransaction = getOrCreatePendingTransaction(client);
+
+        final int size = items.length;
+        for (int i = 0; i &lt; size; i++) {
+            clientTransaction.addTransactionItem(items[i]);
+        }
+
+        onClientTransactionItemScheduled(clientTransaction, shouldDispatchImmediately);
+    }
+
+    private void onClientTransactionItemScheduled(
+            @NonNull ClientTransaction clientTransaction,
+            boolean shouldDispatchImmediately) throws RemoteException {
+        ...
+        scheduleTransaction(clientTransaction);
+    }
+
+
+    void scheduleTransaction(@NonNull ClientTransaction transaction) throws RemoteException {
+        ...
+        transaction.schedule();
+        ...
+    }
+}
+</div><p id="-19plna_820">Внутри него определён метод <code class="code" id="-19plna_952">scheduleTransactionItems</code>, который принимает <code class="code" id="-19plna_953">IApplicationThread</code> и массив <code class="code" id="-19plna_954">ClientTransactionItem</code>. Этот метод создаёт или достаёт транзакцию через <code class="code" id="-19plna_955">getOrCreatePendingTransaction</code>, добавляет в неё все <code class="code" id="-19plna_956">ClientTransactionItem</code> (например, <code class="code" id="-19plna_957">LaunchActivityItem</code>, <code class="code" id="-19plna_958">ResumeActivityItem</code>, <code class="code" id="-19plna_959">PauseActivityItem</code> и т.д.), после чего передаёт её в метод <code class="code" id="-19plna_960">onClientTransactionItemScheduled</code>, где вызывается<code class="code" id="-19plna_961">scheduleTransaction</code>.</p><p id="-19plna_821">После чего управление переходит в метод <code class="code" id="-19plna_962">scheduleTransaction</code>, внутри которого вызывается <code class="code" id="-19plna_963">transaction.schedule()</code>. А как мы уже знаем, метод <code class="code" id="-19plna_964">schedule</code> вызывает <code class="code" id="-19plna_965">ApplicationThread.scheduleTransaction</code>, то есть фактически мы возвращаемся обратно к AIDL-вызову, из которого всё и начинается.</p><p id="-19plna_822">Таким образом, <code class="code" id="-19plna_966">ClientLifecycleManager</code> собирает транзакцию, наполняет её нужными <code class="code" id="-19plna_967">ClientTransactionItem</code>, и отправляет её в исполнение. Это класс, который формирует цепочку действий, и делегирует выполнение низкоуровневому слою через AIDL.</p><p id="-19plna_823"><code class="code" id="-19plna_968">ClientLifecycleManager.scheduleTransactionItems</code> - вызовом метода занимается очень важный класс <code class="code" id="-19plna_969">ActivityTaskSupervisor</code></p><div class="code-block" data-lang="java">
+public class ActivityTaskSupervisor implements RecentTasks.Callbacks {
+    ...
+    final ActivityTaskManagerService mService;
+    ...
+
+    boolean realStartActivityLocked(ActivityRecord r, WindowProcessController proc,
+                                    boolean andResume, boolean checkConfig) throws RemoteException {
+
+
+        // Create activity launch transaction.
+        final LaunchActivityItem launchActivityItem = new LaunchActivityItem(r.token,
+                ...,r.getSavedState(), r.getPersistentSavedState(), ...,
+       );
+        ...
+        mService.getLifecycleManager().scheduleTransactionItems(
+                proc.getThread(),
+                // Immediately dispatch the transaction, so that if it fails, the server can
+                // restart the process and retry now.
+                true /* shouldDispatchImmediately */,
+                launchActivityItem, lifecycleItem);
+        ...
+        return true;
+    }
+    ...
+}
+</div><p id="-19plna_825">Видим очень ключевые моменты:</p><ol class="list _decimal" id="-19plna_826" type="1"><li class="list__item" id="-19plna_970"><p id="-19plna_973">В методе realStartActivityLocked на вход передается объект класса ActivityRecord, который в себе хранит значения - r.getSavedState()(Bundle) и r.getPersistentSavedState(PersistentBundle) и прочие важные значения и информацию об активити</p></li><li class="list__item" id="-19plna_971"><p id="-19plna_974">Наконецто видим создание транзакций <code class="code" id="-19plna_975">LaunchActivityItem</code> c передачей всех нужных аргументов, в числе и Bundle</p></li><li class="list__item" id="-19plna_972"><p id="-19plna_976">Видим что у класса ActivityTaskManagerService вызывается метод <code class="code" id="-19plna_977">getLifecycleManager()</code> который возвращает объект класса <code class="code" id="-19plna_978">ClientLifecycleManager</code> и вызывает у него метод scheduleTransactionItems который мы уже видели, с передачей <code class="code" id="-19plna_979">LaunchActivityItem</code></p></li></ol><p id="-19plna_827">Давай убедимся что метод getLifecycleManager у ActivityTaskManagerService действительно вовзращает ClientLifecycleManager:</p><div class="code-block" data-lang="java">
+public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
+
+    ClientLifecycleManager getLifecycleManager() {
+        return mLifecycleManager;
+    }
+}
+</div><p id="-19plna_829">Убедились, прекрасно, идем дальше, отследим вызов метода <code class="code" id="-19plna_980">realStartActivityLocked</code> класса <code class="code" id="-19plna_981">ActivityTaskSupervisor</code></p><div class="code-block" data-lang="java">
+class RootWindowContainer extends WindowContainer&lt;DisplayContent&gt; implements DisplayManager.DisplayListener {
+
+    ActivityTaskSupervisor mTaskSupervisor;
+    ActivityTaskManagerService mService;
+
+    boolean attachApplication(WindowProcessController app) throws RemoteException {
+        final ArrayList&lt;ActivityRecord&gt; activities = mService.mStartingProcessActivities;
+        for (int i = activities.size() - 1; i &gt;= 0; i--) {
+            final ActivityRecord r = activities.get(i);
+            ...
+            if (mTaskSupervisor.realStartActivityLocked(r, app, canResume,
+                    true /* checkConfig */)) {
+                hasActivityStarted = true;
+            }
+            ...
+            return hasActivityStarted;
+        }
+    }
+}
+</div><aside class="prompt" data-type="tip" data-title="RootWindowContainer..." id="-19plna_831"><p id="-19plna_982"><code class="code" id="-19plna_985">RootWindowContainer</code> &mdash; это центральный компонент в системе управления окнами Android, который содержит в себе всю иерархию окон на всех дисплеях. Он управляет экземплярами <code class="code" id="-19plna_986">DisplayContent</code>, координирует layout, input, фокус, анимации, транзишены, split-screen, picture-in-picture и любые изменения, связанные с конфигурацией экрана. Всё, что должно появиться, исчезнуть, пересчитаться или анимироваться &mdash; сначала проходит через него. Это точка входа для всех транзакций окон, включая запуск и завершение активностей.</p><p id="-19plna_983">Он настолько крут, что может остановить перезапуск activity, если чувствует, что layout всё ещё &quot;в пути&quot;. Ему не нужно подтверждение от <code class="code" id="-19plna_987">WindowManagerService</code> для показа Window и работы с контентом.</p><p id="-19plna_984"><code class="code" id="-19plna_988">RootWindowContainer</code> раньше назывался <code class="code" id="-19plna_989">RootActivityContainer</code></p></aside><p id="-19plna_832">Видим вызов метода <code class="code" id="-19plna_990">ActivityTaskSupervisor.realStartActivityLocked</code> происходит в классе RootWindowContainer, который в методе <code class="code" id="-19plna_991">attachApplication</code>, получает список ActivityRecord у ActivityTaskManagerService, и в цикле для всех вызывает метод <code class="code" id="-19plna_992">ActivityTaskSupervisor.realStartActivityLocked</code>.</p><p id="-19plna_833">Далее мы снова возвращаемся к <code class="code" id="-19plna_993">ActivityTaskManagerService</code>, потому что именно он вызывает метод attachApplication у RootWindowContainer и передает ему</p><div class="code-block" data-lang="java">
+public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
+   ...
+
+    /** The starting activities which are waiting for their processes to attach. */
+    final ArrayList&lt;ActivityRecord&gt; mStartingProcessActivities = new ArrayList&lt;&gt;();
+    RootWindowContainer mRootWindowContainer;
+
+    @HotPath(caller = HotPath.PROCESS_CHANGE)
+    @Override
+    public boolean attachApplication(WindowProcessController wpc) throws RemoteException {
+        ...
+        return mRootWindowContainer.attachApplication(wpc);
+    }
+
+    void startProcessAsync(ActivityRecord activity, boolean knownToBeDead, boolean isTop,
+                           String hostingType) {
+         ...
+        mStartingProcessActivities.add(activity);
+         ...
+    }
+
+
+    ClientLifecycleManager getLifecycleManager() {
+        return mLifecycleManager;
+    }
+   ...
+}
+</div><p id="-19plna_835">Видим что он хранит в себе список ActivityRecord в поле <code class="code" id="-19plna_994">mStartingProcessActivities</code> - вызов которого мы уже видели мы в RootWindowContainer.attachApplication,</p><p id="-19plna_836">Далее видим что у него так же есть ссылка на RootWindowContainer, и в методе ActivityTaskManagerService.attachApplication происходит вызов метода RootWindowContainer.attachApplication, startProcessAsync - Так же очень важный метод, который в список ActivityRecord добавляет новые ActivityRecord внутри которых храниться Bundle, позже его разберем тоже.</p><p id="-19plna_837">Выше ActivityTaskManagerService стоит класс ActivityManagerService, он и вызывает attachApplication у ActivityTaskManagerService:</p><div class="code-block" data-lang="java">
+public class ActivityManagerService extends IActivityManager.Stub {
+
+    public ActivityTaskManagerInternal mAtmInternal;
+    final PidMap mPidsSelfLocked = new PidMap();
+
+    @GuardedBy(&quot;this&quot;)
+    private void attachApplicationLocked(@NonNull IApplicationThread thread,
+                                         int pid, int callingUid, long startSeq) {
+        ...
+        finishAttachApplicationInner(startSeq, callingUid, pid);
+        ...
+    }
+
+    private void finishAttachApplicationInner(long startSeq, int uid, int pid) {
+        ...
+        final ProcessRecord app;
+        app = mPidsSelfLocked.get(pid);
+        ...
+
+        didSomething = mAtmInternal.attachApplication(app.getWindowProcessController());
+        ...
+    }
+}
+</div><p id="-19plna_839">Видим в методе finishAttachApplicationInner - вызов метода attachApplication у mAtmInternal, ActivityTaskManagerInternal который является абстакрным AIDl для ActivityTaskManagerService, по этому фактический здесь вызваеется ActivityTaskManagerService.attachApplication()</p><p id="-19plna_840">сам метод finishAttachApplicationInner вызывается из attachApplicationLocked, так же получает процесс из mPidsSelfLocked по ключу pid(то есть process id)</p><p id="-19plna_841">Сам ActivityManagerService - является Singleton-ом в рамках всей системы Android, у него внутри есть своя структура PidMap которая хранит в себе ProcessRecord, по ключу pid(то есть process id), то есть вызов mPidsSelfLocked.get(pid), mPidsSelfLocked:</p><p id="-19plna_842">Сам класс PidMap выглядит следующим образом:</p><div class="code-block" data-lang="java">
+public class ActivityManagerService extends IActivityManager.Stub {
+
+    final PidMap mPidsSelfLocked = new PidMap();
+
+    ...
+
+    static final class PidMap {
+        private final SparseArray&lt;ProcessRecord&gt; mPidMap = new SparseArray&lt;&gt;();
+
+        ProcessRecord get(int pid) {
+            return mPidMap.get(pid);
+        }
+        ...
+
+        void doAddInternal(int pid, ProcessRecord app) {
+            mPidMap.put(pid, app);
+        }
+       ...
+    }
+
+    public void setSystemProcess() {
+      ...
+        ProcessRecord app = mProcessList.newProcessRecordLocked(info, info.processName,
+                false,
+                0,
+                false,
+                0,
+                null,
+                new HostingRecord(HostingRecord.HOSTING_TYPE_SYSTEM));
+            ...
+        addPidLocked(app);
+            ...
+    }
+
+    void addPidLocked(ProcessRecord app) {
+        final int pid = app.getPid();
+        synchronized (mPidsSelfLocked) {
+            mPidsSelfLocked.doAddInternal(pid, app);
+        }
+      ...
+    }
+}
+</div><p id="-19plna_844">Видим Структуру PidMap которая внутри себя хранит список записей для процессов приложения</p><p id="-19plna_845">Так же видим две методы, setSystemProcess создаем новый proccessRecord и вызывает метод addPidLocked, addPidLocked кладет в mPidsSelfLocked ProcessRecord, setSystemProcess вызывается из SystemServer(он же system_service), ниже краткий стэк вызовов:</p><div class="code-block" data-lang="none">
+1. Загрузчик (Bootloader) → Ядро (Linux Kernel)  
+2. Процесс init (первый userspace-процесс)  
+   ├─ Запуск zygote (через app_process)  
+   │   ├─ ZygoteInit (singleton, подготавливает среду для Java-процессов)  
+   │   │   ├─ fork() → Создаёт SystemServer  
+   │   │   └─ fork() → Создаёт приложения  
+   └─ SystemServer (singleton, запускает все системные сервисы)  
+       ├─ RuntimeInit (инициализирует среду для SystemServer)  
+       └─ ActivityManagerService (singleton, включая setSystemProcess())
+</div><p id="-19plna_847">Выше ActivityManagerService подниматься не будем, да и нет смысла, так как там нечего о Bundle не хранится, многие из них singleton-ы в рамках все системы и никакого отнощения к конкретному приложению не имеют.</p><p id="-19plna_848">На этом моменте по идее уже многое стало ясно, расмотрели очень длинный флоу вызовов, момент который мы немного пропустили, это то где создаются ActivityRecord, ранее мы уже видели список ActivityRecord получаем из поля mStartingProcessActivities у ActivityTaskManagerService:</p><div class="code-block" data-lang="java">
+class RootWindowContainer extends WindowContainer&lt;DisplayContent&gt; implements DisplayManager.DisplayListener {
+
+    ActivityTaskSupervisor mTaskSupervisor;
+    ActivityTaskManagerService mService;
+
+    boolean attachApplication(WindowProcessController app) throws RemoteException {
+        final ArrayList&lt;ActivityRecord&gt; activities = mService.mStartingProcessActivities;
+        for (int i = activities.size() - 1; i &gt;= 0; i--) {
+            final ActivityRecord r = activities.get(i);
+            ...
+            if (mTaskSupervisor.realStartActivityLocked(r, app, canResume,
+                    true /* checkConfig */)) {
+                hasActivityStarted = true;
+            }
+            ...
+        }
+    }
+}
+</div><p id="-19plna_850">а в ActivityTaskManagerService это выглядит следующим образом как мы уже видели, поле mStartingProcessActivities явлыяется коллекцией которая хранит ActivityRecord и есть один метод который в него добавляет ActivityRecord - это метод startProcessAsync</p><div class="code-block" data-lang="java">
+public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
+...
+
+    /** The starting activities which are waiting for their processes to attach. */
+    final ArrayList&lt;ActivityRecord&gt; mStartingProcessActivities = new ArrayList&lt;&gt;();
+    RootWindowContainer mRootWindowContainer;
+
+    void startProcessAsync(ActivityRecord activity, boolean knownToBeDead, boolean isTop,
+                           String hostingType) {
+         ...
+        mStartingProcessActivities.add(activity);
+         ...
+    }
+    ...
+}
+</div><p id="-19plna_852">Следующая глава статьи будет раскрывать этот момент, где создается ActivityRecord и кто его кладет в ActivityTaskManagerService в поле mStartingProcessActivities</p></section></section><section class="chapter"><h2 id="bundle" data-toc="bundle">Пересоздание процесса с сохронением Bundle</h2><div class="code-block" data-lang="none">
+ActivityManagerService.startActivity()
+  → ActivityTaskManagerService.startActivityAsUser()
+    → ActivityStartController.obtainStarter()
+      → ActivityStarter.execute()
+        → executeRequest():
+          1. Создание ActivityRecord (новый объект)
+          2. startActivityUnchecked()
+             → startActivityInner()
+               → setInitialState(r) // сохраняем ActivityRecord в mStartActivity
+               → RootWindowContainer.resumeFocusedTasksTopActivities(mStartActivity)
+                 → Task.resumeTopActivityUncheckedLocked()
+                   → ActivityTaskSupervisor.startSpecificActivity(r)
+                     → (если процесс не запущен)
+                        → ActivityTaskManagerService.startProcessAsync(r)
+                          → mStartingProcessActivities.add(r) // финальная точка
+</div><p id="-19plna_996"><code class="code" id="-19plna_1039">ActivityRecord</code> (с <code class="code" id="-19plna_1040">Bundle</code>) умеет переживать смерть процесса или его прерывание. Подразумевается ситуация, когда приложение уходит в фон и сохраняется в стеке задач (Recents), система через какое-то время убивает процесс. Когда пользователь возвращается, система вызывает метод <code class="code" id="-19plna_1041">startActivityFromRecents</code>, чтобы восстановить задачу (Task) и поднять процесс. Каждая задача, как правило, соответствует одной корневой Activity, но внутри может хранить дочерние Activity, которые тоже связаны с компонентами.</p><div class="code-block" data-lang="java">
+public class ActivityManagerService extends IActivityManager.Stub {
+
+    @Override
+    public final int startActivityFromRecents(int taskId, Bundle bOptions) {
+        return mActivityTaskManager.startActivityFromRecents(taskId, bOptions);
+    }
+
+}
+</div><p id="-19plna_998">Метод <code class="code" id="-19plna_1042">startActivityFromRecents</code> внутри <code class="code" id="-19plna_1043">ActivityManagerService</code> напрямую делегирует вызов в <code class="code" id="-19plna_1044">ActivityTaskManagerService</code>. Сам по себе он ничего не делает, просто перекидывает управление дальше.</p><div class="code-block" data-lang="java">
+public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
+
+    ActivityTaskSupervisor mTaskSupervisor;
+
+    @Override
+    public final int startActivityFromRecents(int taskId, Bundle bOptions) {
+        ...
+        return mTaskSupervisor.startActivityFromRecents(callingPid, callingUid, taskId, safeOptions);
+    }
+}
+</div><p id="-19plna_1000">В <code class="code" id="-19plna_1045">ActivityTaskManagerService.startActivityFromRecents</code> происходит подготовка: извлекаются PID, UID, формируются безопасные опции запуска ( SafeActivityOptions). Далее метод сразу передаёт выполнение в <code class="code" id="-19plna_1046">ActivityTaskSupervisor</code>, где происходит основная логика обработки задачи.</p><div class="code-block" data-lang="java">
+public class ActivityTaskSupervisor implements RecentTasks.Callbacks {
+
+    final ActivityTaskManagerService mService;
+    RootWindowContainer mRootWindowContainer;
+
+    int startActivityFromRecents(int callingPid, int callingUid, int taskId,
+                                 SafeActivityOptions options) {
+        final Task task;
+
+        task = mRootWindowContainer.anyTaskForId(taskId, MATCH_ATTACHED_TASK_OR_RECENT_TASKS_AND_RESTORE, activityOptions, ON_TOP);
+
+        if (!mService.mAmInternal.shouldConfirmCredentials(task.mUserId) &amp;&amp; task.getRootActivity() != null) {
+            final ActivityRecord targetActivity = task.getTopNonFinishingActivity();
+         ...
+            mService.moveTaskToFrontLocked(...);
+         ...
+            return ActivityManager.START_TASK_TO_FRONT;
+        }
+    }
+
+}
+
+</div><p id="-19plna_1002">Внутри <code class="code" id="-19plna_1047">startActivityFromRecents</code> у <code class="code" id="-19plna_1048">ActivityTaskSupervisor</code> происходит уже настоящий разбор: сначала ищется нужная задача через <code class="code" id="-19plna_1049">mRootWindowContainer.anyTaskForId(...)</code>, где передаются различные флаги (например, <code class="code" id="-19plna_1050">MATCH_ATTACHED_TASK_OR_RECENT_TASKS_AND_RESTORE</code>), чтобы восстановить задачу из списка недавних. Затем проверяется, нужно ли подтверждать учётные данные пользователя (например, если включён режим защиты профиля). После этого смотрится, есть ли у задачи root Activity (<code class="code" id="-19plna_1051">getRootActivity()</code>), и извлекается верхняя невыполненная Activity через <code class="code" id="-19plna_1052">getTopNonFinishingActivity()</code>.</p><p id="-19plna_1003">Если все условия подходят, вызывается <code class="code" id="-19plna_1053">moveTaskToFrontLocked(...)</code> у <code class="code" id="-19plna_1054">ActivityTaskManagerService</code>, который отвечает за перенос задачи в передний план и дальнейший запуск. Всё это нужно для того, чтобы корректно восстановить состояние приложения из стека задач без необходимости полного пересоздания Activity с нуля.</p><div class="code-block" data-lang="java">
+public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
+
+    void moveTaskToFrontLocked(@Nullable IApplicationThread appThread,
+                               @Nullable String callingPackage, int taskId, ...) {
+
+        final Task task = mRootWindowContainer.anyTaskForId(taskId);
+        ...
+        mTaskSupervisor.findTaskToMoveToFront(task, flags, ...);
+    }
+
+}
+</div><p id="-19plna_1005">Метод <code class="code" id="-19plna_1055">moveTaskToFrontLocked</code> после проверки передаёт управление в <code class="code" id="-19plna_1056">findTaskToMoveToFront</code>. Здесь задача не просто находится, а действительно перемещается на передний план. В начале вытаскивается корневой контейнер задачи через <code class="code" id="-19plna_1057">getRootTask()</code>. Если задача ещё не была &laquo;переподвешена&raquo; (reparented), вызывается <code class="code" id="-19plna_1058">moveHomeRootTaskToFrontIfNeeded</code>, чтобы при необходимости поднять домашнюю задачу (например, если приложение долго не запускалось).</p><p id="-19plna_1006">Далее через <code class="code" id="-19plna_1059">getTopNonFinishingActivity()</code> достаётся верхняя невыполненная ActivityRecord(Activity) в задаче. Затем вызывается <code class="code" id="-19plna_1060">currentRootTask.moveTaskToFront</code>, куда передаётся сама задача, опции анимации и другие параметры</p><div class="code-block" data-lang="java">
+public class ActivityTaskSupervisor implements RecentTasks.Callbacks {
+
+    void findTaskToMoveToFront(Task task, int flags, ActivityOptions options, String reason,
+                               boolean forceNonResizeable) {
+        Task currentRootTask = task.getRootTask();
+
+        if (!reparented) {
+            moveHomeRootTaskToFrontIfNeeded(flags, currentRootTask.getDisplayArea(), reason);
+        }
+
+        final ActivityRecord r = task.getTopNonFinishingActivity();
+        currentRootTask.moveTaskToFront(task, false /* noAnimation */, options,
+                r == null ? null : r.appTimeTracker, reason);
+        ...
+    }
+
+}
+</div><p id="-19plna_1008">В методе <code class="code" id="-19plna_1061">moveTaskToFront</code> внутри класса <code class="code" id="-19plna_1062">Task</code> мы видим финальный шаг &mdash; вызов <code class="code" id="-19plna_1063">mRootWindowContainer.resumeFocusedTasksTopActivities()</code>. Этот вызов отвечает за то, чтобы на уровне контейнера окон (WindowContainer) запустить или возобновить верхнюю активность, сделать её активной и отрисовать.</p><div class="code-block" data-lang="java">
+class Task extends TaskFragment {
+
+    final void moveTaskToFront(Task tr, boolean noAnimation, ActivityOptions options,
+                               AppTimeTracker timeTracker, boolean deferResume, String reason) {
+        ...
+        mRootWindowContainer.resumeFocusedTasksTopActivities();
+    }
+
+}
+</div><p id="-19plna_1010">Метод <code class="code" id="-19plna_1064">resumeFocusedTasksTopActivities</code> у <code class="code" id="-19plna_1065">RootWindowContainer</code> проходит по всем дисплеям, чтобы определить, какая задача должна быть запущена или возобновлена. Для каждого дисплея вызывается <code class="code" id="-19plna_1066">forAllRootTasks</code>, внутри которого берётся верхняя активность (<code class="code" id="-19plna_1067">topRunningActivity</code>). Если она уже в состоянии <code class="code" id="-19plna_1068">RESUMED</code>, то просто выполняется переход приложения (executeAppTransition). В противном случае активность активируется через <code class="code" id="-19plna_1069">makeActiveIfNeeded</code>.</p><p id="-19plna_1011">Если на дисплее не оказалось ни одной подходящей активности, вызывается <code class="code" id="-19plna_1070">resumeTopActivityUncheckedLocked</code> у фокусной задачи. А если вообще нет фокусных задач, система запускает домашнюю Activity через <code class="code" id="-19plna_1071">resumeHomeActivity</code>.</p><div class="code-block" data-lang="java">
+class RootWindowContainer extends WindowContainer&lt;DisplayContent&gt;
+        implements DisplayManager.DisplayListener {
+
+    boolean resumeFocusedTasksTopActivities(
+            Task targetRootTask, ActivityRecord target, ActivityOptions targetOptions,
+            boolean deferPause) {
+
+        for (int displayNdx = getChildCount() - 1; displayNdx &gt;= 0; --displayNdx) {
+            final DisplayContent display = getChildAt(displayNdx);
+            final boolean curResult = result;
+            boolean[] resumedOnDisplay = new boolean[1];
+            final ActivityRecord topOfDisplay = display.topRunningActivity();
+            display.forAllRootTasks(rootTask -&gt; {
+                final ActivityRecord topRunningActivity = rootTask.topRunningActivity();
+                if (!rootTask.isFocusableAndVisible() || topRunningActivity == null) {
+                    return;
+                }
+                if (rootTask == targetRootTask) {
+                    resumedOnDisplay[0] |= curResult;
+                    return;
+                }
+                if (topRunningActivity.isState(RESUMED) &amp;&amp; topRunningActivity == topOfDisplay) {
+                    rootTask.executeAppTransition(targetOptions);
+                } else {
+                    resumedOnDisplay[0] |= topRunningActivity.makeActiveIfNeeded(target);
+                }
+            });
+            result |= resumedOnDisplay[0];
+            if (!resumedOnDisplay[0]) {
+
+                final Task focusedRoot = display.getFocusedRootTask();
+                if (focusedRoot != null) {
+                    result |= focusedRoot.resumeTopActivityUncheckedLocked(
+                            target, targetOptions, false /* skipPause */);
+                } else if (targetRootTask == null) {
+                    result |= resumeHomeActivity(null /* prev */, &quot;no-focusable-task&quot;,
+                            display.getDefaultTaskDisplayArea());
+                }
+            }
+        }
+
+        return result;
+    }
+
+}
+</div><p id="-19plna_1013">Таким образом, когда пользователь возвращается к приложению из Recents, система шаг за шагом поднимает задачу из стека, подготавливает корневую Activity и доводит её до состояния RESUMED. Всё это происходит последовательно: от поиска задачи в стеке &mdash; до финального вызова <code class="code" id="-19plna_1072">makeActiveIfNeeded</code>, который, по сути, завершает процесс восстановления.</p><p id="-19plna_1014">После того как контейнер окон выбрал задачу для возобновления, управление переходит в метод <code class="code" id="-19plna_1073">resumeTopActivityUncheckedLocked</code> внутри класса <code class="code" id="-19plna_1074">Task</code>. Здесь вызывается внутренний метод <code class="code" id="-19plna_1075">resumeTopActivityInnerLocked</code>, который уже окончательно определяет, какую Activity нужно запустить.</p><div class="code-block" data-lang="java">
+class Task extends TaskFragment {
+
+    @GuardedBy(&quot;mService&quot;)
+    boolean resumeTopActivityUncheckedLocked(ActivityRecord prev, ActivityOptions options,
+                                             boolean deferPause) {
+        someActivityResumed = resumeTopActivityInnerLocked(prev, options, deferPause);
+    }
+
+    @GuardedBy(&quot;mService&quot;)
+    private boolean resumeTopActivityInnerLocked(ActivityRecord prev, ActivityOptions options,
+                                                 boolean deferPause) {
+        final TaskFragment topFragment = topActivity.getTaskFragment();
+        resumed[0] = topFragment.resumeTopActivity(prev, options, deferPause);
+    }
+
+}
+</div><p id="-19plna_1016">В методе <code class="code" id="-19plna_1076">resumeTopActivityInnerLocked</code> вытаскивается фрагмент задачи (<code class="code" id="-19plna_1077">TaskFragment</code>), к которому привязана верхняя Activity. Именно тут начинается конкретная подготовка к запуску компонента приложения.</p><p id="-19plna_1017">Дальше вызывается <code class="code" id="-19plna_1078">resumeTopActivity</code> у <code class="code" id="-19plna_1079">TaskFragment</code>. Здесь происходит поиск верхней активности (<code class="code" id="-19plna_1080">topRunningActivity</code>) и запуск метода <code class="code" id="-19plna_1081">startSpecificActivity</code>. По сути, <code class="code" id="-19plna_1082">startSpecificActivity</code> &mdash; это последняя точка внутри ядра системы, где принимается решение: запустить новый процесс для активности или использовать уже существующий.</p><div class="code-block" data-lang="java">
+class TaskFragment extends WindowContainer&lt;WindowContainer&gt; {
+
+    final boolean resumeTopActivity(ActivityRecord prev, ActivityOptions options,
+                                    boolean skipPause) {
+        ActivityRecord next = topRunningActivity(true /* focusableOnly */);
+        mTaskSupervisor.startSpecificActivity(next, true, false);
+        ...
+        return true;
+        ...
+    }
+
+}
+</div><p id="-19plna_1019">Далее метод <code class="code" id="-19plna_1083">startSpecificActivity</code> внутри <code class="code" id="-19plna_1084">ActivityTaskSupervisor</code>. Здесь анализируется состояние процесса: если процесс уже существует и привязан, то активити будет сразу запущена. Если же процесс отсутствует или был завершён системой, тогда вызывается <code class="code" id="-19plna_1085">startProcessAsync</code>, чтобы создать новый процесс для этой активности.</p><div class="code-block" data-lang="java">
+public class ActivityTaskSupervisor implements RecentTasks.Callbacks {
+    ...
+    final ActivityTaskManagerService mService;
+
+    void startSpecificActivity(ActivityRecord r, boolean andResume, boolean checkConfig) {
+        ...
+        mService.startProcessAsync(r, knownToBeDead, isTop,
+                isTop ? HostingRecord.HOSTING_TYPE_TOP_ACTIVITY
+                        : HostingRecord.HOSTING_TYPE_ACTIVITY);
+    }
+}
+</div><p id="-19plna_1021">В методе <code class="code" id="-19plna_1086">startProcessAsync</code> активити добавляется в список <code class="code" id="-19plna_1087">mStartingProcessActivities</code>. Это своего рода &laquo;очередь на запуск&raquo;, куда система кладёт активности, пока ожидает, что процесс для них будет создан и привязан.</p><div class="code-block" data-lang="java">
+public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
+    ...
+
+    final ArrayList&lt;ActivityRecord&gt; mStartingProcessActivities = new ArrayList&lt;&gt;();
+    RootWindowContainer mRootWindowContainer;
+
+    void startProcessAsync(ActivityRecord activity, boolean knownToBeDead, boolean isTop,
+                           String hostingType) {
+        ...
+        mStartingProcessActivities.add(activity);
+        ...
+    }
+    ...
+}
+</div><p id="-19plna_1023">Таким образом, когда мы доходим до финальной стадии, встает важный вопрос: <span class="control" id="-19plna_1088">где в конечном итоге хранится <code class="code" id="-19plna_1089">ActivityRecord</code> и как устроены связи между ключевыми сущностями &mdash; <code class="code" id="-19plna_1090">DisplayContent</code>, <code class="code" id="-19plna_1091">WindowContainer</code>, <code class="code" id="-19plna_1092">Task</code> (и <code class="code" id="-19plna_1093">TaskFragment</code>)?</span> Это поможет окончательно понять, как именно система управляет состоянием и &laquo;жизнью&raquo; Activity на стороне System Server.</p><p id="-19plna_1024"><span class="control" id="-19plna_1094">Общая структура иерархии</span> Android управляет активностями и окнами в виде <span class="control" id="-19plna_1095">иерархического дерева контейнеров</span>, где каждый контейнер реализован через базовый класс <code class="code" id="-19plna_1096">WindowContainer</code>. Вся структура начинается с корневого контейнера <code class="code" id="-19plna_1097">RootWindowContainer</code>, внутри которого для каждого физического или виртуального дисплея создается <code class="code" id="-19plna_1098">DisplayContent</code>.</p><p id="-19plna_1025"><span class="control" id="-19plna_1099">DisplayContent</span> <code class="code" id="-19plna_1100">DisplayContent</code> представляет отдельный физический или виртуальный дисплей. Он является прямым потомком <code class="code" id="-19plna_1101">RootWindowContainer</code> и внутри себя хранит так называемые <span class="control" id="-19plna_1102">DisplayAreas</span>, в которых сегментируются разные типы окон (например, область приложений, область системных оверлеев и т.д.). Внутри DisplayContent находится <span class="control" id="-19plna_1103">TaskDisplayArea</span>, которая отвечает за размещение пользовательских задач (Tasks).</p><p id="-19plna_1026"><span class="control" id="-19plna_1104">TaskDisplayArea</span> <code class="code" id="-19plna_1105">TaskDisplayArea</code> &mdash; это область дисплея, куда добавляются задачи (<code class="code" id="-19plna_1106">Task</code>). В большинстве случаев, если нет multi-window или особых режимов, используется один <span class="control" id="-19plna_1107">DefaultTaskDisplayArea</span>, где и размещаются все задачи приложения. В иерархии путь выглядит так: <span class="control" id="-19plna_1108">DisplayContent &rarr; TaskDisplayArea &rarr; Task</span>.</p><p id="-19plna_1027"><span class="control" id="-19plna_1109">Task</span> <code class="code" id="-19plna_1110">Task</code> (по сути, &laquo;стек задач&raquo;) группирует одну или несколько активити, которые пользователь воспринимает как одно приложение в списке Recents. В Android <code class="code" id="-19plna_1111">Task</code> наследуется от <code class="code" id="-19plna_1112">TaskFragment</code>, что делает его контейнером, способным содержать дочерние <code class="code" id="-19plna_1113">WindowContainer</code>. Обычно внутри задачи размещаются именно <code class="code" id="-19plna_1114">ActivityRecord</code>, каждая из которых представляет конкретную активити. В более сложных случаях, например при split-screen, <code class="code" id="-19plna_1115">Task</code> может содержать и другие задачи или TaskFragments. Однако в стандартном сценарии (одиночный экран без split) задача содержит список ActivityRecords напрямую.</p><p id="-19plna_1028"><span class="emphasis" id="-19plna_1116">Здесь ключевой момент</span>: <span class="control" id="-19plna_1117"><code class="code" id="-19plna_1119">Task</code> является прямым родителем для <code class="code" id="-19plna_1120">ActivityRecord</code></span>. Это значит, что все состояния и контекст конкретной Activity хранятся внутри её <code class="code" id="-19plna_1118">ActivityRecord</code>, который в свою очередь всегда находится внутри задачи. Таким образом, при возврате пользователя к приложению через Recents, система восстанавливает задачу, а вместе с ней и все вложенные ActivityRecords.</p><p id="-19plna_1029"><span class="control" id="-19plna_1121">TaskFragment</span> <code class="code" id="-19plna_1122">TaskFragment</code> &mdash; это базовый класс, который используется для создания под-контейнеров внутри задачи. В обычных сценариях мы его напрямую не видим, потому что работаем с <code class="code" id="-19plna_1123">Task</code>, который уже является расширением <code class="code" id="-19plna_1124">TaskFragment</code>. В некоторых режимах (например, Activity Embedding) могут создаваться отдельные TaskFragments, чтобы разделить экран между несколькими активити. Но если таких сценариев нет, <code class="code" id="-19plna_1125">Task</code> сам по себе содержит ActivityRecords, и дополнительных TaskFragments не используется.</p><p id="-19plna_1030"><span class="control" id="-19plna_1126">ActivityRecord</span> <code class="code" id="-19plna_1127">ActivityRecord</code> представляет конкретный экземпляр Activity в системе. Он наследуется от <code class="code" id="-19plna_1128">WindowToken</code>, который в свою очередь является дочерним классом <code class="code" id="-19plna_1129">WindowContainer</code>. Таким образом, <code class="code" id="-19plna_1130">ActivityRecord</code> &mdash; это одновременно и контейнер для окон активити, и токен, который WindowManager использует для управления окнами. Обычно внутри <code class="code" id="-19plna_1131">ActivityRecord</code> размещается один основной <code class="code" id="-19plna_1132">WindowState</code> (окно приложения), а также любые дочерние окна (например, диалоги).</p><p id="-19plna_1031"><span class="control" id="-19plna_1133">Путь в иерархии выглядит так</span>: <code class="code" id="-19plna_1134">RootWindowContainer &rarr; DisplayContent &rarr; TaskDisplayArea &rarr; Task &rarr; ActivityRecord &rarr; WindowState</code>.</p><p id="-19plna_1032">Это означает, что <code class="code" id="-19plna_1135">ActivityRecord</code> <span class="control" id="-19plna_1136">всегда живёт внутри задачи</span> и никогда не существует сам по себе или в глобальном списке. Именно поэтому при возврате из Recents задача сначала поднимается целиком (<code class="code" id="-19plna_1137">Task</code>), а затем уже внутри неё активируются нужные активности (<code class="code" id="-19plna_1138">ActivityRecord</code>).</p><p id="-19plna_1033">Такое дерево контейнеров позволяет системе Android централизованно управлять всей иерархией окон и задач. Например, при изменении конфигурации или выгрузке процесса, состояние активности остаётся &laquo;привязанным&raquo; к её <code class="code" id="-19plna_1139">ActivityRecord</code>, который живёт внутри <code class="code" id="-19plna_1140">Task</code>. Когда задача возвращается на экран, все объекты дерева последовательно восстанавливаются, и Activity получает свои данные обратно через <code class="code" id="-19plna_1141">Bundle</code>, связанный с её <code class="code" id="-19plna_1142">ActivityRecord</code>.</p><p id="-19plna_1034">Сделаем краткий итог</p><ul class="list _bullet" id="-19plna_1035"><li class="list__item" id="-19plna_1143"><p id="-19plna_1149"><span class="control" id="-19plna_1150">DisplayContent</span> &mdash; верхний контейнер для дисплея, включает TaskDisplayArea.</p></li><li class="list__item" id="-19plna_1144"><p id="-19plna_1151"><span class="control" id="-19plna_1152">TaskDisplayArea</span> &mdash; область дисплея для задач.</p></li><li class="list__item" id="-19plna_1145"><p id="-19plna_1153"><span class="control" id="-19plna_1154">Task</span> &mdash; контейнер, группирующий одну или несколько ActivityRecords.</p></li><li class="list__item" id="-19plna_1146"><p id="-19plna_1155"><span class="control" id="-19plna_1156">TaskFragment</span> &mdash; промежуточный контейнер, используется при embedding или split, обычно не нужен в базовом сценарии.</p></li><li class="list__item" id="-19plna_1147"><p id="-19plna_1157"><span class="control" id="-19plna_1158">ActivityRecord</span> &mdash; контейнер и токен конкретной Activity, всегда находится внутри Task.</p></li><li class="list__item" id="-19plna_1148"><p id="-19plna_1159"><span class="control" id="-19plna_1160">WindowState</span> &mdash; дочерние окна Activity, живут внутри ActivityRecord.</p></li></ul><p id="-19plna_1036">Таким образом, вопрос <span class="emphasis" id="-19plna_1161">&laquo;где хранится ActivityRecord&raquo;</span> можно чётко ответить: <span class="control" id="-19plna_1162">внутри Task</span>, как дочерний элемент в дереве контейнеров.</p><p id="-19plna_1037">Эта архитектура делает поведение задач предсказуемым и позволяет системе сохранять, приостанавливать и восстанавливать активности, не нарушая общую структуру приложения в памяти. Именно поэтому пользователь всегда видит &laquo;цельную&raquo; задачу в Recents, а не отдельные активности.</p><aside class="prompt" data-type="tip" data-title="" id="-19plna_1038"><p id="-19plna_1163">Для более наглядного понимания иерархии можно посмотреть диаграмму ниже, которая отлично иллюстрирует дерево контейнеров в Android WindowManager (начиная с Android 12).</p><figure id="-19plna_1164"><img alt="Android WindowManager Hierarchy" src="https://cdn.jsdelivr.net/gh/b0xt/sobyte-images/2022/02/15/8e302de71ed649b7aab54919ae455e61.png" title="Android WindowManager Hierarchy"></figure><p id="-19plna_1165"><span class="emphasis" id="-19plna_1166">Диаграмма взята с <a href="https://www.sobyte.net/post/2022-02/android-12-wms-hierarchy/#:~:text=%2A%20RootWindowContainer%3A%20The%20top,%E2%80%A6" id="-19plna_1167" data-external="true" rel="noopener noreferrer" target="_blank">sobyte.net &mdash; Android 12 WMS Hierarchy</a> для иллюстрации иерархии WindowManager.</span></p></aside></section><section class="chapter"><h2 id="activityrecord" data-toc="activityrecord">Где и когда создается ActivityRecord в первые</h2><p id="-19plna_1168">После того как мы разобрали, где именно хранится <code class="code" id="-19plna_1199">ActivityRecord</code> в иерархии контейнеров, возникает следующий важный вопрос: <span class="control" id="-19plna_1200">а когда и как этот объект вообще появляется в системе?</span></p><p id="-19plna_1169">Все предыдущие главы показывали нам, как система управляет уже существующими <code class="code" id="-19plna_1201">ActivityRecord</code> &mdash; как они восстанавливаются из стека задач ( Recents), как переходят между состояниями, как сохраняются их состояния. Но откуда берётся первый экземпляр <code class="code" id="-19plna_1202">ActivityRecord</code>, когда Activity запускается впервые, например, при самом первом запуске приложения или при старте новой Activity через интент?</p><p id="-19plna_1170">Именно этот момент &mdash; создание <code class="code" id="-19plna_1203">ActivityRecord</code> &mdash; можно считать точкой входа активности в &laquo;жизнь&raquo; на стороне system server. На этом этапе создаётся основная структура, к которой в дальнейшем будут привязаны всё: и окна (<code class="code" id="-19plna_1204">WindowState</code>), и состояния (<code class="code" id="-19plna_1205">Bundle</code>), и привязки к задаче (<code class="code" id="-19plna_1206">Task</code>).</p><p id="-19plna_1171">Дальше система начинает &laquo;разворачивать&raquo; процесс по цепочке вызовов, начиная с верхнего уровня &mdash; <code class="code" id="-19plna_1207">ActivityManagerService</code>. Когда приложение или другой компонент системы вызывает <code class="code" id="-19plna_1208">startActivity(...)</code>, эта команда сначала попадает в публичный API <code class="code" id="-19plna_1209">ActivityManagerService</code>, а уже оттуда прокладывает путь вниз через слои system server, где и подготавливаются все объекты, необходимые для старта.</p><p id="-19plna_1172">Вот как выглядит эта цепочка вызовов на первых уровнях:</p><div class="code-block" data-lang="java">
+public class ActivityManagerService extends IActivityManager.Stub,...{
+
+@Override
+public int startActivityWithFeature(IApplicationThread caller, String callingPackage,...) {
+    return mActivityTaskManager.startActivity(caller, callingPackage, callingFeatureId, intent,...);
+}
+
+}
+</div><p id="-19plna_1174">Здесь <code class="code" id="-19plna_1210">ActivityManagerService</code> лишь перенаправляет вызов в <code class="code" id="-19plna_1211">ActivityTaskManagerService</code>, где начинается более детальная работа с профилями пользователей, флагами интентов и прочими проверками.</p><div class="code-block" data-lang="java">
+public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
+
+    @Override
+    public final int startActivity(IApplicationThread caller, String callingPackage, ...) {
+        return startActivityAsUser(caller, callingPackage, callingFeatureId, intent, ...);
+    }
+
+    private int startActivityAsUser(IApplicationThread caller, String callingPackage, ...) {
+
+        return getActivityStartController().obtainStarter(intent, &quot;startActivityAsUser&quot;)
+              ...
+              .execute();
+    }
+
+    ActivityStartController getActivityStartController() {
+        return mActivityStartController;
+    }
+
+}
+</div><p id="-19plna_1176">В методе <code class="code" id="-19plna_1212">startActivityAsUser</code> мы уже видим обращение к <code class="code" id="-19plna_1213">ActivityStartController</code>, который управляет процессом создания и конфигурации старта активности. Метод <code class="code" id="-19plna_1214">obtainStarter</code> возвращает объект <code class="code" id="-19plna_1215">ActivityStarter</code>, который можно назвать настоящим &laquo;дирижёром&raquo; запуска. Он собирает все параметры, проверяет, нужна ли новая задача (<code class="code" id="-19plna_1216">Task</code>) или можно использовать существующую, проверяет конфигурацию и наконец подготавливает <code class="code" id="-19plna_1217">ActivityRecord</code>.</p><div class="code-block" data-lang="java">
+public class ActivityStartController {
+
+    ActivityStarter obtainStarter(Intent intent, String reason) {
+        return mFactory.obtain().setIntent(intent).setReason(reason);
+    }
+}
+</div><p id="-19plna_1178">После того как мы получаем <code class="code" id="-19plna_1218">ActivityStarter</code> через <code class="code" id="-19plna_1219">obtainStarter</code>, именно здесь происходит создание нового объекта <code class="code" id="-19plna_1220">ActivityRecord</code>. <code class="code" id="-19plna_1221">ActivityStarter</code> формирует все ключевые параметры запуска: интент, флаги, целевой <code class="code" id="-19plna_1222">Task</code>, конфигурацию окна, а также решает, нужно ли создать новую задачу или использовать существующую.</p><p id="-19plna_1179">Созданный <code class="code" id="-19plna_1223">ActivityRecord</code> связывается с задачей, добавляется в иерархию контейнеров и становится частью общей структуры <code class="code" id="-19plna_1224">RootWindowContainer</code>. После создания <code class="code" id="-19plna_1225">ActivityRecord</code> хранится в дереве контейнеров до завершения активности или её удаления системой.</p><div class="code-block" data-lang="java">
+class ActivityStarter {
+
+    private final ActivityTaskManagerService mService;
+    private final RootWindowContainer mRootWindowContainer;
+    ActivityRecord mStartActivity;
+
+    int execute() {
+        ...
+        res = executeRequest(mRequest);
+        ...
+    }
+
+    private int executeRequest(Request request) {
+        final ActivityRecord r = new ActivityRecord.Builder(mService)
+                 ... // параметры через билдер
+                .build();
+
+        mLastStartActivityResult = startActivityUnchecked(r, ...);
+        ...
+    }
+
+    private int startActivityUnchecked(final ActivityRecord r, ...) {
+        ...
+        result = startActivityInner(r, ...);
+        ...
+    }
+
+    int startActivityInner(final ActivityRecord r, ...) {
+        setInitialState(r, ...);
+
+        mRootWindowContainer.resumeFocusedTasksTopActivities(
+                mTargetRootTask, mStartActivity, mOptions, mTransientLaunch);
+    }
+
+    private void setInitialState(ActivityRecord r, ...) {
+        ...
+        mStartActivity = r;
+        ...
+    }
+}
+</div><p id="-19plna_1182">В методе <code class="code" id="-19plna_1226">executeRequest</code> через билдер создаётся объект <code class="code" id="-19plna_1227">ActivityRecord</code>. После инициализации передаётся в <code class="code" id="-19plna_1228">startActivityUnchecked</code>, а затем в <code class="code" id="-19plna_1229">startActivityInner</code>, где вызывается метод <code class="code" id="-19plna_1230">setInitialState</code>. Здесь объект сохраняется в <code class="code" id="-19plna_1231">mStartActivity</code> &mdash; это ссылка на текущую активность, которая будет запущена.</p><p id="-19plna_1183">Далее активити подготавливается к запуску через вызов <code class="code" id="-19plna_1232">resumeFocusedTasksTopActivities</code> у <code class="code" id="-19plna_1233">RootWindowContainer</code>.</p><div class="code-block" data-lang="java">
+class RootWindowContainer extends WindowContainer&lt;DisplayContent&gt;
+        implements DisplayManager.DisplayListener {
+
+    boolean resumeFocusedTasksTopActivities(
+            Task targetRootTask, ActivityRecord target, ActivityOptions targetOptions,
+            boolean deferPause) {
+
+        for (int displayNdx = getChildCount() - 1; displayNdx &gt;= 0; --displayNdx) {
+            final DisplayContent display = getChildAt(displayNdx);
+            final boolean curResult = result;
+            boolean[] resumedOnDisplay = new boolean[1];
+            final ActivityRecord topOfDisplay = display.topRunningActivity();
+            display.forAllRootTasks(rootTask -&gt; {
+                final ActivityRecord topRunningActivity = rootTask.topRunningActivity();
+                if (!rootTask.isFocusableAndVisible() || topRunningActivity == null) {
+                    return;
+                }
+                if (rootTask == targetRootTask) {
+                    resumedOnDisplay[0] |= curResult;
+                    return;
+                }
+                if (topRunningActivity.isState(RESUMED) &amp;&amp; topRunningActivity == topOfDisplay) {
+                    rootTask.executeAppTransition(targetOptions);
+                } else {
+                    resumedOnDisplay[0] |= topRunningActivity.makeActiveIfNeeded(target);
+                }
+            });
+            result |= resumedOnDisplay[0];
+            if (!resumedOnDisplay[0]) {
+                final Task focusedRoot = display.getFocusedRootTask();
+                if (focusedRoot != null) {
+                    result |= focusedRoot.resumeTopActivityUncheckedLocked(
+                            target, targetOptions, false /* skipPause */);
+                } else if (targetRootTask == null) {
+                    result |= resumeHomeActivity(null /* prev */, &quot;no-focusable-task&quot;,
+                            display.getDefaultTaskDisplayArea());
+                }
+            }
+        }
+
+        return result;
+    }
+}
+</div><p id="-19plna_1186">В методе <code class="code" id="-19plna_1234">resumeFocusedTasksTopActivities</code> происходит обход всех дисплеев и корневых задач. Для каждой задачи выбирается верхняя активити, проверяется её состояние и возможность активации. Если задача содержит целевую активити (<code class="code" id="-19plna_1235">target</code>), она активируется вызовом <code class="code" id="-19plna_1236">resumeTopActivityUncheckedLocked</code>.</p><p id="-19plna_1187">Таким образом, после создания <code class="code" id="-19plna_1237">ActivityRecord</code>, система полностью подготавливает задачу и активирует верхнюю активити, переводя её в состояние RESUMED. Отлично, продолжим ровно в том же техническом, &laquo;ровном&raquo; стиле, учитывая, что эти методы мы действительно уже подробно разбирали ранее.</p><p id="-19plna_1188">После того как контейнер окон выбрал задачу для возобновления, управление переходит в метод <code class="code" id="-19plna_1238">resumeTopActivityUncheckedLocked</code> внутри класса <code class="code" id="-19plna_1239">Task</code>. Мы уже встречали этот метод раньше &mdash; он отвечает за выбор и финальную подготовку верхней активити внутри задачи перед запуском. Внутри него вызывается <code class="code" id="-19plna_1240">resumeTopActivityInnerLocked</code>, который в свою очередь извлекает нужный <code class="code" id="-19plna_1241">TaskFragment</code>.</p><div class="code-block" data-lang="java">
+class Task extends TaskFragment {
+
+    @GuardedBy(&quot;mService&quot;)
+    boolean resumeTopActivityUncheckedLocked(ActivityRecord prev, ActivityOptions options,
+                                             boolean deferPause) {
+        someActivityResumed = resumeTopActivityInnerLocked(prev, options, deferPause);
+    }
+
+    @GuardedBy(&quot;mService&quot;)
+    private boolean resumeTopActivityInnerLocked(ActivityRecord prev, ActivityOptions options,
+                                                 boolean deferPause) {
+        final TaskFragment topFragment = topActivity.getTaskFragment();
+        resumed[0] = topFragment.resumeTopActivity(prev, options, deferPause);
+    }
+
+}
+</div><p id="-19plna_1190">Как мы помним, в методе <code class="code" id="-19plna_1242">resumeTopActivityInnerLocked</code> вытаскивается верхний фрагмент задачи (объект <code class="code" id="-19plna_1243">TaskFragment</code>), который содержит активити, готовую к запуску.</p><p id="-19plna_1191">Далее вызывается <code class="code" id="-19plna_1244">resumeTopActivity</code> у <code class="code" id="-19plna_1245">TaskFragment</code>. Этот метод ищет верхнюю активити в контейнере (<code class="code" id="-19plna_1246">topRunningActivity</code>) и инициирует вызов <code class="code" id="-19plna_1247">startSpecificActivity</code>. Здесь принимается решение, нужно ли запускать новый процесс или использовать уже существующий.</p><div class="code-block" data-lang="java">
+class TaskFragment extends WindowContainer&lt;WindowContainer&gt; {
+
+    final boolean resumeTopActivity(ActivityRecord prev, ActivityOptions options,
+                                    boolean skipPause) {
+        ActivityRecord next = topRunningActivity(true /* focusableOnly */);
+        mTaskSupervisor.startSpecificActivity(next, true, false);
+        ...
+        return true;
+        ...
+    }
+
+}
+</div><p id="-19plna_1193">Мы уже видели метод <code class="code" id="-19plna_1248">startSpecificActivity</code> внутри <code class="code" id="-19plna_1249">ActivityTaskSupervisor</code> в предыдущих главах. Он проверяет, существует ли уже процесс для текущей активности. Если процесс жив и активити привязана, то система продолжает её запуск напрямую. Если процесс отсутствует или был выгружен системой, вызывается метод <code class="code" id="-19plna_1250">startProcessAsync</code>, который отвечает за асинхронный старт нового процесса.</p><div class="code-block" data-lang="java">
+public class ActivityTaskSupervisor implements RecentTasks.Callbacks {
+    ...
+    final ActivityTaskManagerService mService;
+
+    void startSpecificActivity(ActivityRecord r, boolean andResume, boolean checkConfig) {
+        ...
+        mService.startProcessAsync(r, knownToBeDead, isTop,
+                isTop ? HostingRecord.HOSTING_TYPE_TOP_ACTIVITY
+                        : HostingRecord.HOSTING_TYPE_ACTIVITY);
+    }
+}
+</div><p id="-19plna_1195">Внутри <code class="code" id="-19plna_1251">startProcessAsync</code>, как мы уже подробно разбирали, активити добавляется в список <code class="code" id="-19plna_1252">mStartingProcessActivities</code>. Это очередь для тех активити, которые ждут, пока процесс будет создан и привязан системой. Такая очередь позволяет системе контролировать порядок запуска и управлять ресурсами без потерь состояний.</p><div class="code-block" data-lang="java">
+public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
+    ...
+
+    final ArrayList&lt;ActivityRecord&gt; mStartingProcessActivities = new ArrayList&lt;&gt;();
+    RootWindowContainer mRootWindowContainer;
+
+    void startProcessAsync(ActivityRecord activity, boolean knownToBeDead, boolean isTop,
+                           String hostingType) {
+        ...
+        mStartingProcessActivities.add(activity);
+        ...
+    }
+    ...
+}
+</div><p id="-19plna_1197">Таким образом, вся эта цепочка методов, которые мы уже встречали ранее, замыкается именно здесь: от вызова из контейнеров окон до финального решения о создании нового процесса или продолжении в текущем. В результате создаётся, сохраняется и активируется <code class="code" id="-19plna_1253">ActivityRecord</code>, и именно он становится ключевым звеном между системой и пользовательским интерфейсом. Что происходит после вызова этого метода и последующую логику обработки мы уже подробно разбирали в предыдущих главах.</p><p id="-19plna_1198">На этом, пожалуй, всё &mdash; это конец статьи.</p></section><div class="last-modified">01 июля 2025</div><div data-feedback-placeholder="true"></div><div class="navigation-links _bottom"><a href="view-model-under-the-hood-сompose.html" class="navigation-links__prev">ViewModel под капотом: как работает в Compose и View</a><a href="decompose-save-state-internal.html" class="navigation-links__next">Decompose и Essenty: под капотом сохранения состояния без ViewModel</a></div></article><div id="disqus_thread"></div></div></section></main></div><script src="https://resources.jetbrains.com/writerside/apidoc/6.22.0-b776/app.js"></script></body></html>

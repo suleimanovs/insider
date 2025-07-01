@@ -1,0 +1,615 @@
+<!DOCTYPE html SYSTEM "about:legacy-compat">
+<html lang="en-US" data-preset="contrast" data-primary-color="#1B9F8E" data-link-color="#57B747" data-content-max-width="1600" data-resizable-sidebar="true"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8"><meta charset="UTF-8"><meta name="built-on" content="2025-07-02T00:45:19.094546"><title>Decompose и Essenty: под капотом сохранения состояния без ViewModel | suleimanov</title><script type="application/json" id="virtual-toc-data">[{"id":"-edz58z_3","level":0,"title":"Введение","anchor":"#-edz58z_3"},{"id":"-edz58z_4","level":0,"title":"Базис","anchor":"#-edz58z_4"},{"id":"statekeeperowner","level":0,"title":"StateKeeperOwner","anchor":"#statekeeperowner"},{"id":"-edz58z_6","level":0,"title":"Продолжаем разбор: цепочка до настоящего хранилища","anchor":"#-edz58z_6"},{"id":"instancekeeper","level":0,"title":"InstanceKeeper","anchor":"#instancekeeper"},{"id":"defaultcomponentcontext","level":0,"title":"DefaultComponentContext","anchor":"#defaultcomponentcontext"},{"id":"-edz58z_9","level":0,"title":"Финал","anchor":"#-edz58z_9"}]</script><script type="application/json" id="topic-shortcuts"></script><link href="https://resources.jetbrains.com/writerside/apidoc/6.22.0-b776/app.css" rel="stylesheet"><link href="static/style.css" rel="stylesheet"><link rel="icon" type="image/png" sizes="16x16" href="https://iili.io/3eop8YX.png"><meta name="image" content=""><!-- Open Graph --><meta property="og:title" content="Decompose и Essenty: под капотом сохранения состояния без ViewModel | suleimanov"><meta property="og:description" content=""><meta property="og:image" content=""><meta property="og:site_name" content="suleimanov Help"><meta property="og:type" content="website"><meta property="og:locale" content="en_US"><meta property="og:url" content="writerside-documentation//1.0/decompose-save-state-internal.html"><!-- End Open Graph --><!-- Twitter Card --><meta name="twitter:card" content="summary_large_image"><meta name="twitter:site" content=""><meta name="twitter:title" content="Decompose и Essenty: под капотом сохранения состояния без ViewModel | suleimanov"><meta name="twitter:description" content=""><meta name="twitter:creator" content=""><meta name="twitter:image:src" content=""><!-- End Twitter Card --><!-- Schema.org WebPage --><script type="application/ld+json">{
+    "@context": "http://schema.org",
+    "@type": "WebPage",
+    "@id": "writerside-documentation//1.0/decompose-save-state-internal.html#webpage",
+    "url": "writerside-documentation//1.0/decompose-save-state-internal.html",
+    "name": "Decompose и Essenty: под капотом сохранения состояния без ViewModel | suleimanov",
+    "description": "",
+    "image": "",
+    "inLanguage":"en-US"
+}</script><!-- End Schema.org --><!-- Schema.org WebSite --><script type="application/ld+json">{
+    "@type": "WebSite",
+    "@id": "writerside-documentation/#website",
+    "url": "writerside-documentation/",
+    "name": "suleimanov Help"
+}</script><!-- End Schema.org --></head><body data-id="decompose-save-state-internal" data-main-title="Decompose и Essenty: под капотом сохранения состояния без ViewModel" data-article-props="{&quot;seeAlsoStyle&quot;:&quot;links&quot;}" data-template="article" data-breadcrumbs="Android"><div class="wrapper"><main class="panel _main"><header class="panel__header"><div class="container"><h3>suleimanov 1.0 Help</h3><div class="panel-trigger"></div></div></header><section class="panel__content"><div class="container"><article class="article" data-shortcut-switcher="inactive"><h1 data-toc="decompose-save-state-internal" id="decompose-save-state-internal.md">Decompose и Essenty: под капотом сохранения состояния без ViewModel</h1><section class="chapter"><h2 id="-edz58z_3" data-toc="-edz58z_3">Введение</h2><p id="-edz58z_10">Это продолжение четырех предыдущих статей.</p><ol class="list _decimal" id="-edz58z_11" type="1"><li class="list__item" id="-edz58z_15"><p id="-edz58z_19">В первой мы разобрали, где в конечном итоге хранится <code class="code" id="-edz58z_20">ViewModelStore</code> в случае с <code class="code" id="-edz58z_21">Activity</code>.</p></li><li class="list__item" id="-edz58z_16"><p id="-edz58z_22">Во второй &mdash; как это устроено во <code class="code" id="-edz58z_23">Fragment</code>.</p></li><li class="list__item" id="-edz58z_17"><p id="-edz58z_24">В третьей &mdash; где хранятся <code class="code" id="-edz58z_25">ViewModel</code>-и, когда мы используем <span class="control" id="-edz58z_26">Compose</span> (или даже просто <code class="code" id="-edz58z_27">View</code>).</p></li><li class="list__item" id="-edz58z_18"><p id="-edz58z_28">В четвёртой &mdash; как работают методы <code class="code" id="-edz58z_29">onSaveInstanceState</code>/<code class="code" id="-edz58z_30">onRestoreInstanceState</code>, Saved State API и где хранится <code class="code" id="-edz58z_31">Bundle</code>.</p></li></ol><p id="-edz58z_12">В этой статье разберёмся, как широко используемая в KMP библиотека <span class="control" id="-edz58z_32">Decompose</span> справляется без <code class="code" id="-edz58z_33">ViewModel</code> и методов <code class="code" id="-edz58z_34">onSaveInstanceState</code>, ведь она является кроссплатформенной (KMP) библиотекой.</p><p id="-edz58z_13">Статья не о том, <span class="emphasis" id="-edz58z_35">как</span> использовать эти API, а о том, <span class="emphasis" id="-edz58z_36">как</span> они работают изнутри. Поэтому я буду полагаться на то, что вы уже знакомы с ними или хотя бы имеете общее представление.</p><p id="-edz58z_14">Как всегда, начнём с базиса. Давайте сначала дадим определение Decompose:</p></section><section class="chapter"><h2 id="-edz58z_4" data-toc="-edz58z_4">Базис</h2><p id="-edz58z_37"><span class="control" id="-edz58z_48">Decompose</span> &mdash; это мультиплатформенная библиотека для разделения бизнес-логики и UI, разработанная Аркадием Ивановым. Она работает поверх <code class="code" id="-edz58z_49">ComponentContext</code>, который управляет жизненным циклом, состоянием и навигацией между компонентами.</p><p id="-edz58z_38">Поддерживает: Android, iOS, JS, JVM, macOS, watchOS, tvOS.</p><p id="-edz58z_39">Зачем использовать:</p><ul class="list _bullet" id="-edz58z_40"><li class="list__item" id="-edz58z_50"><p id="-edz58z_55">логика отделена от UI и легко тестируется</p></li><li class="list__item" id="-edz58z_51"><p id="-edz58z_56">работает с Compose, SwiftUI, React и др.</p></li><li class="list__item" id="-edz58z_52"><p id="-edz58z_57">навигация и состояние &mdash; кроссплатформенные</p></li><li class="list__item" id="-edz58z_53"><p id="-edz58z_58">компоненты переживают конфигурационные изменения (как <code class="code" id="-edz58z_59">ViewModel</code>)</p></li><li class="list__item" id="-edz58z_54"><p id="-edz58z_60">можно расширять и кастомизировать <code class="code" id="-edz58z_61">ComponentContext</code> под свои задачи</p></li></ul><p id="-edz58z_41"><span class="control" id="-edz58z_62">Decompose</span> &mdash; это не фреймворк, а мощный инструмент, на котором можно построить свой API. Кратко говоря, это швейцарский нож.</p><p id="-edz58z_42">В Android сложно представить приложение без стандартной <code class="code" id="-edz58z_63">ViewModel</code>, и удивительно, что в <span class="control" id="-edz58z_64">Decompose</span> её нет, но при этом она умеет сохранять данные как при изменении конфигурации, так и при уничтожении процесса.</p><p id="-edz58z_43">Давайте быстро разберёмся с сущностями, на которых основана Decompose:</p><p id="-edz58z_44">Всё в <span class="control" id="-edz58z_65">Decompose</span> крутится вокруг <code class="code" id="-edz58z_66">ComponentContext</code> &mdash; компонента, связанного с определённым экраном или набором дочерних компонентов. У каждого компонента есть свой <code class="code" id="-edz58z_67">ComponentContext</code>, который реализует следующие интерфейсы:</p><ul class="list _bullet" id="-edz58z_45"><li class="list__item" id="-edz58z_68"><p id="-edz58z_72"><span class="control" id="-edz58z_73">LifecycleOwner</span> &mdash; предоставляется библиотекой <span class="control" id="-edz58z_74">Essenty</span>, даёт каждому компоненту собственный жизненный цикл.</p></li><li class="list__item" id="-edz58z_69"><p id="-edz58z_75"><span class="control" id="-edz58z_76">StateKeeperOwner</span> &mdash; позволяет сохранять любое состояние при конфигурационных изменениях и/или смерти процесса.</p></li><li class="list__item" id="-edz58z_70"><p id="-edz58z_77"><span class="control" id="-edz58z_78">InstanceKeeperOwner</span> &mdash; даёт возможность сохранять любые объекты внутри компонента (аналог <code class="code" id="-edz58z_79">ViewModel</code> в AndroidX).</p></li><li class="list__item" id="-edz58z_71"><p id="-edz58z_80"><span class="control" id="-edz58z_81">BackHandlerOwner</span> &mdash; позволяет каждому компоненту обрабатывать нажатие кнопки &laquo;назад&raquo;.</p></li></ul><p id="-edz58z_46">Основное внимание мы уделим именно <code class="code" id="-edz58z_82">StateKeeperOwner</code> (<code class="code" id="-edz58z_83">StateKeeper</code>) и <code class="code" id="-edz58z_84">InstanceKeeperOwner</code> (<code class="code" id="-edz58z_85">InstanceKeeper</code>). Как видно, они на самом деле тянутся из библиотеки <span class="control" id="-edz58z_86">Essenty</span>, которая также была создана Аркадием Ивановым. Однако особую популярность эта библиотека получила именно благодаря <span class="control" id="-edz58z_87">Decompose</span>.</p><p id="-edz58z_47">Начнём углубляться в работу <code class="code" id="-edz58z_88">StateKeeperOwner</code> (<code class="code" id="-edz58z_89">StateKeeper</code>). Я буду полагаться на то, что вы уже читали предыдущие статьи. Давайте начнём.</p></section><section class="chapter"><h2 id="statekeeperowner" data-toc="statekeeperowner">StateKeeperOwner</h2><p id="-edz58z_90">Чтобы понять, как он работает, давайте реализуем простой экран <code class="code" id="-edz58z_113">Counter</code>. Цель &mdash; увидеть, как счётчик умеет переживать изменение конфигурации и даже смерть процесса.</p><p id="-edz58z_91">Начнём с создания компонента для счетчика:</p><div class="code-block" data-lang="kotlin">
+class DefaultCounterComponent(
+    componentContext: ComponentContext
+) : ComponentContext by componentContext {
+
+    val model: StateFlow&lt;Int&gt; field = MutableStateFlow(stateKeeper.consume(KEY, Int.serializer()) ?: 0)
+
+    init {
+        stateKeeper.register(KEY, Int.serializer()) { model.value }
+    }
+
+    fun increase() {
+        model.value++
+    }
+
+    fun decrease() {
+        model.value--
+    }
+
+    companion object {
+        private const val KEY = &quot;counter_state&quot;
+    }
+}
+</div><p id="-edz58z_93">Довольно простая логика: у нас есть <code class="code" id="-edz58z_114">model</code>, который хранит текущее значение счётчика, и два метода для его изменения. При инициализации переменной мы получаем значение из <code class="code" id="-edz58z_115">stateKeeper</code> через <code class="code" id="-edz58z_116">consume</code>, если оно отсутствует &mdash; используем <code class="code" id="-edz58z_117">0</code> по умолчанию.</p><p id="-edz58z_94">А в <code class="code" id="-edz58z_118">init</code> блоке мы регистрируем лямбду, которая будет вызвана при сохранении состояния. Пока просто запомните этот момент &mdash; позже разберёмся, как и когда она срабатывает.</p><p id="-edz58z_95">Теперь экран счетчика, который работает с <code class="code" id="-edz58z_119">DefaultCounterComponent</code>:</p><div class="code-block" data-lang="kotlin">
+@Composable
+fun CounterScreen(component: DefaultCounterComponent) {
+    val count by component.model.collectAsState()
+
+    Column(
+        modifier = Modifier.fillMaxSize(),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        Text(text = count.toString(), style = MaterialTheme.typography.headlineLarge)
+        Row(horizontalArrangement = Arrangement.spacedBy(40.dp)) {
+            FloatingActionButton(onClick = { component.decrease() }) { Text(&quot;-&quot;, fontSize = 56.sp) }
+            FloatingActionButton(onClick = { component.increase() }) { Text(&quot;+&quot;, fontSize = 56.sp) }
+        }
+    }
+}
+</div><p id="-edz58z_97">И, наконец, <code class="code" id="-edz58z_120">Activity</code>, в которой инициализируется <code class="code" id="-edz58z_121">ComponentContext</code> и вызывается экран <code class="code" id="-edz58z_122">CounterScreen</code>:</p><div class="code-block" data-lang="kotlin">
+class MainActivity : ComponentActivity() {
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        val counterComponent = DefaultCounterComponent(defaultComponentContext())
+        setContent { CounterScreen(component = counterComponent) }
+    }
+}
+</div><p id="-edz58z_99">Теперь давайте проверим поведение визуально:</p><ol class="list _decimal" id="-edz58z_100" type="1"><li class="list__item" id="-edz58z_123"><p id="-edz58z_125">Как будет вести себя счётчик при изменении конфигурации (именно повороте экрана).</p></li><li class="list__item" id="-edz58z_124"><p id="-edz58z_126">Как будет вести себя счётчик при уничтожении процесса, когда приложение находится в фоне.</p></li></ol><figure data-theme="light" id="-edz58z_101" width="800"><img alt="Screenshot" class="js-gif article__bordered-element" data-gif-src="images/stateKeeper.gif" width="800" style="width: 800px;"></figure><p id="-edz58z_102">Как видим, всё работает ровно так, как ожидалось. Значение счётчика сохраняется как при повороте экрана, так и после полного убийства процесса. При этом мы не видим здесь ни методов <code class="code" id="-edz58z_127">onSaveInstanceState</code>, ни <code class="code" id="-edz58z_128">ViewModel</code>. Давайте снова взглянем на компонент счётчика:</p><div class="code-block" data-lang="kotlin">
+class DefaultCounterComponent(
+    componentContext: ComponentContext
+) : ComponentContext by componentContext {
+
+    val model: StateFlow&lt;Int&gt; field = MutableStateFlow(stateKeeper.consume(KEY, Int.serializer()) ?: 0)
+
+    init {
+        stateKeeper.register(KEY, Int.serializer()) { model.value }
+    }
+    ...
+
+    companion object {
+        private const val KEY = &quot;counter_state&quot;
+    }
+}
+</div><p id="-edz58z_104">При пересоздании активности &mdash; как из-за изменения конфигурации, так и после смерти процесса &mdash; <code class="code" id="-edz58z_129">DefaultCounterComponent</code> будет создаваться заново, и вместе с ним создаётся и поле <code class="code" id="-edz58z_130">model</code>. В таком случае мы обращаемся к <code class="code" id="-edz58z_131">stateKeeper</code> и, вызывая у него метод <code class="code" id="-edz58z_132">consume</code>, получаем по ключу сохранённое значение. Если сохранённого значения нет, используем значение по умолчанию &mdash; <code class="code" id="-edz58z_133">0</code>.</p><p id="-edz58z_105">В <code class="code" id="-edz58z_134">init</code>-блоке мы регистрируем коллбэк через метод <code class="code" id="-edz58z_135">stateKeeper.register</code>, передавая ему ключ, стратегию сериализации из <code class="code" id="-edz58z_136">kotlinx.serialization</code> и лямбду, возвращающую текущее значение <code class="code" id="-edz58z_137">model</code>.</p><p id="-edz58z_106">Посмотрим на исходники, чтобы понять, откуда берётся поле <code class="code" id="-edz58z_138">stateKeeper</code>. Наш <code class="code" id="-edz58z_139">DefaultCounterComponent</code> реализует интерфейс <code class="code" id="-edz58z_140">ComponentContext</code>, а поле <code class="code" id="-edz58z_141">stateKeeper</code> приходит из <code class="code" id="-edz58z_142">StateKeeperOwner</code>. Полная цепочка наследования следующая:</p><div class="code-block" data-lang="kotlin">
+interface StateKeeperOwner {
+
+    val stateKeeper: StateKeeper
+}
+
+interface GenericComponentContext&lt;out T : Any&gt; :
+    LifecycleOwner,
+    StateKeeperOwner,
+    InstanceKeeperOwner,
+    BackHandlerOwner,
+    ComponentContextFactoryOwner&lt;T&gt;
+
+
+interface ComponentContext : GenericComponentContext&lt;ComponentContext&gt;
+</div><p id="-edz58z_108">Таким образом, цепочка наследования выглядит так: <code class="code" id="-edz58z_143">StateKeeperOwner</code> &larr; <code class="code" id="-edz58z_144">GenericComponentContext</code> &larr; <code class="code" id="-edz58z_145">ComponentContext</code> &larr; <code class="code" id="-edz58z_146">DefaultCounterComponent</code>.</p><p id="-edz58z_109">Мы реализуем <code class="code" id="-edz58z_147">ComponentContext</code>, делегируя его переданному в конструктор параметру <code class="code" id="-edz58z_148">componentContext</code>.</p><div class="code-block" data-lang="kotlin">
+class DefaultCounterComponent(
+    componentContext: ComponentContext
+) : ComponentContext by componentContext {
+    ...
+}
+</div><p id="-edz58z_111">А в <code class="code" id="-edz58z_149">MainActivity</code> создаём <code class="code" id="-edz58z_150">ComponentContext</code>, используя готовую extension-функцию <code class="code" id="-edz58z_151">defaultComponentContext</code>, которая за нас уже создаёт <code class="code" id="-edz58z_152">ComponentContext</code> со всеми нужными компонентами, вроде <code class="code" id="-edz58z_153">StateKeeper</code>:</p><div class="code-block" data-lang="kotlin">
+class MainActivity : ComponentActivity() {
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        ...
+        val counterComponent = DefaultCounterComponent(defaultComponentContext())
+        ...
+    }
+}
+</div></section><section class="chapter"><h2 id="-edz58z_6" data-toc="-edz58z_6">Продолжаем разбор: цепочка до настоящего хранилища</h2><p id="-edz58z_154">Итак, мы уже увидели, как в компоненте вызываются <code class="code" id="-edz58z_160">stateKeeper.consume()</code> и <code class="code" id="-edz58z_161">stateKeeper.register()</code>, и знаем, что сам компонент получает <code class="code" id="-edz58z_162">stateKeeper</code> через свой <code class="code" id="-edz58z_163">ComponentContext</code>. Но что именно происходит между вызовом в <code class="code" id="-edz58z_164">Activity</code>/<code class="code" id="-edz58z_165">Fragment</code> и конечным хранилищем? Пройдёмся по цепочке, которую мы только что вывели из исходников.</p><section class="chapter"><h3 id="statekeeper" data-toc="statekeeper">Как создаётся <code class="code" id="-edz58z_173">StateKeeper</code></h3><p id="-edz58z_167">В <code class="code" id="-edz58z_174">Activity</code> (или <code class="code" id="-edz58z_175">Fragment</code>) создаётся <code class="code" id="-edz58z_176">DefaultComponentContext</code>, и ему передаётся результат вызова <code class="code" id="-edz58z_177">defaultComponentContext()</code>. Заглянем внутрь:</p><div class="code-block" data-lang="kotlin">
+fun &lt;T&gt; T.defaultComponentContext(
+    discardSavedState: Boolean = false,
+    isStateSavingAllowed: () -&gt; Boolean = { true },
+): DefaultComponentContext where
+        T : SavedStateRegistryOwner, T : OnBackPressedDispatcherOwner, T : ViewModelStoreOwner, T : LifecycleOwner =
+    defaultComponentContext(
+        backHandler = BackHandler(onBackPressedDispatcher),
+        discardSavedState = discardSavedState,
+        isStateSavingAllowed = isStateSavingAllowed,
+    )
+</div><p id="-edz58z_169">Обратите внимание, что функция является расширением для <code class="code" id="-edz58z_178">T</code>, где <code class="code" id="-edz58z_179">T</code> должен быть объектом, реализующим интерфейсы <code class="code" id="-edz58z_180">SavedStateRegistryOwner</code>, <code class="code" id="-edz58z_181">OnBackPressedDispatcherOwner</code>, <code class="code" id="-edz58z_182">ViewModelStoreOwner</code>, <code class="code" id="-edz58z_183">LifecycleOwner</code>. Классы <code class="code" id="-edz58z_184">ComponentActivity</code>, <code class="code" id="-edz58z_185">FragmentActivity</code>, <code class="code" id="-edz58z_186">AppCompatActivity</code> идеально подходят под эти требования.</p><p id="-edz58z_170">Внутри по сути просто собираются все нужные зависимости и прокидываются чуть дальше &mdash; в ещё одну функцию-обёртку, где уже инициализируется всё, что нужно для хранения состояния:</p><div class="code-block" data-lang="kotlin">
+private fun &lt;T&gt; T.defaultComponentContext(
+    backHandler: BackHandler?,
+    discardSavedState: Boolean,
+    isStateSavingAllowed: () -&gt; Boolean,
+): DefaultComponentContext where
+        T : SavedStateRegistryOwner, T : ViewModelStoreOwner, T : LifecycleOwner {
+    val stateKeeper = stateKeeper(discardSavedState = discardSavedState, isSavingAllowed = isStateSavingAllowed)
+    ...
+    return DefaultComponentContext(
+        lifecycle = lifecycle.asEssentyLifecycle(),
+        stateKeeper = stateKeeper,
+        instanceKeeper = instanceKeeper(discardRetainedInstances = marker == null),
+        backHandler = backHandler,
+    )
+}
+</div><p id="-edz58z_172">Вот тут и начинается самое интересное &mdash; создаётся объект <code class="code" id="-edz58z_187">StateKeeper</code> вызовом функции <code class="code" id="-edz58z_188">stateKeeper</code> и пробрасывается дальше.</p></section><section class="chapter"><h3 id="statekeeper" data-toc="statekeeper">Как создаётся сам <code class="code" id="-edz58z_195">StateKeeper</code></h3><p id="-edz58z_190">Теперь посмотрим, откуда взялся этот объект. Всё упирается в extension-функцию <code class="code" id="-edz58z_196">stateKeeper</code>, которая является расширением для <code class="code" id="-edz58z_197">SavedStateRegistryOwner</code>:</p><div class="code-block" data-lang="kotlin">
+private const val KEY_STATE = &quot;STATE_KEEPER_STATE&quot;
+
+fun SavedStateRegistryOwner.stateKeeper(
+    discardSavedState: Boolean = false,
+    isSavingAllowed: () -&gt; Boolean = { true },
+): StateKeeper =
+    stateKeeper(
+        key = KEY_STATE,
+        discardSavedState = discardSavedState,
+        isSavingAllowed = isSavingAllowed,
+    )
+</div><p id="-edz58z_192">Здесь просто прокидывается ключ (по умолчанию <code class="code" id="-edz58z_198">&quot;STATE_KEEPER_STATE&quot;</code>), и происходит вызов другого метода <code class="code" id="-edz58z_199">stateKeeper</code>:</p><div class="code-block" data-lang="kotlin">
+fun SavedStateRegistryOwner.stateKeeper(
+    key: String,
+    discardSavedState: Boolean = false,
+    isSavingAllowed: () -&gt; Boolean = { true },
+): StateKeeper =
+    StateKeeper(
+        savedStateRegistry = savedStateRegistry,
+        key = key,
+        discardSavedState = discardSavedState,
+        isSavingAllowed = isSavingAllowed
+    )
+</div><p id="-edz58z_194">Тут мы уже явно вызываем конструктор <code class="code" id="-edz58z_200">StateKeeper</code> (на самом деле это функция, а не класс). Сюда подаётся главный объект &mdash; <code class="code" id="-edz58z_201">savedStateRegistry</code>. Да-да, тот самый из AndroidX, который находится внутри <code class="code" id="-edz58z_202">Activity</code> и <code class="code" id="-edz58z_203">Fragment</code> и используется системой для всех вызовов <code class="code" id="-edz58z_204">onSaveInstanceState</code>.</p></section><section class="chapter"><h3 id="statekeeper" data-toc="statekeeper">Что реально происходит внутри <code class="code" id="-edz58z_226">StateKeeper</code></h3><p id="-edz58z_206">Вот теперь мы приблизились к сути. <code class="code" id="-edz58z_227">StateKeeper</code> &mdash; это функция, которая создаёт реальный объект интерфейса <code class="code" id="-edz58z_228">StateKeeper</code>:</p><div class="code-block" data-lang="kotlin">
+fun StateKeeper(
+    savedStateRegistry: SavedStateRegistry,
+    key: String,
+    discardSavedState: Boolean = false,
+    isSavingAllowed: () -&gt; Boolean = { true },
+): StateKeeper {
+    val dispatcher =
+        StateKeeperDispatcher(
+            savedState = savedStateRegistry
+                .consumeRestoredStateForKey(key = key)
+                ?.getSerializableContainer(key = KEY_STATE)
+                ?.takeUnless { discardSavedState },
+        )
+
+    savedStateRegistry.registerSavedStateProvider(key = key) {
+        Bundle().apply {
+            if (isSavingAllowed()) {
+                putSerializableContainer(key = KEY_STATE, value = dispatcher.save())
+            }
+        }
+    }
+
+    return dispatcher
+}
+</div><p id="-edz58z_208">Вот он &mdash; наш главный гейтвей между миром Android и системой сохранения состояния в Essenty/Decompose. Давайте по строчкам:</p><ul class="list _bullet" id="-edz58z_209"><li class="list__item" id="-edz58z_229"><p id="-edz58z_232">Извлекается ранее сохранённое состояние из <code class="code" id="-edz58z_233">SavedStateRegistry</code> по ключу &mdash; по сути, из стандартного <code class="code" id="-edz58z_234">Bundle</code>, в который Android сохраняет данные при onPause/onStop</p></li><li class="list__item" id="-edz58z_230"><p id="-edz58z_235">Создаётся объект <code class="code" id="-edz58z_236">StateKeeperDispatcher</code> &mdash; это конкретная реализация интерфейса <code class="code" id="-edz58z_237">StateKeeper</code>, которая умеет хранить сериализованные значения, зарегистрированные вручную, и при необходимости возвращать их обратно через <code class="code" id="-edz58z_238">consume</code>.</p></li><li class="list__item" id="-edz58z_231"><p id="-edz58z_239">Регистрируется новый <code class="code" id="-edz58z_240">SavedStateProvider</code> &mdash; это лямбда, которую Android вызовет при необходимости сохранить состояние. Именно в ней <code class="code" id="-edz58z_241">dispatcher.save()</code> собирает зарегистрированные значения и подготавливает их к сохранению.</p></li></ul><p id="-edz58z_210">Вызов <code class="code" id="-edz58z_242">SavedStateRegistry.registerSavedStateProvider</code> здесь &mdash; точка подключения к системе восстановления Android. Он позволяет сохранить состояние <code class="code" id="-edz58z_243">StateKeeperDispatcher</code> в <code class="code" id="-edz58z_244">Bundle</code>, чтобы при следующем запуске его можно было восстановить. Весь этот механизм &mdash; адаптер между KMP-механикой сохранения и Android API.</p><p id="-edz58z_211">И вот тут вступает в игру <code class="code" id="-edz58z_245">SerializableContainer</code>.</p><p id="-edz58z_212">Когда вызывается <code class="code" id="-edz58z_246">dispatcher.save()</code>, все значения, зарегистрированные через <code class="code" id="-edz58z_247">stateKeeper.register(...)</code>, сериализуются и оборачиваются в <code class="code" id="-edz58z_248">SerializableContainer</code>.</p><p id="-edz58z_213">Это универсальная обёртка, которая хранит данные в виде <code class="code" id="-edz58z_249">ByteArray</code>, а затем превращает их в строку с помощью <code class="code" id="-edz58z_250">Base64</code>. Благодаря этому результат можно безопасно сохранить в <code class="code" id="-edz58z_251">Bundle</code> как обычную строку &mdash; без <code class="code" id="-edz58z_252">Parcelable</code>, <code class="code" id="-edz58z_253">putSerializable()</code> и без Java <code class="code" id="-edz58z_254">Serializable</code>. При восстановлении этот путь проходит в обратную сторону: строка &rarr; байты &rarr; объект через <code class="code" id="-edz58z_255">kotlinx.serialization</code>.</p><p id="-edz58z_214">Таким образом, при вызове <code class="code" id="-edz58z_256">dispatcher.save()</code> мы получаем сериализуемый контейнер, который можно безопасно положить в <code class="code" id="-edz58z_257">Bundle</code>. И вот здесь важна не просто сериализация, а то, как именно она устроена. Это не <code class="code" id="-edz58z_258">Parcelable</code>, и не <code class="code" id="-edz58z_259">Serializable</code> &mdash; это <code class="code" id="-edz58z_260">SerializableContainer</code>.</p><p id="-edz58z_215"><code class="code" id="-edz58z_261">SerializableContainer</code> &mdash; это отдельная сущность, которая оборачивает объект и умеет работать с <code class="code" id="-edz58z_262">kotlinx.serialization</code> напрямую. Она сама сериализуема, поскольку реализует <code class="code" id="-edz58z_263">KSerializer</code>, и может быть сохранена в <code class="code" id="-edz58z_264">Bundle</code> без дополнительных усилий. Ниже &mdash; её внутренняя реализация:</p><div class="code-block" data-lang="kotlin">
+@Serializable(with = SerializableContainer.Serializer::class)
+class SerializableContainer private constructor(
+    private var data: ByteArray?,
+) {
+    constructor() : this(data = null)
+
+    private var holder: Holder&lt;*&gt;? = null
+
+    fun &lt;T : Any&gt; consume(strategy: DeserializationStrategy&lt;T&gt;): T? {
+        val consumedValue: Any? = holder?.value ?: data?.deserialize(strategy)
+        holder = null
+        data = null
+        @Suppress(&quot;UNCHECKED_CAST&quot;) return consumedValue as T?
+    }
+
+    fun &lt;T : Any&gt; set(value: T?, strategy: SerializationStrategy&lt;T&gt;) {
+        holder = Holder(value = value, strategy = strategy)
+        data = null
+    }
+
+    private class Holder&lt;T : Any&gt;(
+        val value: T?,
+        val strategy: SerializationStrategy&lt;T&gt;,
+    )
+
+    internal object Serializer : KSerializer&lt;SerializableContainer&gt; {
+        private const val NULL_MARKER = &quot;.&quot;
+        override val descriptor = PrimitiveSerialDescriptor(&quot;SerializableContainer&quot;, PrimitiveKind.STRING)
+
+        override fun serialize(encoder: Encoder, value: SerializableContainer) {
+            val bytes = value.holder?.serialize() ?: value.data
+            encoder.encodeString(bytes?.toBase64() ?: NULL_MARKER)
+        }
+
+        override fun deserialize(decoder: Decoder): SerializableContainer =
+            SerializableContainer(data = decoder.decodeString().takeUnless { it == NULL_MARKER }?.base64ToByteArray())
+    }
+}
+</div><p id="-edz58z_217">Что здесь важно:</p><ul class="list _bullet" id="-edz58z_218"><li class="list__item" id="-edz58z_265"><p id="-edz58z_268">В методе <code class="code" id="-edz58z_269">set(...)</code> сохраняется объект и соответствующая стратегия сериализации, но не происходит немедленной сериализации.</p></li><li class="list__item" id="-edz58z_266"><p id="-edz58z_270">Только при вызове сериализатора (<code class="code" id="-edz58z_271">Serializer</code>) объект превращается в <code class="code" id="-edz58z_272">ByteArray</code>, а затем в строку.</p></li><li class="list__item" id="-edz58z_267"><p id="-edz58z_273">После восстановления &mdash; <code class="code" id="-edz58z_274">decodeString()</code> &rarr; <code class="code" id="-edz58z_275">ByteArray</code> &rarr; десериализация с использованием заранее известной стратегии.</p></li></ul><p id="-edz58z_219">Это даёт контроль над моментом сериализации и возможность отложенной обработки.</p><p id="-edz58z_220">Теперь о том, как это всё оказывается внутри <code class="code" id="-edz58z_276">Bundle</code>. Ниже &mdash; вспомогательные функции, которые используются внутри библиотеки Essenty/Decompose для сериализации и десериализации <code class="code" id="-edz58z_277">SerializableContainer</code> и произвольных объектов, вызовы которых мы уже встречали в фукнций StateKeeper:</p><div class="code-block" data-lang="kotlin">
+fun &lt;T : Any&gt; Bundle.putSerializable(key: String?, value: T?, strategy: SerializationStrategy&lt;T&gt;) {
+    putParcelable(key, ValueHolder(value = value, bytes = lazy { value?.serialize(strategy) }))
+}
+
+fun &lt;T : Any&gt; Bundle.getSerializable(key: String?, strategy: DeserializationStrategy&lt;T&gt;): T? =
+    getParcelableCompat&lt;ValueHolder&lt;T&gt;&gt;(key)?.let { holder -&gt;
+        holder.value ?: holder.bytes.value?.deserialize(strategy)
+    }
+
+@Suppress(&quot;DEPRECATION&quot;)
+private inline fun &lt;reified T : Parcelable&gt; Bundle.getParcelableCompat(key: String?): T? =
+    classLoader.let { savedClassLoader -&gt;
+        try {
+            classLoader = T::class.java.classLoader
+            getParcelable(key) as T?
+        } finally {
+            classLoader = savedClassLoader
+        }
+    }
+
+fun Bundle.putSerializableContainer(key: String?, value: SerializableContainer?) {
+    putSerializable(key = key, value = value, strategy = SerializableContainer.serializer())
+}
+
+fun Bundle.getSerializableContainer(key: String?): SerializableContainer? =
+    getSerializable(key = key, strategy = SerializableContainer.serializer())
+</div><p id="-edz58z_222">Отдельно стоит упомянуть сущность <code class="code" id="-edz58z_278">ValueHolder</code>:</p><div class="code-block" data-lang="kotlin">
+private class ValueHolder&lt;out T : Any&gt;(
+    val value: T?,
+    val bytes: Lazy&lt;ByteArray?&gt;,
+) : Parcelable {
+    override fun writeToParcel(dest: Parcel, flags: Int) {
+        dest.writeByteArray(bytes.value)
+    }
+
+    override fun describeContents(): Int = 0
+
+    companion object CREATOR : Parcelable.Creator&lt;ValueHolder&lt;Any&gt;&gt; {
+        override fun createFromParcel(parcel: Parcel): ValueHolder&lt;Any&gt; =
+            ValueHolder(value = null, bytes = lazyOf(parcel.createByteArray()))
+
+        override fun newArray(size: Int): Array&lt;ValueHolder&lt;Any&gt;?&gt; =
+            arrayOfNulls(size)
+    }
+}
+</div><p id="-edz58z_224"><code class="code" id="-edz58z_279">ValueHolder</code> здесь нужен для безопасной упаковки сериализованных байт в <code class="code" id="-edz58z_280">Bundle</code> через <code class="code" id="-edz58z_281">Parcelable</code>. Он не сериализует объект напрямую &mdash; он сохраняет только <code class="code" id="-edz58z_282">ByteArray</code>, который позже может быть развёрнут обратно в объект через <code class="code" id="-edz58z_283">kotlinx.serialization</code>. Истинная причина по которой нужен этот объект в том что Bundle может хранит Parcleable и Java Serializeble, но он не умеет напрямую работать с <code class="code" id="-edz58z_284">kotlinx.serialization</code>, по этому он служит в качестве обертки.</p><p id="-edz58z_225">Таким образом, <code class="code" id="-edz58z_285">SerializableContainer</code> + <code class="code" id="-edz58z_286">ValueHolder</code> &mdash; это низкоуровневая инфраструктура сериализации, которая позволяет сохранить произвольные значения Kotlin Multiplatform без зависимостей на Android-специфичные интерфейсы, сохраняя кроссплатформенность и контроль над сериализацией.</p></section><section class="chapter"><h3 id="-edz58z_158" data-toc="-edz58z_158">К чему это всё ведёт</h3><p id="-edz58z_287">То есть, по факту, <code class="code" id="-edz58z_301">StateKeeper</code> &mdash; это просто адаптер между внутренней системой хранения состояния в Essenty/Decompose и системным <code class="code" id="-edz58z_302">SavedStateRegistry</code> (а значит &mdash; тем самым <code class="code" id="-edz58z_303">onSaveInstanceState</code> в <code class="code" id="-edz58z_304">Activity</code>/<code class="code" id="-edz58z_305">Fragment</code>, только более удобно и декларативно, и с поддержкой сериализации через <code class="code" id="-edz58z_306">kotlinx.serialization</code>).</p><p id="-edz58z_288">Кратко по цепочке:</p><ol class="list _decimal" id="-edz58z_289" type="1"><li class="list__item" id="-edz58z_307"><p id="-edz58z_311">В компоненте <code class="code" id="-edz58z_312">DefaultCounterComponent</code> мы вызываем <code class="code" id="-edz58z_313">consume</code>/<code class="code" id="-edz58z_314">register</code> через интерфейс <code class="code" id="-edz58z_315">StateKeeper</code>.</p></li><li class="list__item" id="-edz58z_308"><p id="-edz58z_316"><code class="code" id="-edz58z_317">StateKeeper</code> реализован как <code class="code" id="-edz58z_318">StateKeeperDispatcher</code>.</p></li><li class="list__item" id="-edz58z_309"><p id="-edz58z_319"><code class="code" id="-edz58z_320">StateKeeperDispatcher</code> внутри себя хранит значения, сериализует их и регистрирует функцию для сохранения в системный <code class="code" id="-edz58z_321">Bundle</code> через <code class="code" id="-edz58z_322">SavedStateRegistry</code>. Важно понять, что значения, которые мы регистрируем в <code class="code" id="-edz58z_323">StateKeeper</code>, не вызывают напрямую <code class="code" id="-edz58z_324">savedStateRegistry.registerSavedStateProvider</code> и не создают отдельные <code class="code" id="-edz58z_325">SavedStateProvider</code>'ы. Всё сохраняется централизованно &mdash; в одном объекте <code class="code" id="-edz58z_326">StateKeeperDispatcher</code>, и только он регистрируется в <code class="code" id="-edz58z_327">SavedStateRegistry</code>.</p></li><li class="list__item" id="-edz58z_310"><p id="-edz58z_328">Всё сериализуется и десериализуется через <code class="code" id="-edz58z_329">kotlinx.serialization</code>, без <code class="code" id="-edz58z_330">Parcelable</code>, <code class="code" id="-edz58z_331">Bundle.putXXX()</code> и прочего boilerplate.</p></li></ol><p id="-edz58z_290">Посмотрим интерфейс <code class="code" id="-edz58z_332">StateKeeper</code> и его прямого наследника <code class="code" id="-edz58z_333">StateKeeperDispatcher</code>:</p><p id="-edz58z_291"><span class="control" id="-edz58z_334">com.arkivanov.essenty.statekeeper.StateKeeper.kt:</span></p><div class="code-block" data-lang="kotlin">
+
+interface StateKeeper {
+
+
+    fun &lt;T : Any&gt; consume(key: String, strategy: DeserializationStrategy&lt;T&gt;): T?
+
+    fun &lt;T : Any&gt; register(key: String, strategy: SerializationStrategy&lt;T&gt;, supplier: () -&gt; T?)
+
+    fun unregister(key: String)
+
+    fun isRegistered(key: String): Boolean
+}
+</div><ol class="list _decimal" id="-edz58z_293" type="1"><li class="list__item" id="-edz58z_335"><p id="-edz58z_339"><span class="control" id="-edz58z_340"><code class="code" id="-edz58z_341">consume</code></span> &mdash; извлекает и удаляет ранее сохранённое значение по заданному ключу, используя стратегию десериализации.</p></li><li class="list__item" id="-edz58z_336"><p id="-edz58z_342"><span class="control" id="-edz58z_343"><code class="code" id="-edz58z_344">register</code></span> &mdash; регистрирует поставщика значения, которое будет сериализовано и сохранено при следующем сохранении состояния.</p></li><li class="list__item" id="-edz58z_337"><p id="-edz58z_345"><span class="control" id="-edz58z_346"><code class="code" id="-edz58z_347">unregister</code></span> &mdash; удаляет ранее зарегистрированного поставщика, чтобы его значение больше не сохранялось.</p></li><li class="list__item" id="-edz58z_338"><p id="-edz58z_348"><span class="control" id="-edz58z_349"><code class="code" id="-edz58z_351">isRegistered</code></span> &mdash; возвращает <code class="code" id="-edz58z_350">true</code>, если по указанному ключу уже зарегистрирован поставщик значения.</p></li></ol><p id="-edz58z_294"><span class="control" id="-edz58z_352">com.arkivanov.essenty.statekeeper.StateKeeperDispatcher.kt:</span></p><div class="code-block" data-lang="kotlin">
+interface StateKeeperDispatcher : StateKeeper {
+
+    fun save(): SerializableContainer
+}
+
+@JsName(&quot;stateKeeperDispatcher&quot;)
+fun StateKeeperDispatcher(savedState: SerializableContainer? = null): StateKeeperDispatcher =
+    DefaultStateKeeperDispatcher(savedState)
+</div><p id="-edz58z_296">Метод <code class="code" id="-edz58z_353">save()</code> в <code class="code" id="-edz58z_354">StateKeeperDispatcher</code> &mdash; это тот самый метод, который мы уже встречали ранее: <code class="code" id="-edz58z_355">dispatcher.save()</code>. Именно он вызывается в момент, когда Android собирается сохранить состояние активности или фрагмента, и через него сериализуются все зарегистрированные значения. Тут мы снова видим функцию <code class="code" id="-edz58z_356">StateKeeperDispatcher</code>, которую уже встречали ранее. Напомню &mdash; это не класс, а фабричная функция, которая создаёт экземпляр <code class="code" id="-edz58z_357">DefaultStateKeeperDispatcher</code> &mdash; единственную реализацию интерфейса <code class="code" id="-edz58z_358">StateKeeperDispatcher</code>:</p><div class="code-block" data-lang="kotlin">
+internal class DefaultStateKeeperDispatcher(
+    savedState: SerializableContainer?,
+) : StateKeeperDispatcher {
+
+    private val savedState: MutableMap&lt;String, SerializableContainer&gt;? = savedState?.consume(strategy = SavedState.serializer())?.map
+    private val suppliers = HashMap&lt;String, Supplier&lt;*&gt;&gt;()
+
+    override fun save(): SerializableContainer {
+        val map = savedState?.toMutableMap() ?: HashMap()
+
+        suppliers.forEach { (key, supplier) -&gt;
+            supplier.toSerializableContainer()?.also { container -&gt;
+                map[key] = container
+            }
+        }
+
+        return SerializableContainer(value = SavedState(map), strategy = SavedState.serializer())
+    }
+
+    private fun &lt;T : Any&gt; Supplier&lt;T&gt;.toSerializableContainer(): SerializableContainer? =
+        supplier()?.let { value -&gt;
+            SerializableContainer(value = value, strategy = strategy)
+        }
+
+    override fun &lt;T : Any&gt; consume(key: String, strategy: DeserializationStrategy&lt;T&gt;): T? =
+        savedState
+            ?.remove(key)
+            ?.consume(strategy = strategy)
+
+    override fun &lt;T : Any&gt; register(key: String, strategy: SerializationStrategy&lt;T&gt;, supplier: () -&gt; T?) {
+        check(!isRegistered(key)) { &quot;Another supplier is already registered with the key: $key&quot; }
+        suppliers[key] = Supplier(strategy = strategy, supplier = supplier)
+    }
+
+    override fun unregister(key: String) {
+        check(isRegistered(key)) { &quot;No supplier is registered with the key: $key&quot; }
+        suppliers -= key
+    }
+
+    override fun isRegistered(key: String): Boolean = key in suppliers
+
+    private class Supplier&lt;T : Any&gt;(
+        val strategy: SerializationStrategy&lt;T&gt;,
+        val supplier: () -&gt; T?,
+    )
+
+    @Serializable
+    private class SavedState(
+        val map: MutableMap&lt;String, SerializableContainer&gt;
+    )
+}
+</div><p id="-edz58z_298">Эта реализация управляет двумя основными структурами:</p><ul class="list _bullet" id="-edz58z_299"><li class="list__item" id="-edz58z_359"><p id="-edz58z_361"><code class="code" id="-edz58z_362">savedState</code> &mdash; карта уже восстановленных значений из <code class="code" id="-edz58z_363">SavedStateRegistry</code>, если они были сохранены ранее;</p></li><li class="list__item" id="-edz58z_360"><p id="-edz58z_364"><code class="code" id="-edz58z_365">suppliers</code> &mdash; все зарегистрированные поставщики значений, которые должны быть сериализованы при следующем сохранении состояния.</p></li></ul><p id="-edz58z_300">Когда вызывается метод <code class="code" id="-edz58z_366">save()</code>, он собирает все текущие значения из <code class="code" id="-edz58z_367">suppliers</code>, сериализует их и упаковывает в <code class="code" id="-edz58z_368">SerializableContainer</code>, который затем сохраняется системой. Восстановление происходит через метод <code class="code" id="-edz58z_369">consume()</code>, где по ключу извлекается значение из <code class="code" id="-edz58z_370">savedState</code> и десериализуется с помощью переданной стратегии.</p></section><section class="chapter"><h3 id="-edz58z_159" data-toc="-edz58z_159">Вывод</h3><p id="-edz58z_371">Мы прошли весь путь &mdash; от компонента, использующего <code class="code" id="-edz58z_379">stateKeeper.consume()</code> и <code class="code" id="-edz58z_380">register()</code>, до конечного объекта, сериализуемого в <code class="code" id="-edz58z_381">Bundle</code>. Разобрали, как <code class="code" id="-edz58z_382">StateKeeper</code> цепляется к <code class="code" id="-edz58z_383">SavedStateRegistry</code>, как значения хранятся внутри <code class="code" id="-edz58z_384">StateKeeperDispatcher</code>, и как именно они сохраняются и восстанавливаются через сериализацию.</p><p id="-edz58z_372"><code class="code" id="-edz58z_385">StateKeeper</code> &mdash; в android это обёртка над Android Saved State API, которая пришла на замену <code class="code" id="-edz58z_386">onSaveInstanceState</code>, но реализована декларативно и кроссплатформенно. Она позволяет сохранять произвольные значения через <code class="code" id="-edz58z_387">kotlinx.serialization</code>, без использования <code class="code" id="-edz58z_388">Parcelable</code>, <code class="code" id="-edz58z_389">Bundle.putX</code>, reflection и других низкоуровневых деталей.</p><p id="-edz58z_373">Давайте визуально глянем на цепочку вызовов что бы понять работу StateKeeper:</p><p id="-edz58z_374"><span class="control" id="-edz58z_390"><code class="code" id="-edz58z_391">StateKeeper.register(...)</code></span>:</p><div class="code-block" data-lang="none">
+DefaultCounterComponent  
+  └── stateKeeper.register(...)  
+        └── StateKeeper (интерфейс)  
+              └── StateKeeperDispatcher (интерфейс)  
+                    └── DefaultStateKeeperDispatcher.register(...)  
+                          └── suppliers[key] = Supplier(...)
+
+StateKeeper(...) // создание при инициализации  
+  └── SavedStateRegistry.registerSavedStateProvider(&quot;state_keeper_key&quot;)  
+        └── dispatcher.save()  
+              └── сериализация значений через kotlinx.serialization  
+                    └── оборачивание в SerializableContainer  
+                          └── Bundle.putSerializable(&quot;state&quot;, ...)
+</div><p id="-edz58z_376"><span class="control" id="-edz58z_392"><code class="code" id="-edz58z_393">StateKeeper.consume(...)</code></span>:</p><div class="code-block" data-lang="none">
+defaultComponentContext()  
+  └── stateKeeper(...)  
+        └── StateKeeper(...)  
+              └── StateKeeperDispatcher(savedState = ...)  
+                    └── DefaultStateKeeperDispatcher.consume(key, strategy)  
+                          └── savedState.remove(key)?.consume(strategy)  
+                                └── SerializableContainer.consume(strategy)  
+                                      └── kotlinx.serialization.decodeFromByteArray(...)
+</div><p id="-edz58z_378">Теперь разберём другой механизм сохранения состояния в Decompose &mdash; точнее, в библиотеке <span class="control" id="-edz58z_394">Essenty</span>, на которой всё построено.</p></section></section><section class="chapter"><h2 id="instancekeeper" data-toc="instancekeeper">InstanceKeeper</h2><p id="-edz58z_395"><span class="control" id="-edz58z_448">InstanceKeeper</span> &mdash; это один из &quot;всадников&quot; <code class="code" id="-edz58z_449">ComponentContext</code>. Его задача &mdash; сохранять произвольные объекты, которые не должны уничтожаться при конфигурационных изменениях (например, при повороте экрана). Это аналог <code class="code" id="-edz58z_450">ViewModel</code> из Android Jetpack, но в контексте кроссплатформенной разработки (KMP).</p><p id="-edz58z_396">Переделаем наш компонент <code class="code" id="-edz58z_451">DefaultCounterComponent</code>, чтобы вместо <code class="code" id="-edz58z_452">StateKeeper</code> использовать <code class="code" id="-edz58z_453">InstanceKeeper</code>:</p><div class="code-block" data-lang="kotlin">
+
+class DefaultCounterComponent(
+    componentContext: ComponentContext
+) : ComponentContext by componentContext {
+
+    val model: StateFlow&lt;Int&gt; field = instanceKeeper.getOrCreate(
+        key = KEY,
+        factory = {
+            object : InstanceKeeper.Instance {
+                val state = MutableStateFlow(0)
+            }
+        }
+    ).state
+
+    fun increase() {
+        model.value++
+    }
+
+    fun decrease() {
+        model.value--
+    }
+
+    companion object {
+        private const val KEY = &quot;counter_state&quot;
+    }
+}
+</div><aside class="prompt" data-type="tip" data-title="" id="-edz58z_398"><p>Обратите внимание: блок `init` был удалён, а изменена только переменная `model`. Всё остальное осталось без изменений.</p></aside><p id="-edz58z_399">Теперь давайте проверим поведение визуально:</p><ol class="list _decimal" id="-edz58z_400" type="1"><li class="list__item" id="-edz58z_454"><p id="-edz58z_456">Как будет вести себя счётчик при изменении конфигурации (именно повороте экрана).</p></li><li class="list__item" id="-edz58z_455"><p id="-edz58z_457">Как будет вести себя счётчик при уничтожении процесса, когда приложение находится в фоне.</p></li></ol><figure data-theme="light" id="-edz58z_401" width="800"><img alt="Screenshot" class="js-gif article__bordered-element" data-gif-src="images/instanceKeeper.gif" width="800" style="width: 800px;"></figure><p id="-edz58z_402">Что мы видим? Счётчик переживает поворот экрана, но обнуляется при смерти процесса. Это как раз поведение <code class="code" id="-edz58z_458">ViewModel</code>, и именно этого мы ожидаем от <code class="code" id="-edz58z_459">InstanceKeeper</code>.</p><p id="-edz58z_403">Теперь давайте посмотрим, как эта конструкция работает под капотом.</p><p id="-edz58z_404">Для начала определим, кто вообще отвечает за хранение <code class="code" id="-edz58z_460">InstanceKeeper</code>. В Essenty (и, соответственно, в Decompose) это интерфейс:</p><div class="code-block" data-lang="kotlin">
+/**
+ * Represents a holder of [InstanceKeeper].
+ */
+interface InstanceKeeperOwner {
+
+    val instanceKeeper: InstanceKeeper
+}
+</div><p id="-edz58z_406">Он реализуется в <code class="code" id="-edz58z_461">GenericComponentContext</code>, а значит, и в <code class="code" id="-edz58z_462">ComponentContext</code>, который используется в каждом компоненте:</p><div class="code-block" data-lang="kotlin">
+interface GenericComponentContext&lt;out T : Any&gt; :
+    LifecycleOwner,
+    StateKeeperOwner,
+    InstanceKeeperOwner,
+    BackHandlerOwner,
+    ComponentContextFactoryOwner&lt;T&gt;
+
+interface ComponentContext : GenericComponentContext&lt;ComponentContext&gt;
+</div><p id="-edz58z_408">Таким образом, цепочка наследования выглядит так: <code class="code" id="-edz58z_463">InstanceKeeperOwner</code> &larr; <code class="code" id="-edz58z_464">GenericComponentContext</code> &larr; <code class="code" id="-edz58z_465">ComponentContext</code> &larr; <code class="code" id="-edz58z_466">DefaultCounterComponent</code>.</p><p id="-edz58z_409">Теперь разберёмся, <span class="control" id="-edz58z_467">откуда приходит реализация</span>.</p><p id="-edz58z_410">В <code class="code" id="-edz58z_468">MainActivity</code> мы создаём компонент верхнего уровня через функцию <code class="code" id="-edz58z_469">defaultComponentContext()</code>. Именно она формирует <code class="code" id="-edz58z_470">ComponentContext</code>, внедряя внутрь все нужные зависимости: <code class="code" id="-edz58z_471">Lifecycle</code>, <code class="code" id="-edz58z_472">StateKeeper</code>, <code class="code" id="-edz58z_473">InstanceKeeper</code>, <code class="code" id="-edz58z_474">BackHandler</code>.</p><div class="code-block" data-lang="kotlin">
+class MainActivity : ComponentActivity() {
+    override fun onCreate(savedInstanceState: Bundle?) {
+        ...
+        val counterComponent = DefaultCounterComponent(defaultComponentContext())
+        ...
+    }
+}
+</div><p id="-edz58z_412">Посмотрим ещё раз на исходники <code class="code" id="-edz58z_475">defaultComponentContext()</code>:</p><div class="code-block" data-lang="kotlin">
+fun &lt;T&gt; T.defaultComponentContext(
+    discardSavedState: Boolean = false,
+    isStateSavingAllowed: () -&gt; Boolean = { true },
+): DefaultComponentContext where
+        T : SavedStateRegistryOwner, T : OnBackPressedDispatcherOwner, T : ViewModelStoreOwner, T : LifecycleOwner =
+    defaultComponentContext(
+        backHandler = BackHandler(onBackPressedDispatcher),
+        discardSavedState = discardSavedState,
+        isStateSavingAllowed = isStateSavingAllowed,
+    )
+</div><p id="-edz58z_414">На этом уровне происходит лишь проксирование вызова &mdash; все зависимости собираются и передаются дальше, в приватную функцию:</p><div class="code-block" data-lang="kotlin">
+private fun &lt;T&gt; T.defaultComponentContext(
+    backHandler: BackHandler?,
+    discardSavedState: Boolean,
+    isStateSavingAllowed: () -&gt; Boolean,
+): DefaultComponentContext where
+        T : SavedStateRegistryOwner, T : ViewModelStoreOwner, T : LifecycleOwner {
+    ...
+    return DefaultComponentContext(
+        lifecycle = lifecycle.asEssentyLifecycle(),
+        stateKeeper = stateKeeper,
+        instanceKeeper = instanceKeeper(discardRetainedInstances = marker == null),
+        backHandler = backHandler,
+    )
+}
+</div><p id="-edz58z_416">Ключевая строка здесь &mdash; <code class="code" id="-edz58z_476">instanceKeeper = instanceKeeper(...)</code>.</p><p id="-edz58z_417">Это и есть та самая точка, где создаётся (или восстанавливается) <code class="code" id="-edz58z_477">InstanceKeeper</code>. Теперь наша задача &mdash; разобраться, что это за функция <code class="code" id="-edz58z_478">instanceKeeper(...)</code>, как она устроена и как реализована логика хранения внутри.</p><p id="-edz58z_418">Начнём с того, что <code class="code" id="-edz58z_479">instanceKeeper</code> &mdash; это функция-расширение для <code class="code" id="-edz58z_480">ViewModelStoreOwner</code>. Она становится доступной внутри <code class="code" id="-edz58z_481">defaultComponentContext</code>, потому что его дженерик явно требует, чтобы вызывающий объект реализовывал интерфейс <code class="code" id="-edz58z_482">ViewModelStoreOwner</code>. Это условие обеспечивает доступ к <code class="code" id="-edz58z_483">ViewModelStore</code>, который и передаётся внутрь <code class="code" id="-edz58z_484">InstanceKeeper(...)</code>. Вот сигнатура этой функции:</p><div class="code-block" data-lang="kotlin">
+/**
+ * Creates a new instance of [InstanceKeeper] and attaches it to the AndroidX [ViewModelStore].
+ *
+ * @param discardRetainedInstances a flag indicating whether any previously retained instances should be
+ * discarded and destroyed or not, default value is `false`.
+ */
+fun ViewModelStoreOwner.instanceKeeper(discardRetainedInstances: Boolean = false): InstanceKeeper =
+    InstanceKeeper(viewModelStore = viewModelStore, discardRetainedInstances = discardRetainedInstances)
+</div><p id="-edz58z_420">На первый взгляд кажется, что <code class="code" id="-edz58z_485">InstanceKeeper</code> &mdash; это класс, но в данном случае это вовсе не конструктор, а функция, возвращающая реализацию интерфейса <code class="code" id="-edz58z_486">InstanceKeeper</code>. Вот как она устроена:</p><div class="code-block" data-lang="kotlin">
+/**
+ * Creates a new instance of [InstanceKeeper] and attaches it to the provided AndroidX [ViewModelStore].
+ *
+ * @param discardRetainedInstances a flag indicating whether any previously retained instances should be
+ * discarded and destroyed or not, default value is `false`.
+ */
+fun InstanceKeeper(
+    viewModelStore: ViewModelStore,
+    discardRetainedInstances: Boolean = false,
+): InstanceKeeper =
+    ViewModelProvider(
+        viewModelStore,
+        object : ViewModelProvider.Factory {
+            @Suppress(&quot;UNCHECKED_CAST&quot;)
+            override fun &lt;T : ViewModel&gt; create(modelClass: Class&lt;T&gt;): T = InstanceKeeperViewModel() as T
+        }
+    )
+        .get&lt;InstanceKeeperViewModel&gt;()
+        .apply {
+            if (discardRetainedInstances) {
+                recreate()
+            }
+        }
+        .instanceKeeperDispatcher
+</div><p id="-edz58z_422">Теперь становится понятно: реализация <code class="code" id="-edz58z_487">InstanceKeeper</code> на Android напрямую завязана на <code class="code" id="-edz58z_488">ViewModelStore</code>. Концепция долгоживущих объектов реализована здесь через обёртку вокруг обычной <code class="code" id="-edz58z_489">ViewModel</code>.</p><p id="-edz58z_423">Создаётся <code class="code" id="-edz58z_490">InstanceKeeperViewModel</code>, и далее из неё извлекается <code class="code" id="-edz58z_491">instanceKeeperDispatcher</code>, который и возвращается как <code class="code" id="-edz58z_492">InstanceKeeper</code>.</p><p id="-edz58z_424">Само API на первый взгляд кажется абстрактным и независимым от Android, но под капотом &mdash; чистый <code class="code" id="-edz58z_493">ViewModel</code>. Причём внутри всей этой логики нет даже намёка на то, что используется Android ViewModel &mdash; всё скрыто за интерфейсом <code class="code" id="-edz58z_494">InstanceKeeper</code>.</p><p id="-edz58z_425">Вот как устроена InstanceKeeperViewModel:</p><div class="code-block" data-lang="kotlin">
+internal class InstanceKeeperViewModel : ViewModel() {
+    var instanceKeeperDispatcher: InstanceKeeperDispatcher = InstanceKeeperDispatcher()
+        private set
+
+    override fun onCleared() {
+        instanceKeeperDispatcher.destroy()
+    }
+
+    fun recreate() {
+        instanceKeeperDispatcher.destroy()
+        instanceKeeperDispatcher = InstanceKeeperDispatcher()
+    }
+}
+</div><p id="-edz58z_427">Что здесь важно:</p><ul class="list _bullet" id="-edz58z_428"><li class="list__item" id="-edz58z_495"><p id="-edz58z_498"><code class="code" id="-edz58z_499">instanceKeeperDispatcher</code> &mdash; это и есть хранилище всех зарегистрированных экземпляров (<code class="code" id="-edz58z_500">InstanceKeeper.Instance</code>).</p></li><li class="list__item" id="-edz58z_496"><p id="-edz58z_501">Метод <code class="code" id="-edz58z_502">onCleared()</code> вызывается, когда ViewModel удаляется из <code class="code" id="-edz58z_503">ViewModelStore</code>. Он вызывает <code class="code" id="-edz58z_504">destroy()</code> у <code class="code" id="-edz58z_505">dispatcher</code>, уничтожая все зарегистрированные экземпляры.</p></li><li class="list__item" id="-edz58z_497"><p id="-edz58z_506">Метод <code class="code" id="-edz58z_507">recreate()</code> позволяет вручную сбросить все ранее сохранённые экземпляры &mdash; полезно, если нужно очистить состояние при пересоздании компонента.</p></li></ul><p id="-edz58z_429">После того как мы поняли, что <code class="code" id="-edz58z_508">InstanceKeeperViewModel</code> возвращает <code class="code" id="-edz58z_509">instanceKeeperDispatcher</code>, возникает логичный вопрос &mdash; что он из себя представляет.</p><div class="code-block" data-lang="kotlin">
+/**
+ * Represents a destroyable [InstanceKeeper].
+ */
+interface InstanceKeeperDispatcher : InstanceKeeper {
+
+    /**
+     * Destroys all existing instances. Instances are not cleared, so that they can be
+     * accessed later. Any new instances will be immediately destroyed.
+     */
+    fun destroy()
+}
+</div><p id="-edz58z_431"><code class="code" id="-edz58z_510">InstanceKeeperDispatcher</code> &mdash; это интерфейс, расширяющий <code class="code" id="-edz58z_511">InstanceKeeper</code> и добавляющий к нему жизненно важную функцию <code class="code" id="-edz58z_512">destroy()</code>. Она уничтожает все текущие экземпляры <code class="code" id="-edz58z_513">Instance</code>, но не очищает их из внутреннего хранилища &mdash; к ним всё ещё можно обращаться при необходимости. Однако любые новые экземпляры, созданные после вызова <code class="code" id="-edz58z_514">destroy()</code>, уничтожаются сразу.</p><p id="-edz58z_432">Метод <code class="code" id="-edz58z_515">destroy()</code> вызывается системой тогда, когда жизненный цикл компонента подходит к концу &mdash; например, при полном удалении из back stack. Это позволяет вовремя освободить ресурсы и завершить фоновые задачи.</p><p id="-edz58z_433">Реализация создаётся через фабричную функцию:</p><div class="code-block" data-lang="kotlin">
+/**
+ * Creates a default implementation of [InstanceKeeperDispatcher].
+ */
+@JsName(&quot;instanceKeeperDispatcher&quot;)
+fun InstanceKeeperDispatcher(): InstanceKeeperDispatcher = DefaultInstanceKeeperDispatcher()
+</div><p id="-edz58z_435">Теперь разберём, что собой представляет сам <code class="code" id="-edz58z_516">InstanceKeeper</code>.</p><div class="code-block" data-lang="kotlin">
+/**
+ * A generic keyed store of [Instance] objects. Instances are destroyed at the end of the
+ * [InstanceKeeper]'s scope, which is typically tied to the scope of a back stack entry.
+ * E.g. instances are retained over Android configuration changes, and destroyed when the
+ * corresponding back stack entry is popped.
+ */
+interface InstanceKeeper {
+
+    fun get(key: Any): Instance?
+
+    fun put(key: Any, instance: Instance)
+
+    fun remove(key: Any): Instance?
+
+    interface Instance {
+        fun onDestroy() {}
+    }
+
+    class SimpleInstance&lt;out T&gt;(val instance: T) : Instance
+}
+</div><p id="-edz58z_437"><code class="code" id="-edz58z_517">InstanceKeeper</code> &mdash; это ключевое хранилище долгоживущих объектов, которые переживают конфигурационные изменения, но уничтожаются при окончательном завершении жизненного цикла компонента. Типичный пример &mdash; удаление элемента из back stack.</p><p id="-edz58z_438">Хранилище работает по принципу <code class="code" id="-edz58z_518">key -&gt; Instance</code> и предоставляет методы для получения, сохранения и удаления объектов.</p><p id="-edz58z_439">Сам интерфейс <code class="code" id="-edz58z_519">Instance</code> минимален: чтобы объект стал управляемым, нужно реализовать единственный метод <code class="code" id="-edz58z_520">onDestroy()</code>. Он будет вызван системой при уничтожении компонента &mdash; это аналог <code class="code" id="-edz58z_521">onCleared()</code> у <code class="code" id="-edz58z_522">ViewModel</code>, но с более гибким контролем.</p><p id="-edz58z_440">А для случаев, когда никакая очистка не требуется, можно использовать обёртку <code class="code" id="-edz58z_523">SimpleInstance</code>. Она реализует <code class="code" id="-edz58z_524">Instance</code>, но ничего не делает в <code class="code" id="-edz58z_525">onDestroy()</code> &mdash; просто превращает любой объект в совместимый с <code class="code" id="-edz58z_526">InstanceKeeper</code>.</p><p id="-edz58z_441">Теперь давай посмотрим, как работает сама реализация хранилища:</p><div class="code-block" data-lang="kotlin">
+internal class DefaultInstanceKeeperDispatcher : InstanceKeeperDispatcher {
+
+    private val map = HashMap&lt;Any, Instance&gt;()
+    private var isDestroyed = false
+
+    override fun get(key: Any): Instance? =
+        map[key]
+
+    override fun put(key: Any, instance: Instance) {
+        check(key !in map) { &quot;Another instance is already associated with the key: $key&quot; }
+
+        map[key] = instance
+
+        if (isDestroyed) {
+            instance.onDestroy()
+        }
+    }
+
+    override fun remove(key: Any): Instance? =
+        map.remove(key)
+
+    override fun destroy() {
+        if (!isDestroyed) {
+            isDestroyed = true
+            map.values.toList().forEach(Instance::onDestroy)
+        }
+    }
+}
+</div><p id="-edz58z_443"><code class="code" id="-edz58z_527">DefaultInstanceKeeperDispatcher</code> &mdash; это конкретная реализация <code class="code" id="-edz58z_528">InstanceKeeperDispatcher</code>. Внутри у него обычная <code class="code" id="-edz58z_529">HashMap</code>, где по ключу хранятся все текущие <code class="code" id="-edz58z_530">Instance</code>. Метод <code class="code" id="-edz58z_531">put()</code> добавляет объект, предварительно проверяя, что ключ не занят. Флаг <code class="code" id="-edz58z_532">isDestroyed</code> позволяет отслеживать, завершена ли уже работа хранилища &mdash; если <code class="code" id="-edz58z_533">true</code>, то даже только что добавленный объект сразу уничтожается через <code class="code" id="-edz58z_534">onDestroy()</code>.</p><p id="-edz58z_444">Метод <code class="code" id="-edz58z_535">destroy()</code> проходит по всем зарегистрированным объектам и вызывает <code class="code" id="-edz58z_536">onDestroy()</code> у каждого. При этом сами объекты остаются в <code class="code" id="-edz58z_537">map</code>, чтобы, если нужно, можно было к ним обратиться позже &mdash; хотя новые уже не будут жить.</p><p id="-edz58z_445">Теперь &mdash; о том, что мы используем в нашем компоненте <code class="code" id="-edz58z_538">DefaultCounterComponent</code>. Там вызывается не <code class="code" id="-edz58z_539">put</code>, а <code class="code" id="-edz58z_540">getOrCreate</code>, и вот как он работает:</p><div class="code-block" data-lang="kotlin">
+inline fun &lt;T : InstanceKeeper.Instance&gt; InstanceKeeper.getOrCreate(key: Any, factory: () -&gt; T): T {
+    @Suppress(&quot;UNCHECKED_CAST&quot;)
+    var instance: T? = get(key) as T?
+    if (instance == null) {
+        instance = factory()
+        put(key, instance)
+    }
+
+    return instance
+}
+</div><p id="-edz58z_447">Метод <code class="code" id="-edz58z_541">getOrCreate()</code> &mdash; это удобный хелпер: сначала он пробует достать объект по ключу, и если такого ещё нет, &mdash; создаёт его через <code class="code" id="-edz58z_542">factory()</code> и сохраняет. Используется он в 90% случаев, потому что избавляет от ручной проверки наличия и двойного кода.</p></section><section class="chapter"><h2 id="defaultcomponentcontext" data-toc="defaultcomponentcontext">DefaultComponentContext</h2><p id="-edz58z_543">На протяжении всей статьи мы много раз касались функции <code class="code" id="-edz58z_549">defaultComponentContext()</code> &mdash; именно она выступает точкой входа, где собираются все зависимости компонента:</p><div class="code-block" data-lang="kotlin">
+private fun &lt;T&gt; T.defaultComponentContext(
+    backHandler: BackHandler?,
+    discardSavedState: Boolean,
+    isStateSavingAllowed: () -&gt; Boolean,
+): DefaultComponentContext where
+        T : SavedStateRegistryOwner, T : ViewModelStoreOwner, T : LifecycleOwner {
+    val stateKeeper = stateKeeper(discardSavedState = discardSavedState, isSavingAllowed = isStateSavingAllowed)
+    val marker = stateKeeper.consume(key = KEY_STATE_MARKER, strategy = String.serializer())
+    stateKeeper.register(key = KEY_STATE_MARKER, strategy = String.serializer()) { &quot;marker&quot; }
+
+    return DefaultComponentContext(
+        lifecycle = lifecycle.asEssentyLifecycle(),
+        stateKeeper = stateKeeper,
+        instanceKeeper = instanceKeeper(discardRetainedInstances = marker == null),
+        backHandler = backHandler,
+    )
+}
+
+private const val KEY_STATE_MARKER = &quot;DefaultComponentContext_state_marker&quot;
+</div><p id="-edz58z_545">Мы уже детально разобрали, откуда здесь берётся <code class="code" id="-edz58z_550">StateKeeper</code>, как создаётся <code class="code" id="-edz58z_551">InstanceKeeper</code>, и какую роль играет <code class="code" id="-edz58z_552">marker</code>. Но до сих пор мы не смотрели внутрь самого <code class="code" id="-edz58z_553">DefaultComponentContext</code> &mdash; давай это исправим:</p><div class="code-block" data-lang="kotlin">
+class DefaultComponentContext(
+    override val lifecycle: Lifecycle,
+    stateKeeper: StateKeeper? = null,
+    instanceKeeper: InstanceKeeper? = null,
+    backHandler: BackHandler? = null,
+) : ComponentContext {
+
+    override val stateKeeper: StateKeeper = stateKeeper ?: StateKeeperDispatcher()
+    override val instanceKeeper: InstanceKeeper = instanceKeeper ?: InstanceKeeperDispatcher().attachTo(lifecycle)
+    override val backHandler: BackHandler = backHandler ?: BackDispatcher()
+    override val componentContextFactory: ComponentContextFactory&lt;ComponentContext&gt; =
+        ComponentContextFactory(::DefaultComponentContext)
+
+    constructor(lifecycle: Lifecycle) : this(
+        lifecycle = lifecycle,
+        stateKeeper = null,
+        instanceKeeper = null,
+        backHandler = null,
+    )
+}
+</div><p id="-edz58z_547">Как видно, <code class="code" id="-edz58z_554">DefaultComponentContext</code> &mdash; это просто удобный бандл, который объединяет в себе <code class="code" id="-edz58z_555">Lifecycle</code>, <code class="code" id="-edz58z_556">StateKeeper</code>, <code class="code" id="-edz58z_557">InstanceKeeper</code> и <code class="code" id="-edz58z_558">BackHandler</code>. Если какие-то зависимости не были переданы извне &mdash; он сам создаёт дефолтные реализации. Всё это обёрнуто в единый объект <code class="code" id="-edz58z_559">ComponentContext</code>, который дальше передаётся в компоненты и навигационные структуры.</p><p id="-edz58z_548">Таким образом, <code class="code" id="-edz58z_560">DefaultComponentContext</code> можно считать связующим звеном между Android-инфраструктурой и кроссплатформенной архитектурой Decompose &mdash; он превращает низкоуровневые сущности в универсальный интерфейс.</p></section><section class="chapter"><h2 id="-edz58z_9" data-toc="-edz58z_9">Финал</h2><p id="-edz58z_561">Если вы дошли до этого момента &mdash; значит, прошли со мной весь путь по хранению состояний в Android на глубоком, подкапотном уровне: от того, где реально живёт <code class="code" id="-edz58z_565">ViewModelStore</code> в <code class="code" id="-edz58z_566">Activity</code> и <code class="code" id="-edz58z_567">Fragment</code>, до того, как <code class="code" id="-edz58z_568">ViewModel</code> хранятся в <code class="code" id="-edz58z_569">Compose</code> и <code class="code" id="-edz58z_570">View</code>, как работает <code class="code" id="-edz58z_571">Saved State API</code>, чем отличается от <code class="code" id="-edz58z_572">onSaveInstanceState</code>, и где в итоге оказывается <code class="code" id="-edz58z_573">Bundle</code>.</p><p id="-edz58z_562">В последней части мы разобрали, как устроена логика сохранения состояния в <code class="code" id="-edz58z_574">Decompose</code> и <code class="code" id="-edz58z_575">Essenty</code>, чтобы снять иллюзию &quot;магии&quot; и показать, что под капотом &mdash; всё те же стандартные механизмы Android, просто обёрнутые в более универсальный API. Всё это рассматривалось строго через призму хранения и восстановления данных.</p><p id="-edz58z_563">Эта статья завершает серию. Всё, что здесь написано &mdash; не документация и не руководство. Это просто попытка заглянуть внутрь, разобраться и собрать цельную картину.</p><p id="-edz58z_564">Если посчитаете, что это может быть полезно кому-то ещё &mdash; можете поделиться. Если захотите обсудить или предложить правки &mdash; я открыт.</p></section><div class="last-modified">01 июля 2025</div><div data-feedback-placeholder="true"></div><div class="navigation-links _bottom"><a href="saved-state-handle-under-the-hood.html" class="navigation-links__prev">SavedStateHandle и Bundle под капотом: как Android сохраняет состояние</a></div></article><div id="disqus_thread"></div></div></section></main></div><script src="https://resources.jetbrains.com/writerside/apidoc/6.22.0-b776/app.js"></script></body></html>
