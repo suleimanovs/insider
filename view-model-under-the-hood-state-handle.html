@@ -1,0 +1,194 @@
+<!DOCTYPE html SYSTEM "about:legacy-compat">
+<html lang="en-US" data-preset="contrast" data-primary-color="#1B9F8E" data-link-color="#57B747" data-content-max-width="1600" data-resizable-sidebar="true"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8"><meta charset="UTF-8"><meta name="built-on" content="2025-05-13T19:12:40.696925"><title>&lt;view-model-under-the-hood-state-handle.md&gt; | suleimanov</title><script type="application/json" id="virtual-toc-data">[{"id":"-j0sw2u_3","level":0,"title":"Введение","anchor":"#-j0sw2u_3"},{"id":"-j0sw2u_4","level":0,"title":"Базис","anchor":"#-j0sw2u_4"},{"id":"onsaveinstancestate-onrestoreinstancestate","level":0,"title":"onSaveInstanceState/ onRestoreInstanceState","anchor":"#onsaveinstancestate-onrestoreinstancestate"},{"id":"saved-state-api","level":0,"title":"Saved State Api","anchor":"#saved-state-api"},{"id":"registersavedstateprovider","level":0,"title":"Метод registerSavedStateProvider","anchor":"#registersavedstateprovider"},{"id":"savedstateprovider","level":0,"title":"Интерфейс SavedStateProvider","anchor":"#savedstateprovider"},{"id":"consumerestoredstateforkey","level":0,"title":"Метод consumeRestoredStateForKey","anchor":"#consumerestoredstateforkey"},{"id":"unregistersavedstateprovider","level":0,"title":"Метод unregisterSavedStateProvider","anchor":"#unregistersavedstateprovider"},{"id":"getsavedstateprovider","level":0,"title":"Метод getSavedStateProvider","anchor":"#getsavedstateprovider"},{"id":"-j0sw2u_12","level":0,"title":"Пример использования","anchor":"#-j0sw2u_12"},{"id":"-j0sw2u_13","level":0,"title":"Лог выполнения","anchor":"#-j0sw2u_13"},{"id":"kmp-kotlin-multiplatform","level":0,"title":"KMP (Kotlin Multiplatform)","anchor":"#kmp-kotlin-multiplatform"}]</script><script type="application/json" id="topic-shortcuts"></script><link href="https://resources.jetbrains.com/writerside/apidoc/6.22.0-b776/app.css" rel="stylesheet"><link href="static/style.css" rel="stylesheet"><link rel="icon" type="image/png" sizes="16x16" href="https://iili.io/3eop8YX.png"><meta name="image" content=""><!-- Open Graph --><meta property="og:title" content="&lt;view-model-under-the-hood-state-handle.md&gt; | suleimanov"><meta property="og:description" content=""><meta property="og:image" content=""><meta property="og:site_name" content="suleimanov Help"><meta property="og:type" content="website"><meta property="og:locale" content="en_US"><meta property="og:url" content="writerside-documentation//1.0/view-model-under-the-hood-state-handle.html"><!-- End Open Graph --><!-- Twitter Card --><meta name="twitter:card" content="summary_large_image"><meta name="twitter:site" content=""><meta name="twitter:title" content="&lt;view-model-under-the-hood-state-handle.md&gt; | suleimanov"><meta name="twitter:description" content=""><meta name="twitter:creator" content=""><meta name="twitter:image:src" content=""><!-- End Twitter Card --><!-- Schema.org WebPage --><script type="application/ld+json">{
+    "@context": "http://schema.org",
+    "@type": "WebPage",
+    "@id": "writerside-documentation//1.0/view-model-under-the-hood-state-handle.html#webpage",
+    "url": "writerside-documentation//1.0/view-model-under-the-hood-state-handle.html",
+    "name": "&lt;view-model-under-the-hood-state-handle.md&gt; | suleimanov",
+    "description": "",
+    "image": "",
+    "inLanguage":"en-US"
+}</script><!-- End Schema.org --><!-- Schema.org WebSite --><script type="application/ld+json">{
+    "@type": "WebSite",
+    "@id": "writerside-documentation/#website",
+    "url": "writerside-documentation/",
+    "name": "suleimanov Help"
+}</script><!-- End Schema.org --></head><body data-id="view-model-under-the-hood-state-handle" data-main-title="&lt;view-model-under-the-hood-state-handle.md&gt;" data-article-props="{&quot;seeAlsoStyle&quot;:&quot;links&quot;}" data-template="article" data-breadcrumbs=""><div class="wrapper"><main class="panel _main"><header class="panel__header"><div class="container"><h3>suleimanov 1.0 Help</h3><div class="panel-trigger"></div></div></header><section class="panel__content"><div class="container"><article class="article" data-shortcut-switcher="inactive"><h1 data-toc="view-model-under-the-hood-state-handle" id="view-model-under-the-hood-state-handle.md">&lt;view-model-under-the-hood-state-handle.md&gt;</h1><p id="-j0sw2u_2">Это продолжение трех предыдущих статей.</p><section class="chapter"><h2 id="-j0sw2u_3" data-toc="-j0sw2u_3">Введение</h2><ol class="list _decimal" id="-j0sw2u_15" type="1"><li class="list__item" id="-j0sw2u_17"><p id="-j0sw2u_20">В первой мы разобрали, где в конечном итоге хранится <code class="code" id="-j0sw2u_21">ViewModelStore</code> в случае с <code class="code" id="-j0sw2u_22">Activity</code>,</p></li><li class="list__item" id="-j0sw2u_18"><p id="-j0sw2u_23">Во второй &mdash; как это устроено во <code class="code" id="-j0sw2u_24">Fragment</code>,</p></li><li class="list__item" id="-j0sw2u_19"><p id="-j0sw2u_25">В третьей где хранятся <code class="code" id="-j0sw2u_26">ViewModel</code>-и, когда мы используем <span class="control" id="-j0sw2u_27">Compose</span> (или даже просто <code class="code" id="-j0sw2u_28">View</code>).</p></li></ol><p id="-j0sw2u_16">В этой статье рассмотрим Где хранится SavedStateHandle, SavedStateHandle vs onSaveInstanceState vs ViewModel(ViewModelStore) Особенно когда мы объявляем <code class="code" id="-j0sw2u_29">ViewModel</code> прямо внутри <code class="code" id="-j0sw2u_30">Composable</code> функций. Но, как всегда, начнём с базиса.</p></section><section class="chapter"><h2 id="-j0sw2u_4" data-toc="-j0sw2u_4">Базис</h2><p id="-j0sw2u_31">В статье не будет описания как работать с этими Api, а будет о том как они работают изнутри, по этому я буду пологаться на то что вы уже работали с ними. Как всегда начнем с базиса, давайте сначала дадим определения для SavedStateHandle, onSaveInstanceState, ViewModel:</p><p id="-j0sw2u_32"><span class="control" id="-j0sw2u_38">ViewModel</span> - компонент архитектурного паттерна MVVM, который был предоставлен Google как примитив позволяющий пережить изменение конфигураций. Изменение конфигураций в свою очередь - это состояние, заставляющая activity/fragment пересоздаваться, это именно то состояние которое может пережить ViewModel. Увы на этом обьязанности ViewModel по хранению данных заканчивается</p><p id="-j0sw2u_33">Если proccess приложения умирает или прырывается proccess , то в таком случае ViewModel не справится, по этому тут в дело входит старый добрый метод onSaveInstanceState/onRestoreInstanceState</p><p id="-j0sw2u_34"><span class="control" id="-j0sw2u_39">onSaveInstanceState/onRestoreInstanceState</span> &mdash; это методы жизненного цикла Activity, Fragment и View(да View тоже может сохронять состояние) которые позволяют сохранять и восстанавливать временное состояние пользовательского интерфейса при изменениях конфигурации (например, при повороте экрана) или при полном уничтожении активности из-за нехватки ресурсов. В onSaveInstanceState данные сохраняются в Bundle, который автоматически передаётся в метод onRestoreInstanceState при восстановлении активности.</p><p id="-j0sw2u_35">Это базовый механизм для хранения состояния примитивных(и их массивы) типов данных, Parcelable/ Serializeble и еще пару нативных андроид типов, но он требует явного указания того, что именно нужно сохранить.</p><p id="-j0sw2u_36"><span class="control" id="-j0sw2u_40">SavedState API</span> &mdash; это современная альтернатива методу onSaveInstanceState, которая более гибко управляет состоянием, особенно в связке с ViewModel.</p><p id="-j0sw2u_37"><span class="control" id="-j0sw2u_41">SavedStateHandle</span> &mdash; это объект, предоставленный в конструкторе ViewModel, который позволяет безопасно сохранять и восстанавливать данные, даже если процесс был уничтожен. В отличие от статичного использования onSaveInstanceState, SavedStateHandle предоставляет так же возможность подписаться на Flow, LiveData данные которые он хранит и восстанавливает Он автоматически интегрирован с ViewModel и поддерживает сохранение состояния при изменениях конфигурации, а также при полном уничтожении приложения(процесса). Дополнительное преимущество &mdash; это возможность подписываться на изменения значений в SavedStateHandle, получая реактивное поведение прямо в ViewModel.</p></section><section class="chapter"><h2 id="onsaveinstancestate-onrestoreinstancestate" data-toc="onsaveinstancestate-onrestoreinstancestate">onSaveInstanceState/ onRestoreInstanceState</h2><p id="-j0sw2u_42">Давайте так же освижим память о методах onSaveInstanceState/ onRestoreInstanceState:</p><div class="code-block" data-lang="kotlin">
+class RestoreActivity : AppCompatActivity() {
+
+    private var counter = 0
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        // Восстановление значения при пересоздании
+        counter = savedInstanceState?.getInt(&quot;counter_key&quot;) ?: 0
+    }
+
+    override fun onRestoreInstanceState(savedInstanceState: Bundle) {
+        super.onRestoreInstanceState(savedInstanceState)
+        // Восстановление значения при пересоздании
+        counter = savedInstanceState.getInt(&quot;counter_key&quot;)
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        // Сохраняем значение
+        outState.putInt(&quot;counter_key&quot;, counter)
+        Log.d(&quot;MainActivity&quot;, &quot;onSaveInstanceState: Counter saved = $counter&quot;)
+    }
+}
+</div><p id="-j0sw2u_44"><span class="control" id="-j0sw2u_50">onSaveInstanceState</span> &mdash; вызывается для получения состояния Activity перед её уничтожением, чтобы это состояние могло быть восстановлено в методах <code class="code" id="-j0sw2u_51">onCreate</code> или <code class="code" id="-j0sw2u_52">onRestoreInstanceState</code>. <code class="code" id="-j0sw2u_53">Bundle</code>, заполненный в этом методе, будет передан в оба метода.</p><p id="-j0sw2u_45">Этот метод вызывается перед тем, как активность может быть уничтожена, чтобы в будущем, при повторном создании, она могла восстановить своё состояние. Не следует путать этот метод с методами жизненного цикла, такими как <code class="code" id="-j0sw2u_54">onPause</code>, который всегда вызывается, когда пользователь больше не взаимодействует с активностью, или <code class="code" id="-j0sw2u_55">onStop</code>, который вызывается, когда активность становится невидимой. Пример, когда <code class="code" id="-j0sw2u_56">onPause</code> и <code class="code" id="-j0sw2u_57">onStop</code> вызываются, но <code class="code" id="-j0sw2u_58">onSaveInstanceState</code> &mdash; нет: пользователь возвращается из Activity B в Activity A &mdash; в этом случае состояние B не требуется восстанавливать, поэтому <code class="code" id="-j0sw2u_59">onSaveInstanceState</code> для B не вызывается. Другой пример: если Activity B запускается поверх Activity A, но A остаётся в памяти, то <code class="code" id="-j0sw2u_60">onSaveInstanceState</code> для A также не вызывается, так как его состояние остаётся неизменным.</p><p id="-j0sw2u_46">Реализация по умолчанию этого метода автоматически сохраняет большую часть состояния пользовательского интерфейса, вызывая метод <code class="code" id="-j0sw2u_61">onSaveInstanceState()</code> у каждого представления (<code class="code" id="-j0sw2u_62">View</code>) в иерархии, у которого есть ID, и сохраняя ID элемента, который был в фокусе. Восстановление этих данных будет происходить в стандартной реализации метода <code class="code" id="-j0sw2u_63">onRestoreInstanceState()</code>. Если метод переопределяется для сохранения дополнительной информации, которая не захвачена отдельными представлениями, рекомендуется вызвать реализацию по умолчанию через <code class="code" id="-j0sw2u_64">super.onSaveInstanceState(outState)</code>. В противном случае разработчику придётся вручную сохранять состояние всех представлений.</p><p id="-j0sw2u_47">Если метод вызывается, то это произойдёт <span class="control" id="-j0sw2u_65">после <code class="code" id="-j0sw2u_68">onStop</code></span> для приложений, нацеленных на платформы, начиная с Android P. Для более ранних версий Android этот метод будет вызван <span class="control" id="-j0sw2u_66">до <code class="code" id="-j0sw2u_69">onStop</code></span>, и нет никаких гарантий, будет ли он вызван до или после <code class="code" id="-j0sw2u_67">onPause</code>.</p><p id="-j0sw2u_48"><span class="control" id="-j0sw2u_70">onRestoreInstanceState</span> &mdash; этот метод вызывается <span class="control" id="-j0sw2u_71">после</span> <code class="code" id="-j0sw2u_72">onStart</code>, когда активность повторно инициализируется из ранее сохранённого состояния, переданного в <code class="code" id="-j0sw2u_73">savedInstanceState</code>. Большинство реализаций используют для восстановления состояния метод <code class="code" id="-j0sw2u_74">onCreate</code>, но иногда бывает удобнее делать это здесь, после того как завершена вся инициализация, или чтобы подклассы могли решить, использовать ли вашу реализацию по умолчанию. Стандартная реализация этого метода восстанавливает состояние представлений (View), которое было ранее заморожено методом <code class="code" id="-j0sw2u_75">onSaveInstanceState</code>. Этот метод вызывается <span class="control" id="-j0sw2u_76">между <code class="code" id="-j0sw2u_80">onStart</code> и <code class="code" id="-j0sw2u_81">onPostCreate</code></span>. Он срабатывает <span class="control" id="-j0sw2u_77">только при повторном создании активности</span>; метод <span class="control" id="-j0sw2u_78">не вызывается</span>, если <code class="code" id="-j0sw2u_79">onStart</code> был вызван по любой другой причине (например, при переходе из фона на передний план).</p><p id="-j0sw2u_49">На этом примере временно забываем о них, чуть позже мы их снова встретим в более низкоуровневых цепочках вызовов.</p></section><section class="chapter"><h2 id="saved-state-api" data-toc="saved-state-api">Saved State Api</h2><p id="-j0sw2u_82">Тот же Пример что и выше, только переписанный с использованием Saved State Api, делает ровно тоже самое:</p><div class="code-block" data-lang="kotlin">
+class RestoreActivity : AppCompatActivity() {
+
+    private var counter = 0
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        savedStateRegistry.registerSavedStateProvider(
+            key = &quot;counter_key&quot;,
+            provider = object : SavedStateRegistry.SavedStateProvider {
+                override fun saveState(): SavedState {
+                    return SavedState(bundleOf(&quot;counter&quot; to counter))
+                }
+            }
+        )
+
+        // Восстановление значения при пересоздании
+        counter = savedStateRegistry.consumeRestoredStateForKey(&quot;counter_key&quot;)?.getInt(&quot;counter&quot;, 0) ?: 0
+    }
+}
+</div><p id="-j0sw2u_84">Мы вызываем у объекта savedStateRegistry метод registerSavedStateProvider куда передаем key и анонимный объект SavedStateRegistry.SavedStateProvider который возвращает bundle обернутый в объект SavedState, давайте сейчас же определим что из себя представляет этот тип SavedState, если зайти в исходники, а именно в expect логику, то тип описан следующим образом: androidx.savedstate.SavedState.kt</p><div class="code-block" data-lang="kotlin">
+/**
+* An opaque (empty) common type that holds saveable values to be saved and restored by native
+* platforms that have a concept of System-initiated Process Death.
+*
+* That means, the OS will give the chance for the process to keep the state of the application
+* (normally using a serialization mechanism), and allow the app to restore its state later. That is
+* commonly referred to as &quot;state restoration&quot;.
+*
+* required to act as a source input for a [SavedStateReader] or [SavedStateWriter].
+*
+* This class represents a container for persistable state data. It is designed to be
+* platform-agnostic, allowing seamless state saving and restoration across different environments.
+  */
+  public expect class SavedState
+</div><p id="-j0sw2u_86">в контексте android нас интересует именно actual реализация, по этому далее специфичная для android actual: androidx.savedstate.SavedState.android.kt</p><div class="code-block" data-lang="kotlin">
+public actual typealias SavedState = android.os.Bundle
+</div><p id="-j0sw2u_88">Как видим в android нет на самом деле какого-то типа как SavedState, в actual реализаций это просто typealias который ссылается на тот же старый добрый родной класс Bundle, по этому всегда представляйте что там где используется SavedState - на самом деле используется класс Bundle, и ничто нам не мешает не использовать двоную обертку, а напрямую вернуть сам bundle:</p><div class="code-block" data-lang="none">
+savedStateRegistry.registerSavedStateProvider(
+    key = &quot;counter_key&quot;,
+    provider = object : SavedStateRegistry.SavedStateProvider {
+        override fun saveState(): SavedState {
+           return bundleOf(&quot;counter&quot; to counter)
+        }
+    }
+)
+</div><p id="-j0sw2u_90">Раз с этим разобрались, дальше давайте зайдем в исходники метода registerSavedStateProvider, этот метод вызывается у переменной savedStateRegistry которая имеет тип SavedStateRegistry, давайте быстро узнаем определение этого класса:</p><p id="-j0sw2u_91"><span class="control" id="-j0sw2u_107"><code class="code" id="-j0sw2u_108">SavedStateRegistry</code></span> - управляет сохранением и восстановлением сохранённого состояния, чтобы данные не терялись при пересоздании компонентов. Реализация привязана к SavedStateRegistryImpl, которая отвечает за фактическое хранение и восстановление данных. Интерфейс для подключения компонентов, которые потребляют и вносят данные в сохранённое состояние. Объект имеет такой же жизненный цикл, как и его владелец (Activity или Fragment): когда Activity или Fragment пересоздаются (например, при повороте экрана или изменении конфигурации), создаётся новый экземпляр этого объекта.</p><p id="-j0sw2u_92">Но откуда береться <code class="code" id="-j0sw2u_109">savedStateRegistry</code> переменная внутри activity мы рассмотрим позже, пока достаточно знать что он есть у activity, далее исходники метода registerSavedStateProvider пренадлежащий классу <code class="code" id="-j0sw2u_110">SavedStateRegistry</code> (expect): <span class="control" id="-j0sw2u_111">androidx.savedstate.SavedStateRegistry.kt</span></p><div class="code-block" data-lang="none">
+public expect class SavedStateRegistry internal constructor(
+    impl: SavedStateRegistryImpl,
+) {
+
+    /** This interface marks a component that contributes to saved state. */
+    public fun interface SavedStateProvider {
+        
+        public fun saveState(): SavedState
+    }
+
+    ...
+    public val isRestored: Boolean
+    ...
+    @MainThread public fun consumeRestoredStateForKey(key: String): SavedState?
+    ...
+    @MainThread public fun registerSavedStateProvider(key: String, provider: SavedStateProvider)
+    ...
+    public fun getSavedStateProvider(key: String): SavedStateProvider?
+    ...
+    @MainThread public fun unregisterSavedStateProvider(key: String)
+}
+</div><p id="-j0sw2u_94">в expect версий нет реализаций, только сигнатуры методов, так же мы увидели исходники интерфейса SavedStateProvider который является каллбэком для получения bundle который нужно сохранить, что бы увидеть реализацию метода registerSavedStateProvider, надо поискать <span class="control" id="-j0sw2u_112">actual реализацию, далее actual реализация SavedStateRegistry:</span></p><div class="code-block" data-lang="kotlin">
+public actual class SavedStateRegistry internal actual constructor(
+    private val impl: SavedStateRegistryImpl,
+) {
+
+    @get:MainThread
+    public actual val isRestored: Boolean
+        get() = impl.isRestored
+
+    @MainThread
+    public actual fun consumeRestoredStateForKey(key: String): SavedState? =
+        impl.consumeRestoredStateForKey(key)
+
+    @MainThread
+    public actual fun registerSavedStateProvider(key: String, provider: SavedStateProvider) {
+        impl.registerSavedStateProvider(key, provider)
+    }
+
+    public actual fun getSavedStateProvider(key: String): SavedStateProvider? =
+        impl.getSavedStateProvider(key)
+
+    @MainThread
+    public actual fun unregisterSavedStateProvider(key: String) {
+        impl.unregisterSavedStateProvider(key)
+    }
+
+    public actual fun interface SavedStateProvider {
+        public actual fun saveState(): SavedState
+    }
+    ...
+}
+</div><p id="-j0sw2u_96">actual реализация делегирует свои вызовы готовой имплементацией SavedStateRegistryImpl:</p><p id="-j0sw2u_97">Давайте начнем разбираться, начнем рассматривать поэтапно:</p><div class="code-block" data-lang="kotlin">
+savedStateRegistry.registerSavedStateProvider(key = &quot;counter_key&quot;) { 
+    SavedState(bundleOf(&quot;counter&quot; to counter)) 
+}
+</div><p id="-j0sw2u_99">внутри activity нам доступна поле savedStateRegistry, это поле доступна так потому что Activity реализует interface SavedStateRegistryOwner если зайти в исходники то можно это увидеть что ComponentActivity реализует интерфейс SavedStateRegistryOwner, на самом деле ComponentActivity реализует много интерфейсов, в исходниках ниже опущены родители.:</p><div class="code-block" data-lang="none">
+open class ComponentActivity() : ..., SavedStateRegistryOwner, ... {
+     
+    final override val savedStateRegistry: SavedStateRegistry
+        get() = savedStateRegistryController.savedStateRegistry
+        
+}
+</div><p id="-j0sw2u_101">SavedStateRegistryOwner - это просто interface который хранит в себе SavedStateRegistry, его реализует Activity, Fragment и NavBackStackEntry,</p><p id="-j0sw2u_102"><code class="code" id="-j0sw2u_113">SavedStateRegistry</code> &mdash; это механизм для сохранения состояния компонентов Android (в основном <code class="code" id="-j0sw2u_114">Activity</code> и <code class="code" id="-j0sw2u_115">Fragment</code>) при изменениях конфигурации (поворот экрана, изменение языка и т.п.) или уничтожении приложения. Этот механизм позволяет сохранять данные в объекте <code class="code" id="-j0sw2u_116">Bundle</code>, который автоматически восстанавливается при пересоздании компонента.</p><p id="-j0sw2u_103"><code class="code" id="-j0sw2u_117">SavedStateRegistry</code> доступен в любом компоненте, реализующем интерфейс <code class="code" id="-j0sw2u_118">SavedStateRegistryOwner</code>. Этим интерфейсом обладают:</p><ul class="list _bullet" id="-j0sw2u_104"><li class="list__item" id="-j0sw2u_119"><p id="-j0sw2u_121"><code class="code" id="-j0sw2u_122">ComponentActivity</code> &mdash; это базовый класс для всех современных <code class="code" id="-j0sw2u_123">Activity</code>.</p></li><li class="list__item" id="-j0sw2u_120"><p id="-j0sw2u_124"><code class="code" id="-j0sw2u_125">Fragment</code> &mdash; любой <code class="code" id="-j0sw2u_126">Fragment</code> также реализует этот интерфейс.</p></li></ul><p id="-j0sw2u_105"><code class="code" id="-j0sw2u_127">SavedStateRegistryOwner</code> предоставляет доступ к объекту <code class="code" id="-j0sw2u_128">SavedStateRegistry</code>, который автоматически создается в момент создания компонента в <code class="code" id="-j0sw2u_129">onCreate</code>. Это позволяет сохранять и восстанавливать состояние компонентов без необходимости ручного управления процессом.</p></section><section class="chapter"><h2 id="registersavedstateprovider" data-toc="registersavedstateprovider">Метод <code class="code" id="-j0sw2u_135">registerSavedStateProvider</code></h2><div class="code-block" data-lang="kotlin">
+savedStateRegistry.registerSavedStateProvider(key = &quot;counter_key&quot;) { 
+    SavedState(bundleOf(&quot;counter&quot; to counter)) 
+}
+</div><p id="-j0sw2u_132">Метод <code class="code" id="-j0sw2u_136">registerSavedStateProvider</code> используется для регистрации провайдера состояния, который будет вызван перед уничтожением активности или фрагмента для сохранения данных. Провайдер состояния реализует интерфейс <code class="code" id="-j0sw2u_137">SavedStateProvider</code> и возвращает объект типа <code class="code" id="-j0sw2u_138">SavedState</code>.</p><ul class="list _bullet" id="-j0sw2u_133"><li class="list__item" id="-j0sw2u_139"><p id="-j0sw2u_141"><code class="code" id="-j0sw2u_142">key</code> &mdash; строковый идентификатор, с которым связывается состояние.</p></li><li class="list__item" id="-j0sw2u_140"><p id="-j0sw2u_143"><code class="code" id="-j0sw2u_144">provider</code> &mdash; объект, реализующий интерфейс <code class="code" id="-j0sw2u_145">SavedStateProvider</code>, который возвращает объект типа <code class="code" id="-j0sw2u_146">SavedState</code>.</p></li></ul></section><section class="chapter"><h2 id="savedstateprovider" data-toc="savedstateprovider">Интерфейс <code class="code" id="-j0sw2u_151">SavedStateProvider</code></h2><div class="code-block" data-lang="kotlin">
+public fun interface SavedStateProvider {
+    fun saveState(): SavedState
+}
+</div><p id="-j0sw2u_149"><code class="code" id="-j0sw2u_152">SavedStateProvider</code> &mdash; это функциональный интерфейс, который требует реализации метода <code class="code" id="-j0sw2u_153">saveState()</code>. Этот метод вызывается при необходимости сохранить состояние компонента. В примере выше он возвращает объект <code class="code" id="-j0sw2u_154">SavedState</code>, содержащий данные в виде <code class="code" id="-j0sw2u_155">Bundle</code>.</p></section><section class="chapter"><h2 id="consumerestoredstateforkey" data-toc="consumerestoredstateforkey">Метод <code class="code" id="-j0sw2u_161">consumeRestoredStateForKey</code></h2><div class="code-block" data-lang="kotlin">
+counter = savedStateRegistry.consumeRestoredStateForKey(&quot;counter_key&quot;)?.getInt(&quot;counter&quot;, 0) ?: 0
+</div><p id="-j0sw2u_158">Метод <code class="code" id="-j0sw2u_162">consumeRestoredStateForKey</code> используется для получения сохранённого состояния по указанному ключу. Если состояние было успешно восстановлено, метод возвращает объект <code class="code" id="-j0sw2u_163">SavedState</code>. Если данные не были сохранены или ключ неверен, метод вернёт <code class="code" id="-j0sw2u_164">null</code>. Важно помнить, что после первого вызова данные по этому ключу больше недоступны &mdash; они удаляются из памяти.</p><p id="-j0sw2u_159">Этот метод можно вызывать <span class="control" id="-j0sw2u_165">только после</span> <code class="code" id="-j0sw2u_166">super.onCreate()</code>. В противном случае будет выброшено исключение <code class="code" id="-j0sw2u_167">IllegalArgumentException</code>.</p></section><section class="chapter"><h2 id="unregistersavedstateprovider" data-toc="unregistersavedstateprovider">Метод <code class="code" id="-j0sw2u_172">unregisterSavedStateProvider</code></h2><p id="-j0sw2u_169">Метод позволяет отвязать ранее зарегистрированного провайдера по ключу. После этого вызова состояние по данному ключу не будет восстановлено:</p><div class="code-block" data-lang="kotlin">
+savedStateRegistry.unregisterSavedStateProvider(&quot;counter_key&quot;)
+</div></section><section class="chapter"><h2 id="getsavedstateprovider" data-toc="getsavedstateprovider">Метод <code class="code" id="-j0sw2u_178">getSavedStateProvider</code></h2><p id="-j0sw2u_174">Для проверки, зарегистрирован ли провайдер по ключу, можно воспользоваться методом:</p><div class="code-block" data-lang="kotlin">
+val provider = savedStateRegistry.getSavedStateProvider(&quot;counter_key&quot;)
+</div><p id="-j0sw2u_176">Метод возвращает объект типа <code class="code" id="-j0sw2u_179">SavedStateProvider</code>, если он зарегистрирован, иначе &mdash; <code class="code" id="-j0sw2u_180">null</code>.</p></section><section class="chapter"><h2 id="-j0sw2u_12" data-toc="-j0sw2u_12">Пример использования</h2><div class="code-block" data-lang="kotlin">
+class RestoreActivity : AppCompatActivity() {
+
+    private var counter = 0
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+
+        savedStateRegistry.registerSavedStateProvider(key = &quot;counter_key&quot;) { 
+            Log.d(&quot;RestoreActivity&quot;, &quot;Сохранение состояния: $counter&quot;)
+            SavedState(bundleOf(&quot;counter&quot; to counter))
+        }
+
+        counter = savedStateRegistry.consumeRestoredStateForKey(&quot;counter_key&quot;)
+            ?.getInt(&quot;counter&quot;, 0) ?: 0
+
+        Log.d(&quot;RestoreActivity&quot;, &quot;Восстановленное значение: $counter&quot;)
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        counter++
+        Log.d(&quot;RestoreActivity&quot;, &quot;onSaveInstanceState: $counter&quot;)
+    }
+}
+</div></section><section class="chapter"><h2 id="-j0sw2u_13" data-toc="-j0sw2u_13">Лог выполнения</h2><div class="code-block" data-lang="none">
+Восстановленное значение: 0
+onSaveInstanceState: 1
+Сохранение состояния: 1
+Восстановленное значение: 1
+</div></section><section class="chapter"><h2 id="kmp-kotlin-multiplatform" data-toc="kmp-kotlin-multiplatform">KMP (Kotlin Multiplatform)</h2><p id="-j0sw2u_185">Почти все современные API для работы с состоянием в Android (включая <code class="code" id="-j0sw2u_189">SavedStateRegistry</code>) переписаны под KMP (Kotlin Multiplatform). Это позволяет:</p><ol class="list _decimal" id="-j0sw2u_186" type="1"><li class="list__item" id="-j0sw2u_190"><p id="-j0sw2u_192">Использовать единый механизм сохранения состояния между Android и iOS.</p></li><li class="list__item" id="-j0sw2u_191"><p id="-j0sw2u_193">Работать с одним и тем же API в Kotlin Multiplatform Shared Module (KMM).</p></li></ol><p id="-j0sw2u_188">Хочешь, чтобы я добавил сравнение с обычным <code class="code" id="-j0sw2u_194">onSaveInstanceState</code> и объяснил, в чем основные отличия? Или продолжим с разбором внутренних механизмов <code class="code" id="-j0sw2u_195">SavedStateRegistry</code>?</p></section><div class="last-modified">10 мая 2025</div><div data-feedback-placeholder="true"></div><div class="navigation-links _bottom"><a href="start-page.html" class="navigation-links__prev">suleimanov.com</a></div></article><div id="disqus_thread"></div></div></section></main></div><script src="https://resources.jetbrains.com/writerside/apidoc/6.22.0-b776/app.js"></script></body></html>
