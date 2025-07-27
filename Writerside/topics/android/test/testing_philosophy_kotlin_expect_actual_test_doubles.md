@@ -408,7 +408,7 @@ check(spy.capturedIds.contains("1"))
 > **В примере выше поведение Spy проявляется в том, что `UserRepositorySpy` делегирует вызовы `realRepo`,
 > но при этом фиксирует: сколько раз вызывался метод `findById`, какие значения передавались.**
 
-💡 *Spy полезен там, где поведение важно сохранить, но при этом нужно наблюдать за взаимодействиями. Мы видим как "что вызвали", так и "что
+*Spy полезен там, где поведение важно сохранить, но при этом нужно наблюдать за взаимодействиями. Мы видим как "что вызвали", так и "что
 реально произошло".*
 
 ---
@@ -759,13 +759,16 @@ fun dynamicTestsFromFile(): List<DynamicTest> {
 }
 ```
 
-В статье не будет практического примера по использованию этих аннотаций, для этого существует официальная документация https://docs.junit.org/current/user-guide/
-которая очень подробно описывает использование Junit 5.
+В статье не будет практического примера по использованию аннотаций — для этого существует официальная документация:
+[Junit 5 Documentation](https://docs.junit.org/current/user-guide/),
+которая очень подробно описывает возможности и использование JUnit 5.
+
+---
 
 ### Как JUnit 5 запускает ваш `@Test`: от команды до метода
 
-Давайте на основе примера возьмем что-то простое, например загрузка изображения, пример не является синтетическим, а полностью рабочий код
-который хорошо подходит для демонстраций:
+Давайте возьмём что-то простое и прикладное — например, загрузку изображения. Пример не синтетический,
+а полностью рабочий код, хорошо подходящий для демонстрации:
 
 ```kotlin
 class ImageDownloader {
@@ -776,7 +779,7 @@ class ImageDownloader {
 }
 ```
 
-Далее сам тест для ImageDownloader с использованием Junit 5:
+Далее — тест для `ImageDownloader` с использованием JUnit 5:
 
 ```kotlin
 @TestInstance(TestInstance.Lifecycle.PER_METHOD)
@@ -791,7 +794,7 @@ class ImageDownloaderTest {
     @BeforeEach
     fun setUp() {
         tempFile = File("image-test.jpg")
-        outputStream = FileOutputStream(tempFile,true)
+        outputStream = FileOutputStream(tempFile, true)
     }
 
     @Test
@@ -815,100 +818,469 @@ class ImageDownloaderTest {
     }
 }
 ```
-Наш тест на самом деле достаточно прост, есть один тест `downloaded image is saved to file`, который загружает изображение,
-далее происходит проверка на тот что наш файл скачан и он не пуст, перед запуском теста в setUp создается временный файл и stream
-а в tearDown мы удаляем этот файл так как он только для теста и закрываем stream, так же используем DisplayName что бы
-в CI/ IDE увидеть понятные нам названия и читаемые
 
+Наш тест на самом деле достаточно прост. Есть один тест — `downloaded image is saved to file`,
+который загружает изображение и проверяет, что файл скачан и не пуст.
 
-Представим, что вы запускаете `./gradlew :test --tests "test.ImageDownloaderTest"
-` или кликаете «Run» в IDE — начинается не просто выполнение функций, а целый процесс с
-несколькими важными этапами:
+Перед запуском теста в методе `setUp` создаётся временный файл и открывается поток.
+В `tearDown` этот файл удаляется, а поток закрывается — всё это нужно только для изоляции теста.
+
+Также используется `@DisplayName`, чтобы в CI или IDE отображались читаемые и осмысленные названия тестов.
+
+Представим, что вы запускаете тест в Gradle:
+
+```bash
+./gradlew :test --tests "test.ImageDownloaderTest"
+```
+
+или кликаете «Run» в IDE — начинается не просто вызов функций, а целый процесс с несколькими важными этапами.
+это команда сработает при условий что мы указали в gradle как реагировать на test задачу:
+
+```gradle
+tasks.test {
+useJUnitPlatform()
+}
+```
+
+Исходники функций useJUnitPlatform:
+
+```java
+    public void useJUnitPlatform() {
+    useTestFramework(new JUnitPlatformTestFramework((DefaultTestFilter) getFilter(), true, getDryRun()));
+}
+
+```
 
 ---
 
 #### 1. Запуск через Test Engine
 
-Когда команда вызывает `useJUnitPlatform()` или IDE запускает тесты, выполняется **JUnit Platform Launcher**. Он строит
-`LauncherDiscoveryRequest` — запрос на обнаружение тестов — и передаёт его в `LauncherFactory.create().execute(request)`.
+Когда команда вызывает `useJUnitPlatform()` или IDE запускает тесты, выполняется **JUnit Platform Launcher**.
+JUnitPlatformTestFramework():
 
-Внутри платформы этот запрос обрабатывается через `LauncherDiscoveryRequestBuilder` — он отражает селекторы (пакеты, классы, фильтры) и
-загружает их в `EngineDiscoveryOrchestrator`. ([junit.org][1], [Stack Overflow][2])
+1. Полученение процессора Junit
 
----
+```java
+package org.gradle.api.internal.tasks.testing.junitplatform;
 
-#### 2. Обнаружение тестов (Discovery)
+@UsedByScanPlugin("test-retry")
+public class JUnitPlatformTestFramework implements TestFramework {
 
-**Jupiter TestEngine** (основной движок JUnit 5) анализирует классы по reflection. Он ищет аннотации `@Test`, `@ParameterizedTest`,
-`@Nested` и строит `TestDescriptor` для каждого тест-кейса и контейнера. Это происходит в модулях **junit-jupiter-engine**.
+    @Override
+    public WorkerTestClassProcessorFactory getProcessorFactory() {
+        ...
+        return new JUnitPlatformTestClassProcessorFactory(new JUnitPlatformSpec(
+                filter.toSpec(), options.getIncludeEngines(), options.getExcludeEngines(),
+                options.getIncludeTags(), options.getExcludeTags(), dryRun.get()
+        ));
+    }
+    ...
+}
+```
 
-Обнаруженные тесты собираются в `TestPlan`, структура отражает иерархию классов и методов. ([junit.org][1])
+```java
+package org.gradle.api.internal.tasks.testing.junit;
 
----
+public abstract class AbstractJUnitTestClassProcessor implements TestClassProcessor {
 
-#### 3. Построение плана выполнения
+    private Action<String> executor;
 
-Модель `TestPlan` содержит всё: от классов до конкретных методов тестов. Когда план готов, `Launcher` начинает **execution**, и каждому
-`TestDescriptor` сопоставляется жизненный цикл:
+    @Override
+    public void startProcessing(TestResultProcessor resultProcessor) {
+        TestResultProcessor resultProcessorChain = createResultProcessorChain(resultProcessor);
+        // Wrap the result processor chain up in a blocking actor, to make the whole thing thread-safe
+        resultProcessorActor = actorFactory.createBlockingActor(resultProcessorChain);
+        executor = createTestExecutor(resultProcessorActor);
+    }
 
-* `LifecycleMethodExecutor` вызывает `@BeforeEach`/`@BeforeAll`
-* Затем — сам целевой метод `@Test`
-* После — `@AfterEach`/`@AfterAll`
+    @Override
+    public void processTestClass(TestClassRunInfo testClass) {
+        LOGGER.debug("Executing test class {}", testClass.getTestClassName());
+        executor.execute(testClass.getTestClassName());
+    }
 
-Раз создаётся **новый экземпляр тестового класса** для каждого метода `@Test`, обеспечивается изоляция состояния между тестами.
+}
 
----
+```
 
-#### 4. Выполнение теста
+```java
 
-Метод вызывается через reflection (`ExecutableInvoker.invoke()`), exceptions ловятся и классифицируются: `AssertionFailedError` — как
-провал, другие — как ошибка. Статус передаётся дальше в `TestReporter`.
+package org.gradle.api.internal.tasks.testing.junitplatform;
 
----
+public class JUnitPlatformTestClassProcessor extends AbstractJUnitTestClassProcessor {
 
-#### 5. Репортинг и вывод
+    private static class BackwardsCompatibleLauncherSession implements AutoCloseable {
 
-После исполнения всех тестов `Launcher` собирает `TestExecutionSummary`, который включает:
+        static BackwardsCompatibleLauncherSession open() {
+            try {
+                LauncherSession launcherSession = LauncherFactory.openSession();
+                return new BackwardsCompatibleLauncherSession(launcherSession);
+            } catch (NoSuchMethodError ignore) {
+                // JUnit Platform version on test classpath does not yet support launcher sessions
+                return new BackwardsCompatibleLauncherSession(LauncherFactory.create(), () -> {
+                });
+            }
+        }
+    }
 
-* количество успешных/проваленных тестов,
-* duration запуска,
-* stack trace ошибок,
-* пропуски.
+    @Override
+    protected Action<String> createTestExecutor(Actor resultProcessorActor) {
+        TestResultProcessor threadSafeResultProcessor = resultProcessorActor.getProxy(TestResultProcessor.class);
+        launcherSession = BackwardsCompatibleLauncherSession.open();
+        junitClassLoader = Thread.currentThread().getContextClassLoader();
+        testClassExecutor = new CollectAllTestClassesExecutor(threadSafeResultProcessor);
+        return testClassExecutor;
+    }
 
-Эти данные фонтаном отдаются в Gradle, IDE или CI для отображения, анализа или логирования.
+    public class JUnitPlatformTestClassProcessor extends AbstractJUnitTestClassProcessor {
 
----
+        @Override
+        public void stop() {
+            testClassExecutor.processAllTestClasses();
+            launcherSession.close();
+            super.stop();
+        }
+    }
 
-#### Почему это всё важно
 
-* Метки `@BeforeEach`, `@AfterAll` и пр. **встраиваются в execution flow**, не являются синтаксическим сахаром.
-* Reflection и `TestDescriptor` дают гибкость: фильтры, теги, повторные запуски.
-* Каждый тест изолирован — благодаря созданию нового экземпляра класса.
-* Discovery и execution разделены — позволяет пакетировать, фильтровать, запускать вручную или динамически.
+    private class CollectAllTestClassesExecutor implements Action<String> {
+        private final List<Class<?>> testClasses = new ArrayList<>();
+        private final TestResultProcessor resultProcessor;
 
-Разница между JUnit 3 и 5 не только в синтаксисе, а в архитектуре:
+        CollectAllTestClassesExecutor(TestResultProcessor resultProcessor) {
+            this.resultProcessor = resultProcessor;
+        }
 
-* Раньше — поиск тестов по именам;
-* Сейчас — discovery → план → execution → report — весь жизненный цикл выстроен, конфигурируется и расширяется через API.
+        @Override
+        public void execute(@Nonnull String testClassName) {
+            Class<?> klass = loadClass(testClassName);
+            if (isInnerClass(klass) || (supportsVintageTests() && isNestedClassInsideEnclosedRunner(klass))) {
+                return;
+            }
+            testClasses.add(klass);
+        }
 
-Если нужно — могу приложить ссылки на соответствующие исходники `LauncherDiscoveryRequest.java` и `EngineDiscoveryOrchestrator.java` для
-гиков и желающих копать глубже.
+        private void processAllTestClasses() {
+            LauncherDiscoveryRequest discoveryRequest = createLauncherDiscoveryRequest(testClasses);
+            TestExecutionListener executionListener = new JUnitPlatformTestExecutionListener(resultProcessor, clock, idGenerator);
+            Launcher launcher = launcherSession.getLauncher();
+            if (spec.isDryRun()) {
+                TestPlan testPlan = launcher.discover(discoveryRequest);
+                executeDryRun(testPlan, executionListener);
+            } else {
+                launcher.execute(discoveryRequest, executionListener);
+            }
+        }
+    }
+}
+```
 
-[1]: https://junit.org/junit5/docs/5.0.0/user-guide/?utm_source=chatgpt.com "JUnit 5 User Guide"
+```java
 
-[2]: https://stackoverflow.com/questions/66227706/testengine-with-id-junit-jupiter-failed-to-discover-tests-caused-by-org-jun?utm_source=chatgpt.com "TestEngine with ID 'junit-jupiter' failed to discover tests - Caused by ..."
+public class SuiteTestClassProcessor implements TestClassProcessor {
+    private final TestClassProcessor processor;
 
----
+    @Override
+    public void processTestClass(TestClassRunInfo testClass) {
+        try {
+            processor.processTestClass(testClass);
+        } catch (Throwable t) {
+            Throwable rawFailure = new TestSuiteExecutionException(String.format("Could not execute test class '%s'.", testClass.getTestClassName()), t);
+            resultProcessor.failure(suiteDescriptor.getId(), TestFailure.fromTestFrameworkFailure(rawFailure));
+        }
+    }
+}
+```
 
-### Что делает `@Test` частью контракта
+```java
+public class TestWorker implements Action<WorkerProcessContext>, RemoteTestClassProcessor, Serializable, Stoppable {
 
-Аннотация фиксирует несколько инженерных соглашений:
+    @Override
+    public void processTestClass(final TestClassRunInfo testClass) {
+        submitToRun(new Runnable() {
+            @Override
+            public void run() {
+                if (state != State.STARTED) {
+                    throw new IllegalStateException("Test classes cannot be processed until a command to start processing has been received");
+                }
+                try {
+                    processor.processTestClass(testClass);
+                } catch (AccessControlException e) {
+                    throw e;
+                } finally {
+                    // Clean the interrupted status
+                    Thread.interrupted();
+                }
+            }
+        });
+    }
+}
 
-* **Изолируемость**: тест должен быть самодостаточным. Его можно запустить отдельно.
-* **Предсказуемость**: тест не зависит от глобального состояния, иначе он станет flaky.
-* **Детерминизм**: один и тот же вход → один и тот же результат. Без этого невозможна автоматизация.
+```
 
-JUnit создаёт инстанс тестового класса на каждый `@Test`, чтобы избежать shared-state. Это часть контракта.
+```java
+
+@API(status = MAINTAINED, since = "1.0")
+public abstract class HierarchicalTestEngine<C extends EngineExecutionContext> implements TestEngine {
+
+    @Override
+    public final void execute(ExecutionRequest request) {
+        try (HierarchicalTestExecutorService executorService = createExecutorService(request)) {
+            C executionContext = createExecutionContext(request);
+            ThrowableCollector.Factory throwableCollectorFactory = createThrowableCollectorFactory(request);
+            new HierarchicalTestExecutor<>(request, executionContext, executorService,
+                    throwableCollectorFactory).execute().get();
+        } catch (Exception exception) {
+            throw new JUnitException("Error executing tests for engine " + getId(), exception);
+        }
+    }
+
+}
+```
+
+```java
+
+@API(status = INTERNAL, since = "5.0")
+public final class JupiterTestEngine extends HierarchicalTestEngine<JupiterEngineExecutionContext> {
+
+
+    @Override
+    public TestDescriptor discover(EngineDiscoveryRequest discoveryRequest, UniqueId uniqueId) {
+        JupiterConfiguration configuration = new CachingJupiterConfiguration(
+                new DefaultJupiterConfiguration(discoveryRequest.getConfigurationParameters()));
+        JupiterEngineDescriptor engineDescriptor = new JupiterEngineDescriptor(uniqueId, configuration);
+        new DiscoverySelectorResolver().resolveSelectors(discoveryRequest, engineDescriptor);
+        return engineDescriptor;
+    }
+
+}
+```
+
+```java
+
+package org.junit.platform.launcher.core;
+
+public class LauncherFactory {
+
+    @API(status = STABLE, since = "1.10")
+    public static LauncherSession openSession() throws PreconditionViolationException {
+        return openSession(LauncherConfig.DEFAULT);
+    }
+}
+```
+
+```java
+
+package org.junit.platform.launcher.core;
+
+class DefaultLauncher implements Launcher {
+
+    private final LauncherListenerRegistry listenerRegistry = new LauncherListenerRegistry();
+    private final EngineExecutionOrchestrator executionOrchestrator = new EngineExecutionOrchestrator(
+            listenerRegistry.testExecutionListeners);
+    ;
+
+    @Override
+    public void execute(TestPlan testPlan, TestExecutionListener... listeners) {
+        ...
+        execute((InternalTestPlan) testPlan, listeners);
+    }
+
+
+    private void execute(InternalTestPlan internalTestPlan, TestExecutionListener[] listeners) {
+        executionOrchestrator.execute(internalTestPlan, listeners);
+    }
+}
+```
+
+```java
+public class EngineExecutionOrchestrator {
+
+    private final ListenerRegistry<TestExecutionListener> listenerRegistry;
+
+    public EngineExecutionOrchestrator() {
+        this(ListenerRegistry.forTestExecutionListeners());
+    }
+
+    EngineExecutionOrchestrator(ListenerRegistry<TestExecutionListener> listenerRegistry) {
+        this.listenerRegistry = listenerRegistry;
+    }
+
+    void execute(InternalTestPlan internalTestPlan, TestExecutionListener... listeners) {
+        ConfigurationParameters configurationParameters = internalTestPlan.getConfigurationParameters();
+        ListenerRegistry<TestExecutionListener> testExecutionListenerListeners = buildListenerRegistryForExecution(
+                listeners);
+        withInterceptedStreams(configurationParameters, testExecutionListenerListeners,
+                testExecutionListener -> execute(internalTestPlan, EngineExecutionListener.NOOP, testExecutionListener));
+    }
+
+    private void execute(InternalTestPlan internalTestPlan, EngineExecutionListener parentEngineExecutionListener,
+                         TestExecutionListener testExecutionListener) {
+        internalTestPlan.markStarted();
+
+        // Do not directly pass the internal test plan to test execution listeners.
+        // Hyrum's Law indicates that someone will eventually come to depend on it.
+        TestPlan testPlan = internalTestPlan.getDelegate();
+        LauncherDiscoveryResult discoveryResult = internalTestPlan.getDiscoveryResult();
+
+        testExecutionListener.testPlanExecutionStarted(testPlan);
+        if (isDryRun(internalTestPlan)) {
+            dryRun(testPlan, testExecutionListener);
+        } else {
+            execute(discoveryResult,
+                    buildEngineExecutionListener(parentEngineExecutionListener, testExecutionListener, testPlan));
+        }
+        testExecutionListener.testPlanExecutionFinished(testPlan);
+    }
+
+    @API(status = INTERNAL, since = "1.7", consumers = {"org.junit.platform.testkit"})
+    public void execute(LauncherDiscoveryResult discoveryResult, EngineExecutionListener engineExecutionListener) {
+        Preconditions.notNull(discoveryResult, "discoveryResult must not be null");
+        Preconditions.notNull(engineExecutionListener, "engineExecutionListener must not be null");
+
+        ConfigurationParameters configurationParameters = discoveryResult.getConfigurationParameters();
+        EngineExecutionListener listener = selectExecutionListener(engineExecutionListener, configurationParameters);
+
+        for (TestEngine testEngine : discoveryResult.getTestEngines()) {
+            TestDescriptor engineDescriptor = discoveryResult.getEngineTestDescriptor(testEngine);
+            if (engineDescriptor instanceof EngineDiscoveryErrorDescriptor) {
+                listener.executionStarted(engineDescriptor);
+                listener.executionFinished(engineDescriptor,
+                        TestExecutionResult.failed(((EngineDiscoveryErrorDescriptor) engineDescriptor).getCause()));
+            } else {
+                execute(engineDescriptor, listener, configurationParameters, testEngine);
+            }
+        }
+    }
+
+
+    private void execute(TestDescriptor engineDescriptor, EngineExecutionListener listener,
+                         ConfigurationParameters configurationParameters, TestEngine testEngine) {
+
+        OutcomeDelayingEngineExecutionListener delayingListener = new OutcomeDelayingEngineExecutionListener(listener,
+                engineDescriptor);
+        try {
+            testEngine.execute(new ExecutionRequest(engineDescriptor, delayingListener, configurationParameters));
+            delayingListener.reportEngineOutcome();
+        } catch (Throwable throwable) {
+            UnrecoverableExceptions.rethrowIfUnrecoverable(throwable);
+            delayingListener.reportEngineFailure(new JUnitException(
+                    String.format("TestEngine with ID '%s' failed to execute tests", testEngine.getId()), throwable));
+        }
+    }
+
+}
+```
+
+```java
+
+@API(status = MAINTAINED, since = "1.0")
+public abstract class HierarchicalTestEngine<C extends EngineExecutionContext> implements TestEngine {
+
+    @Override
+    public final void execute(ExecutionRequest request) {
+        try (HierarchicalTestExecutorService executorService = createExecutorService(request)) {
+            C executionContext = createExecutionContext(request);
+            ThrowableCollector.Factory throwableCollectorFactory = createThrowableCollectorFactory(request);
+            new HierarchicalTestExecutor<>(request, executionContext, executorService,
+                    throwableCollectorFactory).execute().get();
+        } catch (Exception exception) {
+            throw new JUnitException("Error executing tests for engine " + getId(), exception);
+        }
+    }
+}
+
+```
+```java
+class HierarchicalTestExecutor<C extends EngineExecutionContext> {
+
+	private final ExecutionRequest request;
+	private final C rootContext;
+	private final HierarchicalTestExecutorService executorService;
+	private final ThrowableCollector.Factory throwableCollectorFactory;
+
+	HierarchicalTestExecutor(ExecutionRequest request, C rootContext, HierarchicalTestExecutorService executorService,
+			ThrowableCollector.Factory throwableCollectorFactory) {
+		this.request = request;
+		this.rootContext = rootContext;
+		this.executorService = executorService;
+		this.throwableCollectorFactory = throwableCollectorFactory;
+	}
+
+	Future<Void> execute() {
+		TestDescriptor rootTestDescriptor = this.request.getRootTestDescriptor();
+		EngineExecutionListener executionListener = this.request.getEngineExecutionListener();
+		NodeExecutionAdvisor executionAdvisor = new NodeTreeWalker().walk(rootTestDescriptor);
+		NodeTestTaskContext taskContext = new NodeTestTaskContext(executionListener, this.executorService,
+			this.throwableCollectorFactory, executionAdvisor);
+		NodeTestTask<C> rootTestTask = new NodeTestTask<>(taskContext, rootTestDescriptor);
+		rootTestTask.setParentContext(this.rootContext);
+		return this.executorService.submit(rootTestTask);
+	}
+}
+```
+```java
+
+@API(status = STABLE, since = "1.10")
+public class SameThreadHierarchicalTestExecutorService implements HierarchicalTestExecutorService {
+	@Override
+	public Future<Void> submit(TestTask testTask) {
+		testTask.execute();
+		return completedFuture(null);
+	}
+}
+```
+```JAVA
+class NodeTestTask<C extends EngineExecutionContext> implements TestTask {
+
+    @Override
+    public void execute() {
+        executeRecursively();
+    }
+
+    private void executeRecursively() {
+
+        throwableCollector.execute(() -> {
+            node.around(context, ctx -> {
+                context = ctx;
+                throwableCollector.execute(() -> {
+                    // @formatter:off
+                    List<NodeTestTask<C>> children = testDescriptor.getChildren().stream()
+                            .map(descriptor -> new NodeTestTask<C>(taskContext, descriptor))
+                            .collect(toCollection(ArrayList::new));
+                    // @formatter:on
+
+                    context = node.before(context);
+
+                    final DynamicTestExecutor dynamicTestExecutor = new DefaultDynamicTestExecutor();
+                    context = node.execute(context, dynamicTestExecutor);
+
+                    if (!children.isEmpty()) {
+                        children.forEach(child -> child.setParentContext(context));
+                        taskContext.getExecutorService().invokeAll(children);
+                    }
+
+                    throwableCollector.execute(dynamicTestExecutor::awaitFinished);
+                });
+
+                throwableCollector.execute(() -> node.after(context));
+            });
+        });
+    }
+}
+
+```
+```java
+
+@API(status = MAINTAINED, since = "1.3")
+public class ThrowableCollector {
+
+    public void execute(Executable executable) {
+        executable.execute();
+    }
+
+}
+```
 
 ---
 
