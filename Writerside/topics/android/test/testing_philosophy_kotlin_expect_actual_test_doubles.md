@@ -1061,7 +1061,8 @@ public class SameThreadHierarchicalTestExecutorService implements HierarchicalTe
 
 ### Этап 9: NodeTestTask выполняет рекурсивную обработку узлов
 
-`NodeTestTask` реализует основную логику выполнения одного узла в дереве тестов:
+`NodeTestTask` — это обёртка над логикой выполнения одного `TestDescriptor` в иерархии тестов. Каждый такой узел может представлять движок,
+контейнер, класс, метод или даже динамический тест. Выполнение узла организовано через метод `executeRecursively()`:
 
 ```java
 public class NodeTestTask<C extends EngineExecutionContext> implements TestTask {
@@ -1076,11 +1077,8 @@ public class NodeTestTask<C extends EngineExecutionContext> implements TestTask 
             node.around(context, ctx -> {
                 context = node.before(context);
                 context = node.execute(context, dynamicTestExecutor);
-                ...
                 taskContext.getExecutorService().invokeAll(children);
-                ...
                 dynamicTestExecutor.awaitFinished();
-                ...
                 node.after(context);
             });
         });
@@ -1088,7 +1086,7 @@ public class NodeTestTask<C extends EngineExecutionContext> implements TestTask 
 }
 ```
 
-Метод `executeRecursively()` реализует классический паттерн выполнения тестов:
+Метод `executeRecursively()` реализует канонический жизненный цикл выполнения теста:
 
 1. **before** — подготовка окружения, выполнение `@BeforeAll` и `@BeforeEach`, создание экземпляра тестового класса
 2. **execute** — непосредственное выполнение логики узла (например, вызов метода с `@Test`)
@@ -1096,8 +1094,43 @@ public class NodeTestTask<C extends EngineExecutionContext> implements TestTask 
 4. **dynamic** — ожидание завершения динамически зарегистрированных тестов (через `@TestFactory`)
 5. **after** — завершающие действия, выполнение `@AfterEach` и `@AfterAll`
 
-Весь блок обернут в `ThrowableCollector.execute()`, что обеспечивает корректную обработку исключений — они собираются и передаются
-слушателям, но не прерывают выполнение остальных фаз.
+Ключевая строка здесь — `context = node.execute(context, dynamicTestExecutor)`. Вызов делегируется текущему `TestDescriptor`, чья реализация
+определяет, что именно будет исполнено.
+
+В случае обычного тестового метода этот узел будет представлять собой экземпляр `TestMethodTestDescriptor`, а значит, выполнение пойдёт в
+его метод `execute()`:
+
+```java
+
+@Override
+public JupiterEngineExecutionContext execute(JupiterEngineExecutionContext context,
+                                             DynamicTestExecutor dynamicTestExecutor) {
+    ThrowableCollector throwableCollector = context.getThrowableCollector();
+
+    invokeBeforeEachCallbacks(context);
+    if (throwableCollector.isEmpty()) {
+        invokeBeforeEachMethods(context);
+        if (throwableCollector.isEmpty()) {
+            invokeBeforeTestExecutionCallbacks(context);
+            if (throwableCollector.isEmpty()) {
+                invokeTestMethod(context, dynamicTestExecutor);
+            }
+            invokeAfterTestExecutionCallbacks(context);
+        }
+        invokeAfterEachMethods(context);
+    }
+    invokeAfterEachCallbacks(context);
+
+    return context;
+}
+```
+
+Таким образом, вызов `node.execute(...)` на самом деле инициирует выполнение целого сценария: от вызова `@BeforeEach` и
+`@BeforeTestExecution`, до реального `@Test`-метода (внутри `invokeTestMethod(...)`) и последующего завершения через `@AfterEach`.
+
+Это значит, что `TestMethodTestDescriptor` внутри себя не просто вызывает `Method.invoke(...)`, а тщательно оборачивает его в точках
+расширения, где могут подключиться extension'ы, interception'ы и пользовательская логика. Именно поэтому `@Test` — не просто вызов метода, а
+управляемый, фазовый процесс с точками вмешательства на каждом этапе.
 
 ### Этап 10: Выполнение конкретного тестового метода
 
