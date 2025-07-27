@@ -1214,52 +1214,64 @@ public interface DynamicTestExecutor {
 `awaitFinished()` в `NodeTestTask`. Это позволяет поддерживать правильный порядок выполнения и корректно обрабатывать результаты
 динамических тестов.
 
+### Как JUnit узнаёт, что перед ним тест?
 
-### Как собираются тестовые классы?
+В предыдущей главе мы остановились на моменте, когда `@Test`-метод уже исполняется. Но как JUnit вообще узнаёт, что этот метод — тест? И
+откуда он вообще берёт класс?
 
-В ходе этой главы на самом деле в исходниках была кодовая база которая показывает как собираются тестовые классы, но мы не уделили
-им внимание что бы не усложнять:
+На самом деле всё начинается сильно раньше — ещё в момент, когда Gradle запускает worker-процесс, где впоследствии и будет обнаружен наш
+тестовый класс.
+
+Разберёмся, как Gradle собирает окружение, и какие шаги ведут к запуску тестового `Runnable` из пользовательского `TestWorker`. Всё, что не
+критично — отправим в троеточие.
+
+#### `GradleWorkerMain` — запуск дочернего worker-процесса
+
 ```java
 public class GradleWorkerMain {
 
     public void run() throws Exception {
-        ...
-        @SuppressWarnings("unchecked")
         Class<? extends Callable<Void>> workerClass = (Class<? extends Callable<Void>>) implementationClassLoader.loadClass("org.gradle.process.internal.worker.child.SystemApplicationClassLoaderWorker").asSubclass(Callable.class);
         Callable<Void> main = workerClass.getConstructor(DataInputStream.class).newInstance(instr);
         main.call();
     }
 
     public static void main(String[] args) {
-        try {
-            new GradleWorkerMain().run();
-            System.exit(0);
-        } catch (Throwable throwable) {
-            throwable.printStackTrace(System.err);
-            System.exit(1);
-        }
+        new GradleWorkerMain().run();
+        System.exit(0);
     }
-
 }
 ```
-```java
 
+> Здесь формируется worker-класс, через который всё и запускается. Пока всё похоже на обычный Java bootstrap — но дальше начинается
+> специфичная инициализация Gradle.
+
+---
+
+#### `SystemApplicationClassLoaderWorker` — делегирует выполнение `ActionExecutionWorker`
+
+```java
 public class SystemApplicationClassLoaderWorker implements Callable<Void> {
 
     @Override
     public Void call() throws Exception {
         ...
-            ActionExecutionWorker worker = new ActionExecutionWorker(config.getWorkerAction());
-            worker.execute(new ContextImpl(config.getWorkerId(), config.getDisplayName(), connection, workerServices));
+        ActionExecutionWorker worker = new ActionExecutionWorker(config.getWorkerAction());
+        worker.execute(new ContextImpl(...));
         ...
     }
-
 }
 ```
-```java
 
+> Здесь мы впервые встречаем `config.getWorkerAction()` — именно он содержит `TestWorker`, который отвечает за запуск тестов. Но пока он
+> обёрнут в универсальный `ActionExecutionWorker`.
+
+---
+
+#### `ActionExecutionWorker` — вызов настоящего `TestWorker`
+
+```java
 public class ActionExecutionWorker implements Action<WorkerProcessContext> {
-    private static final Logger LOGGER = LoggerFactory.getLogger(ActionExecutionWorker.class);
     private final Action<? super WorkerProcessContext> action;
 
     public ActionExecutionWorker(Action<? super WorkerProcessContext> action) {
@@ -1268,8 +1280,6 @@ public class ActionExecutionWorker implements Action<WorkerProcessContext> {
 
     @Override
     public void execute(final WorkerProcessContext workerContext) {
-        LOGGER.debug("Starting {}.", workerContext.getDisplayName());
-
         ObjectConnection clientConnection = workerContext.getServerConnection();
         clientConnection.addUnrecoverableErrorHandler(new Action<Throwable>() {
             @Override
@@ -1283,58 +1293,36 @@ public class ActionExecutionWorker implements Action<WorkerProcessContext> {
         ClassLoader contextClassLoader = Thread.currentThread().getContextClassLoader();
         Thread.currentThread().setContextClassLoader(action.getClass().getClassLoader());
         try {
-            action.execute(workerContext);
+            action.execute(workerContext); // <-- ключевой момент: вызывает TestWorker
         } finally {
-            Thread.currentThread().setContextClassLoader(contextClassLoader);
+            ...
         }
-
-        LOGGER.debug("Completed {}.", workerContext.getDisplayName());
     }
 }
-
 ```
+
+> Здесь action — это и есть TestWorker, просто замаскированный под Action. Этот вызов приводит к запуску кода, который действительно управляет жизненным циклом тестов.
+> Кроме того, через addUnrecoverableErrorHandler(...) сюда может попасть и stop() — он также реализован как Runnable и будет поставлен в очередь на исполнение позже.
+
+---
+
+#### `TestWorker` — управление жизненным циклом и запуск тестов
+
 ```java
 public class TestWorker implements Action<WorkerProcessContext>, RemoteTestClassProcessor, Serializable, Stoppable {
 
     @Override
     public void execute(final WorkerProcessContext workerProcessContext) {
-        Thread.currentThread().setName(WORK_THREAD_NAME);
-
-        LOGGER.info("{} started executing tests.", workerProcessContext.getDisplayName());
-
-        SecurityManager securityManager = System.getSecurityManager();
-
-        System.setProperty(WORKER_ID_SYS_PROPERTY, workerProcessContext.getWorkerId().toString());
-
+        ...
         CloseableServiceRegistry testServices = TestFrameworkServiceRegistry.create(workerProcessContext);
         startReceivingTests(workerProcessContext, testServices);
 
         try {
-            try {
-                while (state != State.STOPPED) {
-                    executeAndMaintainThreadName(runQueue.take());
-                }
-            } catch (InterruptedException e) {
-                throw UncheckedException.throwAsUncheckedException(e);
+            while (state != State.STOPPED) {
+                executeAndMaintainThreadName(runQueue.take());
             }
         } finally {
-            LOGGER.info("{} finished executing tests.", workerProcessContext.getDisplayName());
-
-            // In the event that the main thread exits with an uncaught exception, stop processing
-            // and clear out the run queue to unblock any running communication threads
-            synchronized (this) {
-                state = State.STOPPED;
-                runQueue.clear();
-            }
-
-            if (System.getSecurityManager() != securityManager) {
-                try {
-                    // Reset security manager the tests seem to have installed
-                    System.setSecurityManager(securityManager);
-                } catch (SecurityException e) {
-                    LOGGER.warn("Unable to reset SecurityManager. Continuing anyway...", e);
-                }
-            }
+            ...
             testServices.close();
         }
     }
@@ -1343,14 +1331,50 @@ public class TestWorker implements Action<WorkerProcessContext>, RemoteTestClass
         try {
             action.run();
         } finally {
-            // Reset the thread name if the action changes it (e.g. if a test sets the thread name without resetting it afterwards)
             Thread.currentThread().setName(WORK_THREAD_NAME);
         }
     }
+
+    @Override
+    public void stop() {
+        submitToRun(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    processor.stop();
+                } finally {
+                    state = State.STOPPED;
+                    // Clean the interrupted status
+                    // because some test class processors do work here, e.g. JUnitPlatform
+                    Thread.interrupted();
+                }
+            }
+        });
+    }
+
 }
 ```
-```java
 
+> Здесь начинается реальная жизнь тестов. Метод `startReceivingTests()` инициирует приём тестов от Master-процесса, а `runQueue.take()`
+> вытаскивает очередной `Runnable` — в том числе и JUnit-подобные вызовы. Но кто решает, какие классы положить в эту очередь?
+> executeAndMaintainThreadName вызывая action.run() на самом деле вызовет stop у TestWorker
+
+
+Отлично, теперь мы перешли к следующему важному слою — механизму доставки и вызова тестов. На этом этапе `TestWorker` уже готов принимать
+команды, но кто же инициирует вызовы тестов и как классы с `@Test` действительно попадают в исполнение?
+
+Разбираем цепочку, в которой `Dispatch`, `MethodInvocation` и `TestClassProcessor` играют ключевую роль в том, как тестовый класс сначала *
+*обнаруживается**, а затем **передаётся** для обработки.
+
+
+В этом этапе мы находимся чуть выше JUnit Platform, на уровне Gradle Test Framework. Здесь через прокси и диспатчер происходит вызов
+методов, которые в итоге передают управление JUnit Engine'у.
+
+---
+
+#### `ProxyDispatchAdapter` — создание прокси, который делегирует вызовы через Dispatch
+
+```java
 public class ProxyDispatchAdapter<T> {
     private final Class<T> type;
     private final T source;
@@ -1361,24 +1385,13 @@ public class ProxyDispatchAdapter<T> {
         ClassLoader classLoader = type.getClassLoader();
         types.add(type);
         for (Class<?> extraType : extraTypes) {
-            ClassLoader candidate = extraType.getClassLoader();
-            if (candidate != classLoader && candidate != null) {
-                try {
-                    if (candidate.loadClass(type.getName()) != null) {
-                        classLoader = candidate;
-                    }
-                } catch (ClassNotFoundException e) {
-                    // Ignore
-                }
-            }
+            ...
             types.add(extraType);
         }
-        source = type.cast(Proxy.newProxyInstance(classLoader, types.toArray(new Class<?>[0]),
-            new DispatchingInvocationHandler(type, dispatch)));
-    }
-
-    public Class<T> getType() {
-        return type;
+        source = type.cast(Proxy.newProxyInstance(
+                classLoader,
+                types.toArray(new Class<?>[0]),
+                new DispatchingInvocationHandler(type, dispatch)));
     }
 
     public T getSource() {
@@ -1389,49 +1402,26 @@ public class ProxyDispatchAdapter<T> {
         private final Class<?> type;
         private final Dispatch<? super MethodInvocation> dispatch;
 
-        private DispatchingInvocationHandler(Class<?> type, Dispatch<? super MethodInvocation> dispatch) {
-            this.type = type;
-            this.dispatch = dispatch;
-        }
-
         @Override
         public Object invoke(Object target, Method method, Object[] parameters) throws Throwable {
-            if (method.getName().equals("equals")) {
-                Object parameter = parameters[0];
-                if (parameter == null || !Proxy.isProxyClass(parameter.getClass())) {
-                    return false;
-                }
-                Object handler = Proxy.getInvocationHandler(parameter);
-                if (!DispatchingInvocationHandler.class.isInstance(handler)) {
-                    return false;
-                }
-
-                DispatchingInvocationHandler otherHandler = (DispatchingInvocationHandler) handler;
-                return otherHandler.type.equals(type) && otherHandler.dispatch == dispatch;
-            }
-
-            if (method.getName().equals("hashCode")) {
-                return dispatch.hashCode();
-            }
-            if (method.getName().equals("toString")) {
-                return type.getSimpleName() + " broadcast";
-            }
             dispatch.dispatch(new MethodInvocation(method, parameters));
             return null;
         }
     }
 }
 ```
-```java
 
+> Здесь создаётся **динамический прокси** (через `java.lang.reflect.Proxy`), который вместо непосредственного вызова метода — прокидывает
+> его как `MethodInvocation` в `Dispatch`. Это ключевая прослойка для удалённого и deferred-вызова `processTestClass(...)`.
+
+---
+
+#### `ContextClassLoaderDispatch` — временно меняет classloader на тестовый
+
+```java
 public class ContextClassLoaderDispatch<T> implements Dispatch<T> {
     private final Dispatch<? super T> dispatch;
     private final ClassLoader contextClassLoader;
-
-    public ContextClassLoaderDispatch(Dispatch<? super T> dispatch, ClassLoader contextClassLoader) {
-        this.dispatch = dispatch;
-        this.contextClassLoader = contextClassLoader;
-    }
 
     @Override
     public void dispatch(T message) {
@@ -1445,14 +1435,17 @@ public class ContextClassLoaderDispatch<T> implements Dispatch<T> {
     }
 }
 ```
-```java
 
+> Оборачивает `Dispatch`, чтобы каждый вызов происходил в нужном **contextClassLoader'е** — тот, в котором доступны юзерские тесты,
+> аннотации `@Test`, и прочие артефакты сборки. В противном случае рефлексия просто не увидит нужные классы.
+
+---
+
+#### `ReflectionDispatch` — финальный обработчик, вызывающий метод
+
+```java
 public class ReflectionDispatch implements Dispatch<MethodInvocation> {
     private final Object target;
-
-    public ReflectionDispatch(Object target) {
-        this.target = target;
-    }
 
     @Override
     public void dispatch(MethodInvocation message) {
@@ -1467,11 +1460,16 @@ public class ReflectionDispatch implements Dispatch<MethodInvocation> {
         }
     }
 }
-
 ```
 
-```java
+> Это последний шаг цепочки вызова: приходит `MethodInvocation`, и метод вызывается на `target`-объекте. Обычно это и есть
+`JUnitTestClassProcessor`, у которого вызывается `processTestClass(...)`.
 
+---
+
+#### `SuiteTestClassProcessor` — обёртка над настоящей обработкой класса
+
+```java
 public class SuiteTestClassProcessor implements TestClassProcessor {
     private final TestClassProcessor processor;
 
@@ -1480,12 +1478,17 @@ public class SuiteTestClassProcessor implements TestClassProcessor {
         try {
             processor.processTestClass(testClass);
         } catch (Throwable t) {
-            Throwable rawFailure = new TestSuiteExecutionException(String.format("Could not execute test class '%s'.", testClass.getTestClassName()), t);
+            Throwable rawFailure = new TestSuiteExecutionException(
+                    String.format("Could not execute test class '%s'.", testClass.getTestClassName()), t);
             resultProcessor.failure(suiteDescriptor.getId(), TestFailure.fromTestFrameworkFailure(rawFailure));
         }
     }
 }
 ```
+
+> Именно здесь вызывается `processTestClass(...)` на реальном обработчике — чаще всего это `JUnitTestClassProcessor`, и уже он
+> инициализирует JUnit Engine, Discovery, и начинает сканировать аннотации `@Test`.
+
 
 Далее переменной executor присваевается резултат фукнций createTestExecutor, а в методе processTestClass идет обращение к этому executor
 
@@ -1498,7 +1501,7 @@ public abstract class AbstractJUnitTestClassProcessor implements TestClassProces
     public void startProcessing(TestResultProcessor resultProcessor) {
         executor = createTestExecutor(resultProcessorActor);
     }
-    
+
     @Override
     public void processTestClass(TestClassRunInfo testClass) {
         LOGGER.debug("Executing test class {}", testClass.getTestClassName());
@@ -1506,7 +1509,9 @@ public abstract class AbstractJUnitTestClassProcessor implements TestClassProces
     }
 }
 ```
+
 JUnitPlatformTestClassProcessor наследуется от AbstractJUnitTestClassProcessor, и предоставляет реализацию метода createTestExecutor
+
 ```java
 public class JUnitPlatformTestClassProcessor extends AbstractJUnitTestClassProcessor {
 
@@ -1521,7 +1526,6 @@ public class JUnitPlatformTestClassProcessor extends AbstractJUnitTestClassProce
 
 Взлянем на сам CollectAllTestClassesExecutor который вызывается из AbstractJUnitTestClassProcessor в методе processTestClass:
 
-
 ```java
 private class CollectAllTestClassesExecutor implements Action<String> {
     private final List<Class<?>> testClasses = new ArrayList<>();
@@ -1535,7 +1539,6 @@ private class CollectAllTestClassesExecutor implements Action<String> {
 ```
 
 Тут он добавляется в список testClasses
-
 
 ### Заключение
 
@@ -1619,12 +1622,13 @@ property-based. И возможность строить поверх него �
 
 Это не библиотека для “написать тест и забыть”, это платформа, к которой можно подключить своё видение того, что такое тест вообще.
 
-## 7. Kotlin Test: Строгая минималистика
+## 7. Kotlin Test: Строгая минималистика или Kotest
 
 * Kotlin Test - не "Kotlin обёртка над JUnit", а другая философия.
 * Kotlin First: лямбды, DSL-подход, выразительность.
 * Пример теста без boilerplate.
 * Почему многие так и не поняли силу `kotest`, `kotlin.test`, `assertSoftly` и т.д.
+
 
 ## 8. Заключение: Тест как управляемая иллюзия реальности
 
