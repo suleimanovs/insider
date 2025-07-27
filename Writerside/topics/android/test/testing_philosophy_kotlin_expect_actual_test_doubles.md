@@ -42,7 +42,6 @@ Kotlin хорошо подходит для тестирования, потом
 Во всей серии примеры будут на Kotlin - не потому что «так модно», а потому что это стандарт Android-разработки и полноценный язык для
 продакшена, независимо от платформы. Kotlin уже используется в Spring, Ktor, Compose, KMP - и везде он одинаково хорош для тестов.
 
----
 
 ## 2. Базис: Лексикон тестирования
 
@@ -96,7 +95,6 @@ Gradle (или build system IDE), где runner интегрирован в па
 
 Хороший runner не замечается. Плохой - ломает вам отладку, кеширует устаревшие состояния или игнорирует падения.
 
----
 
 #### Test Double
 
@@ -150,7 +148,6 @@ Integration-тест допускает реальные зависимости:
 
 Мы не тестируем "истину". Мы тестируем поведение в симулированной среде.
 
----
 
 ### Симуляция, а не доказательство
 
@@ -168,7 +165,6 @@ Integration-тест допускает реальные зависимости:
 «допустимым». Если позже меняется бизнес-логика, интерфейс или требования - тест становится устаревшим. Это не баг, это свойство теста как
 инструмента.
 
----
 
 ### Контролируемое окружение
 
@@ -179,7 +175,6 @@ Integration-тест допускает реальные зависимости:
 Разница принципиальна. В production ошибки могут быть случайными. В тестах они - либо детерминированы, либо не обнаруживаются вовсе. Поэтому
 тест никогда не может гарантировать "всё работает". Он может только сказать: *в этих условиях - да*.
 
----
 
 ### Уровень доверия
 
@@ -195,7 +190,6 @@ Integration-тест допускает реальные зависимости:
 компромиссы не осознаны - ни одно число покрытия не имеет смысла. «100% покрытие» может означать как надёжную защиту, так и пустой ритуал -
 всё зависит от того, *что именно* вы покрыли, и *зачем*.
 
----
 
 ### Что мы действительно тестируем
 
@@ -218,7 +212,6 @@ Integration-тест допускает реальные зависимости:
 `assertEquals(expected, actual)`, `assertTrue(condition)`, `assertFailsWith<SomeException>()` или их аналоги. И вроде бы всё очевидно:
 проверяем, что результат совпадает с ожиданием. Но даже в этих простых вызовах есть неочевидный момент.
 
----
 
 ### Не просто сравнение, а утверждение
 
@@ -228,7 +221,6 @@ Integration-тест допускает реальные зависимости:
 Важно понимать: `assert*` - это не отладка. Не исследование. Это декларация. Тест либо пройден, либо нет. Нет «почти», нет «предупреждения».
 И если условие не выполняется - не система сломалась, а **наши ожидания не совпали с реальностью**.
 
----
 
 ### Expected/Actual - порядок, который важен
 
@@ -239,7 +231,6 @@ Integration-тест допускает реальные зависимости:
 Если местами их перепутать, тест всё равно будет работать. Но смысл высказывания становится неявным. Падает читаемость. И, главное, исчезает
 ощущение, **что именно** пошло не так: то ли мы ошиблись в модели, то ли код нарушил контракт.
 
----
 
 ### assertTrue / assertFalse - примитив, но с той же логикой
 
@@ -249,7 +240,6 @@ Integration-тест допускает реальные зависимости:
 По сути, каждая `assert*` - это бинарный фильтр: либо да, либо нет. Это инструмент для фиксации допусков, а не для поиска ошибок. И чем
 яснее мы это осознаём - тем точнее пишем тесты.
 
----
 
 ### Ключевые слова Kotlin Native? Не об этом речь
 
@@ -301,7 +291,6 @@ check(user.name == "John Doe")
 > **В примере выше поведение Stub проявляется в том, что `UserRepositoryStub` всегда возвращает один и тот же результат (`John Doe`),
 независимо от входного параметра `id`. Он не анализирует, что ему передали, и служит лишь для стабилизации окружения.**
 
----
 
 **Mock** - объект, который фиксирует, как с ним взаимодействовали. Он запоминает, какие методы вызвали, с какими параметрами и сколько раз.
 Задача mock-объекта - не возвращать данные, а подтвердить, что код выполнил определённые действия. Mock используют там, где важно проверить,
@@ -335,7 +324,6 @@ check(logger.receivedMessages.first() == "User created")
 
 💡 *Mock часто реализуют с помощью библиотек вроде Mockito или MockK, но здесь он показан вручную, чтобы разобрать суть концепции.*
 
----
 
 **Fake** - рабочая подделка. Это не имитация отдельных вызовов, а полноценная, но упрощённая реализация зависимости. Например, in-memory
 база данных или фейковый API, который хранит данные в памяти. Fake не просто «притворяется» - он действительно ведёт себя как настоящая
@@ -371,7 +359,6 @@ check(result?.name == "Alice")
 > **В примере выше поведение Fake проявляется в том, что `FakeUserRepository` действительно сохраняет и возвращает данные, как настоящий
 репозиторий, но без настоящей базы данных. Это полноценная логика - только in-memory.**
 
----
 
 **Spy** - «двойной агент». Он оборачивает реальный объект, но отслеживает, что с ним происходило. Spy не подменяет поведение (как mock) и не
 заменяет всю реализацию (как fake). Вместо этого он делегирует вызовы настоящему объекту и параллельно фиксирует обращения (например,
@@ -411,7 +398,6 @@ check(spy.capturedIds.contains("1"))
 *Spy полезен там, где поведение важно сохранить, но при этом нужно наблюдать за взаимодействиями. Мы видим как "что вызвали", так и "что
 реально произошло".*
 
----
 
 Иногда выбор типа Double кажется техническим: что проще заиспользовать, что быстрее написать. Но на самом деле он отражает **подход к
 архитектуре**. Если мы используем stub - мы говорим: эта зависимость не важна. Если fake - мы признаём, что логика важна, но
@@ -423,7 +409,6 @@ check(spy.capturedIds.contains("1"))
 
 Поэтому вопрос не в том, *какой* Double использовать, а в том, *что именно мы хотим зафиксировать в этом тесте*.
 
----
 
 ## 6. Unit vs JUnit: Что действительно стоит за словами
 
@@ -444,7 +429,6 @@ check(spy.capturedIds.contains("1"))
 
 Чтобы понимать, как писать хорошие тесты, важно разобраться не только в коде, но и в истории: как JUnit развивался, и какие идеи он принёс.
 
----
 
 ### История JUnit: от процедур до DSL
 
@@ -465,7 +449,6 @@ public class UserServiceTest extends TestCase {
 Никакой магии. JUnit по имени искал методы, начинал их выполнять и сигнализировал о падениях через `AssertionFailedError` или исключения.
 Всё держалось на соглашениях и строгом порядке.
 
----
 
 **JUnit 4** стал поворотной точкой. Он избавился от необходимости наследования `TestCase` и перешёл к декларативному стилю на базе
 аннотаций. Метод помечался `@Test`, и это было достаточно, чтобы фреймворк понял — перед ним тест.
@@ -485,7 +468,6 @@ class UserServiceTest {
 Появились `@Before`, `@After`, `@Ignore`, а также возможность писать кастомные раннеры. Но при всём этом JUnit 4 оставался процедурным.
 Каждый тест — по сути обычная функция, просто обёрнутая инфраструктурой.
 
----
 
 **JUnit 5** — уже не фреймворк, а **платформа**. Он разделён на три части: `Platform`, `Jupiter` и `Vintage`.
 
@@ -523,7 +505,6 @@ JUnit-интеграции в IDE, Gradle, Maven, Bazel и CI-системы (н
 Отлично, вот переработанный блок **по аннотациям JUnit 5** — без лишних классов там, где они не нужны, и с полноценным объяснением каждой
 аннотации (2–3 предложения), строго в авторском техническом стиле.
 
----
 
 ### Знакомство с основами JUnit 5
 
@@ -551,7 +532,6 @@ JUnit вызывает этот метод как автономную един�
 тест не должен зависеть от других тестов и делиться с ними состоянием.
 
 
----
 
 `@BeforeEach` / `@AfterEach`
 Вызываются перед и после каждого `@Test`. Используются для настройки окружения и его очистки: создание файлов, сброс состояний, закрытие
@@ -569,7 +549,6 @@ fun tearDown() {
 }
 ```
 
----
 
 `@BeforeAll` / `@AfterAll`
 Запускаются один раз до и после всех тестов в классе. Используются для тяжёлой инициализации (например, поднятие embedded Redis, Kafka,
@@ -583,7 +562,6 @@ fun initSuite() {
 }
 ```
 
----
 
 `@TestInstance(...)`
 Определяет, как JUnit создаёт экземпляры тестового класса.
@@ -632,7 +610,6 @@ fun adminGetsAllPermissions() {
 }
 ```
 
----
 
 `@Disabled`
 Пропускает тест. Используется для временного отключения (например, нестабильный код, баг в зависимости). В отчётах видно, что тест отключён.
@@ -645,7 +622,6 @@ fun flakyIntegrationTest() {
 }
 ```
 
----
 
 `@Nested`
 Позволяет структурировать тесты в иерархии — с вложенными контекстами. Применяется только к `inner class`, иначе инстанс не создаётся.
@@ -661,7 +637,6 @@ inner class WhenUserIsGuest {
 }
 ```
 
----
 
 `@ParameterizedTest`
 Запускает один и тот же метод несколько раз с разными параметрами. Требует указания источника данных через `@ValueSource`, `@CsvSource`,
@@ -675,7 +650,6 @@ fun testRoles(role: String) {
 }
 ```
 
----
 
 `@ValueSource`, `@CsvSource`, `@EnumSource`, `@MethodSource`, `@ArgumentsSource`
 Аннотации для генерации данных в параметризованных тестах. `@ValueSource` — для простых значений. `@CsvSource` — для табличных данных.
@@ -690,7 +664,6 @@ fun rolePermissionTest(role: String, allowed: Boolean) {
 }
 ```
 
----
 
 `@RepeatedTest`
 Запускает один и тот же тест несколько раз. Удобен для проверки нестабильных сценариев: флаки, гонки, недетерминированные вычисления. Метод
@@ -703,7 +676,6 @@ fun unstableTest() {
 }
 ```
 
----
 
 `@Timeout`
 Завершает тест с ошибкой, если он выполняется дольше заданного времени. Применяется на метод и на весь класс. Полезен для защиты от
@@ -717,7 +689,6 @@ fun longRunningProcessCompletes() {
 }
 ```
 
----
 
 `@Tag`
 Добавляет произвольные метки тестам. Используются в CI/CD для фильтрации: можно запускать только тесты с нужным тегом (`@Tag("slow")`,
@@ -731,7 +702,6 @@ fun savesToDatabase() {
 }
 ```
 
----
 
 `@ExtendWith(...)`
 Подключает расширения (Mockito, Spring, Testcontainers, кастомные хуки). Extension-интерфейсы могут внедрять зависимости, слушать события,
@@ -742,7 +712,6 @@ fun savesToDatabase() {
 class UserServiceSpringTest { ... }
 ```
 
----
 
 `@TestFactory`
 Позволяет генерировать тесты динамически во время выполнения. Метод должен возвращать `Collection<DynamicTest>` или `Stream<DynamicTest>`.
@@ -763,13 +732,13 @@ fun dynamicTestsFromFile(): List<DynamicTest> {
 [Junit 5 Documentation](https://docs.junit.org/current/user-guide/),
 которая очень подробно описывает возможности и использование JUnit 5.
 
----
 
-### Как JUnit 5 запускает ваш `@Test`: от команды до метода
+## Как JUnit 5 запускает ваш @Test: от команды до метода
 
-Давайте возьмём что-то простое и прикладное — например, загрузку изображения. Пример не синтетический,
-а полностью рабочий код, хорошо подходящий для демонстрации:
+Когда вы нажимаете "Run" в IDE или запускаете `./gradlew test`, за этим простым действием скрывается сложная многоуровневая архитектура. Давайте проследим весь путь выполнения теста — от команды в терминале до вызова вашего метода, помеченного `@Test`.
 
+### Рабочий пример для демонстрации
+Возьмем что-то практичное — загрузчик изображений. Код простой, но вполне рабочий:
 ```kotlin
 class ImageDownloader {
     fun downloadImage(url: String): ByteArray {
@@ -779,7 +748,7 @@ class ImageDownloader {
 }
 ```
 
-Далее — тест для `ImageDownloader` с использованием JUnit 5:
+Далее тест для `ImageDownloader` с использованием JUnit 5:
 
 ```kotlin
 @TestInstance(TestInstance.Lifecycle.PER_METHOD)
@@ -819,68 +788,105 @@ class ImageDownloaderTest {
 }
 ```
 
-Наш тест на самом деле достаточно прост. Есть один тест — `downloaded image is saved to file`,
-который загружает изображение и проверяет, что файл скачан и не пуст.
+Тест довольно straightforward: есть один метод `downloaded image is saved to file`, который скачивает изображение и проверяет, что файл действительно создался и не пустой. В `setUp` готовим временный файл и поток, в `tearDown` всё убираем за собой. `@DisplayName` нужен для читаемых названий в отчетах — вместо технических имен методов увидим осмысленные описания.
 
-Перед запуском теста в методе `setUp` создаётся временный файл и открывается поток.
-В `tearDown` этот файл удаляется, а поток закрывается — всё это нужно только для изоляции теста.
-
-Также используется `@DisplayName`, чтобы в CI или IDE отображались читаемые и осмысленные названия тестов.
-
-Представим, что вы запускаете тест в Gradle:
+Теперь запустим тест через Gradle:
 
 ```bash
 ./gradlew :test --tests "test.ImageDownloaderTest"
 ```
 
-или кликаете «Run» в IDE — начинается не просто вызов функций, а целый процесс с несколькими важными этапами.
-это команда сработает при условий что мы указали в gradle как реагировать на test задачу:
+Эта команда сработает, если в `build.gradle` настроена задача test:
 
-```gradle
+```kotlin
 tasks.test {
-useJUnitPlatform()
+    useJUnitPlatform()
 }
 ```
 
-Исходники функций useJUnitPlatform:
+И вот здесь начинается интересное — за кулисами запускается целая цепочка вызовов, которая проходит через несколько архитектурных слоев.
+
+### Этап 1: Gradle настраивает JUnit Platform
+
+Вызов `useJUnitPlatform()` в Gradle — это не просто конфигурационная строчка. Под капотом происходит следующее:
 
 ```java
-    public void useJUnitPlatform() {
+public void useJUnitPlatform() {
     useTestFramework(new JUnitPlatformTestFramework((DefaultTestFilter) getFilter(), true, getDryRun()));
 }
-
 ```
 
----
+Gradle создает экземпляр `JUnitPlatformTestFramework`, который реализует интерфейс `TestFramework`. Этот объект станет мостом между Gradle и JUnit Platform — он знает, как найти тесты, как их запустить и как получить результаты.
 
-#### 1. Запуск через Test Engine
-
-Когда команда вызывает `useJUnitPlatform()` или IDE запускает тесты, выполняется **JUnit Platform Launcher**.
-JUnitPlatformTestFramework():
-
-1. Полученение процессора Junit
+Интересный факт: несмотря на то, что Kotlin набирает популярность, и наш тест написан на нем, исходники JUnit по-прежнему остаются верными букве "J" в названии. Аннотация `@Test` выглядит так:
 
 ```java
-package org.gradle.api.internal.tasks.testing.junitplatform;
-
-@UsedByScanPlugin("test-retry")
-public class JUnitPlatformTestFramework implements TestFramework {
-
-    @Override
-    public WorkerTestClassProcessorFactory getProcessorFactory() {
-        ...
-        return new JUnitPlatformTestClassProcessorFactory(new JUnitPlatformSpec(
-                filter.toSpec(), options.getIncludeEngines(), options.getExcludeEngines(),
-                options.getIncludeTags(), options.getExcludeTags(), dryRun.get()
-        ));
-    }
-    ...
+@Target({ ElementType.ANNOTATION_TYPE, ElementType.METHOD })
+@Retention(RetentionPolicy.RUNTIME)
+@Documented
+@API(status = STABLE, since = "5.0")
+@Testable
+public @interface Test {
 }
 ```
 
-```java
-package org.gradle.api.internal.tasks.testing.junit;
+Документация к аннотации гласит: "@Test используется для обозначения тестового метода. Методы с @Test не должны быть private или static и не должны возвращать значение". Простые правила, но за ними стоит продуманная архитектура.
 
+### Этап 2: Создание фабрики процессоров тестов
+
+Когда Gradle готов запускать тесты, он обращается к нашему `JUnitPlatformTestFramework` за фабрикой процессоров:
+
+```java
+public class JUnitPlatformTestFramework implements TestFramework {
+    @Override
+    public WorkerTestClassProcessorFactory getProcessorFactory() {
+        return new JUnitPlatformTestClassProcessorFactory(new JUnitPlatformSpec(...));
+    }
+}
+```
+
+Эта фабрика умеет создавать процессоры тестовых классов — объекты, которые знают, как обрабатывать отдельные тестовые классы. Когда приходит время, фабрика создает `JUnitPlatformTestClassProcessor`:
+
+```java
+public class JUnitPlatformTestClassProcessorFactory implements WorkerTestClassProcessorFactory {
+    @Override
+    public WorkerTestClassProcessor create(..., JUnitPlatformSpec spec) {
+        return new JUnitPlatformTestClassProcessor(spec, ...);
+    }
+}
+```
+
+`JUnitPlatformTestClassProcessor` наследуется от `AbstractJUnitTestClassProcessor` и реализует интерфейс `TestClassProcessor`. Это ключевой компонент — именно он будет координировать выполнение наших тестов.
+
+### Этап 3: TestWorker начинает обработку
+
+Внутри Gradle работает `TestWorker` — компонент, который управляет жизненным циклом выполнения тестов. 
+```java
+package org.gradle.api.internal.tasks.testing.worker;
+
+public class TestWorker implements Action<WorkerProcessContext>, RemoteTestClassProcessor, Serializable, Stoppable {
+
+    private TestClassProcessor processor;
+
+    @Override
+    public void processTestClass(final TestClassRunInfo testClass) {
+        ...
+        processor.processTestClass(testClass);
+        ...
+    }
+
+    @Override
+    public void startProcessing() {         
+        ...
+        processor.startProcessing(resultProcessor);
+    }
+}
+
+```
+
+TestWorker вызывает два ключевых метода процессора:
+
+```java
 public abstract class AbstractJUnitTestClassProcessor implements TestClassProcessor {
 
     private Action<String> executor;
@@ -888,7 +894,6 @@ public abstract class AbstractJUnitTestClassProcessor implements TestClassProces
     @Override
     public void startProcessing(TestResultProcessor resultProcessor) {
         TestResultProcessor resultProcessorChain = createResultProcessorChain(resultProcessor);
-        // Wrap the result processor chain up in a blocking actor, to make the whole thing thread-safe
         resultProcessorActor = actorFactory.createBlockingActor(resultProcessorChain);
         executor = createTestExecutor(resultProcessorActor);
     }
@@ -898,30 +903,19 @@ public abstract class AbstractJUnitTestClassProcessor implements TestClassProces
         LOGGER.debug("Executing test class {}", testClass.getTestClassName());
         executor.execute(testClass.getTestClassName());
     }
-
 }
-
 ```
 
+На этапе `startProcessing` создается цепочка обработчиков результатов и actor для потокобезопасной работы с ними. Actor — это паттерн, который гарантирует, что все операции с результатами тестов будут выполняться последовательно, даже если тесты запускаются в нескольких потоках.
+
+Метод `processTestClass` получает информацию о тестовом классе и передает его имя executor'у для выполнения. Но тут есть подвох — тесты еще не запускаются!
+
+### Этап 4: Накопление классов перед запуском
+
+В `JUnitPlatformTestClassProcessor` используется интересная стратегия — сначала собрать все тестовые классы, а потом запустить их разом:
+
 ```java
-
-package org.gradle.api.internal.tasks.testing.junitplatform;
-
 public class JUnitPlatformTestClassProcessor extends AbstractJUnitTestClassProcessor {
-
-    private static class BackwardsCompatibleLauncherSession implements AutoCloseable {
-
-        static BackwardsCompatibleLauncherSession open() {
-            try {
-                LauncherSession launcherSession = LauncherFactory.openSession();
-                return new BackwardsCompatibleLauncherSession(launcherSession);
-            } catch (NoSuchMethodError ignore) {
-                // JUnit Platform version on test classpath does not yet support launcher sessions
-                return new BackwardsCompatibleLauncherSession(LauncherFactory.create(), () -> {
-                });
-            }
-        }
-    }
 
     @Override
     protected Action<String> createTestExecutor(Actor resultProcessorActor) {
@@ -932,160 +926,60 @@ public class JUnitPlatformTestClassProcessor extends AbstractJUnitTestClassProce
         return testClassExecutor;
     }
 
-    public class JUnitPlatformTestClassProcessor extends AbstractJUnitTestClassProcessor {
-
-        @Override
-        public void stop() {
-            testClassExecutor.processAllTestClasses();
-            launcherSession.close();
-            super.stop();
-        }
-    }
-
-
-    private class CollectAllTestClassesExecutor implements Action<String> {
-        private final List<Class<?>> testClasses = new ArrayList<>();
-        private final TestResultProcessor resultProcessor;
-
-        CollectAllTestClassesExecutor(TestResultProcessor resultProcessor) {
-            this.resultProcessor = resultProcessor;
-        }
-
-        @Override
-        public void execute(@Nonnull String testClassName) {
-            Class<?> klass = loadClass(testClassName);
-            if (isInnerClass(klass) || (supportsVintageTests() && isNestedClassInsideEnclosedRunner(klass))) {
-                return;
-            }
-            testClasses.add(klass);
-        }
-
-        private void processAllTestClasses() {
-            LauncherDiscoveryRequest discoveryRequest = createLauncherDiscoveryRequest(testClasses);
-            TestExecutionListener executionListener = new JUnitPlatformTestExecutionListener(resultProcessor, clock, idGenerator);
-            Launcher launcher = launcherSession.getLauncher();
-            if (spec.isDryRun()) {
-                TestPlan testPlan = launcher.discover(discoveryRequest);
-                executeDryRun(testPlan, executionListener);
-            } else {
-                launcher.execute(discoveryRequest, executionListener);
-            }
-        }
+    @Override
+    public void stop() {
+        testClassExecutor.processAllTestClasses();
+        launcherSession.close();
+        super.stop();
     }
 }
 ```
 
-```java
+`CollectAllTestClassesExecutor` — это внутренний класс, который просто накапливает имена тестовых классов:
 
-public class SuiteTestClassProcessor implements TestClassProcessor {
-    private final TestClassProcessor processor;
+```java
+private class CollectAllTestClassesExecutor implements Action<String> {
+    private final List<Class<?>> testClasses = new ArrayList<>();
 
     @Override
-    public void processTestClass(TestClassRunInfo testClass) {
-        try {
-            processor.processTestClass(testClass);
-        } catch (Throwable t) {
-            Throwable rawFailure = new TestSuiteExecutionException(String.format("Could not execute test class '%s'.", testClass.getTestClassName()), t);
-            resultProcessor.failure(suiteDescriptor.getId(), TestFailure.fromTestFrameworkFailure(rawFailure));
-        }
+    public void execute(@Nonnull String testClassName) {
+        Class<?> klass = loadClass(testClassName);
+        testClasses.add(klass);
+    }
+
+    void processAllTestClasses() {
+        LauncherDiscoveryRequest discoveryRequest = createLauncherDiscoveryRequest(testClasses);
+        TestExecutionListener executionListener = new JUnitPlatformTestExecutionListener(...);
+        Launcher launcher = launcherSession.getLauncher();
+        launcher.execute(discoveryRequest, executionListener);
     }
 }
 ```
 
+Такой подход позволяет JUnit Platform получить полную картину всех тестов перед началом выполнения. Это важно для планирования выполнения, распределения по потокам и создания правильной структуры отчетов.
+
+Реальный запуск происходит только когда Gradle вызывает `stop()` на процессоре, что приводит к вызову `processAllTestClasses()`.
+
+### Этап 5: Launcher берет управление на себя
+
+Когда все классы собраны, создается `LauncherDiscoveryRequest` — объект, который описывает, какие тесты нужно найти и выполнить. Затем получается экземпляр `Launcher` из сессии и запускается выполнение:
+
 ```java
-public class TestWorker implements Action<WorkerProcessContext>, RemoteTestClassProcessor, Serializable, Stoppable {
-
-    @Override
-    public void processTestClass(final TestClassRunInfo testClass) {
-        submitToRun(new Runnable() {
-            @Override
-            public void run() {
-                if (state != State.STARTED) {
-                    throw new IllegalStateException("Test classes cannot be processed until a command to start processing has been received");
-                }
-                try {
-                    processor.processTestClass(testClass);
-                } catch (AccessControlException e) {
-                    throw e;
-                } finally {
-                    // Clean the interrupted status
-                    Thread.interrupted();
-                }
-            }
-        });
-    }
-}
-
+Launcher launcher = launcherSession.getLauncher();
+launcher.execute(discoveryRequest, executionListener);
 ```
 
-```java
-
-@API(status = MAINTAINED, since = "1.0")
-public abstract class HierarchicalTestEngine<C extends EngineExecutionContext> implements TestEngine {
-
-    @Override
-    public final void execute(ExecutionRequest request) {
-        try (HierarchicalTestExecutorService executorService = createExecutorService(request)) {
-            C executionContext = createExecutionContext(request);
-            ThrowableCollector.Factory throwableCollectorFactory = createThrowableCollectorFactory(request);
-            new HierarchicalTestExecutor<>(request, executionContext, executorService,
-                    throwableCollectorFactory).execute().get();
-        } catch (Exception exception) {
-            throw new JUnitException("Error executing tests for engine " + getId(), exception);
-        }
-    }
-
-}
-```
+`Launcher` — это центральная точка входа в JUnit Platform. Его реализация `DefaultLauncher` выглядит довольно просто:
 
 ```java
+public class DefaultLauncher implements Launcher {
 
-@API(status = INTERNAL, since = "5.0")
-public final class JupiterTestEngine extends HierarchicalTestEngine<JupiterEngineExecutionContext> {
-
-
-    @Override
-    public TestDescriptor discover(EngineDiscoveryRequest discoveryRequest, UniqueId uniqueId) {
-        JupiterConfiguration configuration = new CachingJupiterConfiguration(
-                new DefaultJupiterConfiguration(discoveryRequest.getConfigurationParameters()));
-        JupiterEngineDescriptor engineDescriptor = new JupiterEngineDescriptor(uniqueId, configuration);
-        new DiscoverySelectorResolver().resolveSelectors(discoveryRequest, engineDescriptor);
-        return engineDescriptor;
-    }
-
-}
-```
-
-```java
-
-package org.junit.platform.launcher.core;
-
-public class LauncherFactory {
-
-    @API(status = STABLE, since = "1.10")
-    public static LauncherSession openSession() throws PreconditionViolationException {
-        return openSession(LauncherConfig.DEFAULT);
-    }
-}
-```
-
-```java
-
-package org.junit.platform.launcher.core;
-
-class DefaultLauncher implements Launcher {
-
-    private final LauncherListenerRegistry listenerRegistry = new LauncherListenerRegistry();
-    private final EngineExecutionOrchestrator executionOrchestrator = new EngineExecutionOrchestrator(
-            listenerRegistry.testExecutionListeners);
-    ;
+    private final EngineExecutionOrchestrator executionOrchestrator = new EngineExecutionOrchestrator(...);
 
     @Override
     public void execute(TestPlan testPlan, TestExecutionListener... listeners) {
-        ...
         execute((InternalTestPlan) testPlan, listeners);
     }
-
 
     private void execute(InternalTestPlan internalTestPlan, TestExecutionListener[] listeners) {
         executionOrchestrator.execute(internalTestPlan, listeners);
@@ -1093,145 +987,90 @@ class DefaultLauncher implements Launcher {
 }
 ```
 
+Основная работа делегируется в `EngineExecutionOrchestrator` — оркестратор выполнения движков тестов.
+
+### Этап 6: Оркестратор запускает движки тестов
+
+JUnit Platform построена по модульному принципу — разные типы тестов могут выполняться разными движками (engines). Для JUnit 5 это `JupiterTestEngine`, для JUnit 4 — `VintageTestEngine`, есть движки для TestNG и других фреймворков.
+
 ```java
 public class EngineExecutionOrchestrator {
 
-    private final ListenerRegistry<TestExecutionListener> listenerRegistry;
-
-    public EngineExecutionOrchestrator() {
-        this(ListenerRegistry.forTestExecutionListeners());
-    }
-
-    EngineExecutionOrchestrator(ListenerRegistry<TestExecutionListener> listenerRegistry) {
-        this.listenerRegistry = listenerRegistry;
-    }
-
-    void execute(InternalTestPlan internalTestPlan, TestExecutionListener... listeners) {
-        ConfigurationParameters configurationParameters = internalTestPlan.getConfigurationParameters();
-        ListenerRegistry<TestExecutionListener> testExecutionListenerListeners = buildListenerRegistryForExecution(
-                listeners);
-        withInterceptedStreams(configurationParameters, testExecutionListenerListeners,
-                testExecutionListener -> execute(internalTestPlan, EngineExecutionListener.NOOP, testExecutionListener));
-    }
-
-    private void execute(InternalTestPlan internalTestPlan, EngineExecutionListener parentEngineExecutionListener,
-                         TestExecutionListener testExecutionListener) {
-        internalTestPlan.markStarted();
-
-        // Do not directly pass the internal test plan to test execution listeners.
-        // Hyrum's Law indicates that someone will eventually come to depend on it.
-        TestPlan testPlan = internalTestPlan.getDelegate();
-        LauncherDiscoveryResult discoveryResult = internalTestPlan.getDiscoveryResult();
-
-        testExecutionListener.testPlanExecutionStarted(testPlan);
-        if (isDryRun(internalTestPlan)) {
-            dryRun(testPlan, testExecutionListener);
-        } else {
-            execute(discoveryResult,
-                    buildEngineExecutionListener(parentEngineExecutionListener, testExecutionListener, testPlan));
-        }
-        testExecutionListener.testPlanExecutionFinished(testPlan);
-    }
-
-    @API(status = INTERNAL, since = "1.7", consumers = {"org.junit.platform.testkit"})
     public void execute(LauncherDiscoveryResult discoveryResult, EngineExecutionListener engineExecutionListener) {
-        Preconditions.notNull(discoveryResult, "discoveryResult must not be null");
-        Preconditions.notNull(engineExecutionListener, "engineExecutionListener must not be null");
-
-        ConfigurationParameters configurationParameters = discoveryResult.getConfigurationParameters();
-        EngineExecutionListener listener = selectExecutionListener(engineExecutionListener, configurationParameters);
-
         for (TestEngine testEngine : discoveryResult.getTestEngines()) {
             TestDescriptor engineDescriptor = discoveryResult.getEngineTestDescriptor(testEngine);
-            if (engineDescriptor instanceof EngineDiscoveryErrorDescriptor) {
-                listener.executionStarted(engineDescriptor);
-                listener.executionFinished(engineDescriptor,
-                        TestExecutionResult.failed(((EngineDiscoveryErrorDescriptor) engineDescriptor).getCause()));
-            } else {
-                execute(engineDescriptor, listener, configurationParameters, testEngine);
-            }
-        }
-    }
-
-
-    private void execute(TestDescriptor engineDescriptor, EngineExecutionListener listener,
-                         ConfigurationParameters configurationParameters, TestEngine testEngine) {
-
-        OutcomeDelayingEngineExecutionListener delayingListener = new OutcomeDelayingEngineExecutionListener(listener,
-                engineDescriptor);
-        try {
             testEngine.execute(new ExecutionRequest(engineDescriptor, delayingListener, configurationParameters));
-            delayingListener.reportEngineOutcome();
-        } catch (Throwable throwable) {
-            UnrecoverableExceptions.rethrowIfUnrecoverable(throwable);
-            delayingListener.reportEngineFailure(new JUnitException(
-                    String.format("TestEngine with ID '%s' failed to execute tests", testEngine.getId()), throwable));
         }
     }
-
 }
 ```
 
-```java
+Для каждого найденного движка создается `ExecutionRequest` с описанием тестов, которые этот движок должен выполнить, и вызывается `execute()`.
 
-@API(status = MAINTAINED, since = "1.0")
-public abstract class HierarchicalTestEngine<C extends EngineExecutionContext> implements TestEngine {
+В нашем случае будет использоваться `JupiterTestEngine` — движок для JUnit Jupiter (официальное название JUnit 5).
+
+### Этап 7: JupiterTestEngine организует иерархическое выполнение
+
+`JupiterTestEngine` наследуется от `HierarchicalTestEngine` — базового класса для движков, которые работают с иерархической структурой тестов:
+
+```java
+public final class JupiterTestEngine extends HierarchicalTestEngine<JupiterEngineExecutionContext> {
 
     @Override
-    public final void execute(ExecutionRequest request) {
+    public void execute(ExecutionRequest request) {
         try (HierarchicalTestExecutorService executorService = createExecutorService(request)) {
-            C executionContext = createExecutionContext(request);
+            JupiterEngineExecutionContext executionContext = createExecutionContext(request);
             ThrowableCollector.Factory throwableCollectorFactory = createThrowableCollectorFactory(request);
-            new HierarchicalTestExecutor<>(request, executionContext, executorService,
-                    throwableCollectorFactory).execute().get();
+
+            new HierarchicalTestExecutor<>(
+                request,
+                executionContext,
+                executorService,
+                throwableCollectorFactory
+            ).execute().get();
         } catch (Exception exception) {
             throw new JUnitException("Error executing tests for engine " + getId(), exception);
         }
     }
 }
-
 ```
+
+Здесь создается `HierarchicalTestExecutor` — исполнитель, который умеет работать с деревом `TestDescriptor`'ов. Каждый `TestDescriptor` представляет узел в иерархии тестов — это может быть движок, пакет, класс, метод или отдельный тестовый случай.
+
+`ExecutorService` определяет, как будут выполняться тесты — последовательно в одном потоке или параллельно в нескольких. `ThrowableCollector` нужен для корректной обработки исключений на разных уровнях иерархии.
+
+### Этап 8: HierarchicalTestExecutor запускает корневую задачу
+
 ```java
 class HierarchicalTestExecutor<C extends EngineExecutionContext> {
 
-	private final ExecutionRequest request;
-	private final C rootContext;
-	private final HierarchicalTestExecutorService executorService;
-	private final ThrowableCollector.Factory throwableCollectorFactory;
-
-	HierarchicalTestExecutor(ExecutionRequest request, C rootContext, HierarchicalTestExecutorService executorService,
-			ThrowableCollector.Factory throwableCollectorFactory) {
-		this.request = request;
-		this.rootContext = rootContext;
-		this.executorService = executorService;
-		this.throwableCollectorFactory = throwableCollectorFactory;
-	}
-
-	Future<Void> execute() {
-		TestDescriptor rootTestDescriptor = this.request.getRootTestDescriptor();
-		EngineExecutionListener executionListener = this.request.getEngineExecutionListener();
-		NodeExecutionAdvisor executionAdvisor = new NodeTreeWalker().walk(rootTestDescriptor);
-		NodeTestTaskContext taskContext = new NodeTestTaskContext(executionListener, this.executorService,
-			this.throwableCollectorFactory, executionAdvisor);
-		NodeTestTask<C> rootTestTask = new NodeTestTask<>(taskContext, rootTestDescriptor);
-		rootTestTask.setParentContext(this.rootContext);
-		return this.executorService.submit(rootTestTask);
-	}
+    Future<Void> execute() {
+        NodeTestTask<C> rootTestTask = new NodeTestTask<>(taskContext, rootTestDescriptor);
+        rootTestTask.setParentContext(this.rootContext);
+        return this.executorService.submit(rootTestTask);
+    }
 }
 ```
+
+Создается корневая задача `NodeTestTask` для корневого `TestDescriptor` и отправляется на выполнение в `ExecutorService`. Часто используется `SameThreadHierarchicalTestExecutorService`, который выполняет задачи синхронно:
+
 ```java
-
-@API(status = STABLE, since = "1.10")
 public class SameThreadHierarchicalTestExecutorService implements HierarchicalTestExecutorService {
-	@Override
-	public Future<Void> submit(TestTask testTask) {
-		testTask.execute();
-		return completedFuture(null);
-	}
+
+    @Override
+    public Future<Void> submit(TestTask testTask) {
+        testTask.execute();
+        return CompletableFuture.completedFuture(null);
+    }
 }
 ```
-```JAVA
-class NodeTestTask<C extends EngineExecutionContext> implements TestTask {
+
+### Этап 9: NodeTestTask выполняет рекурсивную обработку узлов
+
+`NodeTestTask` реализует основную логику выполнения одного узла в дереве тестов:
+
+```java
+public class NodeTestTask<C extends EngineExecutionContext> implements TestTask {
 
     @Override
     public void execute() {
@@ -1239,50 +1078,109 @@ class NodeTestTask<C extends EngineExecutionContext> implements TestTask {
     }
 
     private void executeRecursively() {
-
         throwableCollector.execute(() -> {
             node.around(context, ctx -> {
-                context = ctx;
-                throwableCollector.execute(() -> {
-                    // @formatter:off
-                    List<NodeTestTask<C>> children = testDescriptor.getChildren().stream()
-                            .map(descriptor -> new NodeTestTask<C>(taskContext, descriptor))
-                            .collect(toCollection(ArrayList::new));
-                    // @formatter:on
-
-                    context = node.before(context);
-
-                    final DynamicTestExecutor dynamicTestExecutor = new DefaultDynamicTestExecutor();
-                    context = node.execute(context, dynamicTestExecutor);
-
-                    if (!children.isEmpty()) {
-                        children.forEach(child -> child.setParentContext(context));
-                        taskContext.getExecutorService().invokeAll(children);
-                    }
-
-                    throwableCollector.execute(dynamicTestExecutor::awaitFinished);
-                });
-
-                throwableCollector.execute(() -> node.after(context));
+                context = node.before(context);
+                context = node.execute(context, dynamicTestExecutor);
+                ...
+                taskContext.getExecutorService().invokeAll(children);
+                ...
+                dynamicTestExecutor.awaitFinished();
+                ...
+                node.after(context);
             });
         });
     }
 }
-
 ```
+
+Метод `executeRecursively()` реализует классический паттерн выполнения тестов:
+
+1. **before** — подготовка окружения, выполнение `@BeforeAll` и `@BeforeEach`, создание экземпляра тестового класса
+2. **execute** — непосредственное выполнение логики узла (например, вызов метода с `@Test`)
+3. **children** — рекурсивное выполнение всех дочерних узлов
+4. **dynamic** — ожидание завершения динамически зарегистрированных тестов (через `@TestFactory`)
+5. **after** — завершающие действия, выполнение `@AfterEach` и `@AfterAll`
+
+Весь блок обернут в `ThrowableCollector.execute()`, что обеспечивает корректную обработку исключений — они собираются и передаются слушателям, но не прерывают выполнение остальных фаз.
+
+### Этап 10: Выполнение конкретного тестового метода
+
+Когда очередь доходит до узла типа `MethodTestDescriptor` (это наш метод `downloaded image is saved to file`), вызывается его метод `execute()`:
+
 ```java
-
-@API(status = MAINTAINED, since = "1.3")
-public class ThrowableCollector {
-
-    public void execute(Executable executable) {
-        executable.execute();
-    }
-
+@Override
+public JupiterEngineExecutionContext execute(JupiterEngineExecutionContext context, DynamicTestExecutor dynamicTestExecutor) {
+    invoker.invoke(context.getExtensionRegistry(), context.getTestInstance(), executable);
+    return context;
 }
 ```
 
----
+Здесь `invoker` — это экземпляр `ExecutableInvoker`, а `executable` — объект типа `Method`, который ссылается на наш тестовый метод.
+
+`ExecutableInvoker` обрабатывает параметры метода (если они есть), применяет расширения и в конце концов вызывает:
+
+```java
+public class ExecutableInvoker {
+
+    public Object invoke(ExtensionRegistry extensionRegistry, Object target, Executable executable, Object... arguments) throws Throwable {
+        ...
+        return ReflectionUtils.invokeMethod((Method) executable, target, arguments);
+    }
+}
+```
+
+А `ReflectionUtils.invokeMethod()` делает то, что и следует из названия:
+
+```java
+public final class ReflectionUtils {
+
+    public static Object invokeMethod(Method method, Object target, Object... arguments) throws Exception {
+        method.setAccessible(true);
+        return method.invoke(target, arguments);
+    }
+}
+```
+
+И вот здесь, наконец, происходит то, ради чего была запущена вся эта машинерия — выполняется `Method.invoke()` на экземпляре нашего класса `ImageDownloaderTest`, вызывая метод `downloaded image is saved to file()`.
+
+###### Этап 11: Обработка динамических тестов
+
+JUnit 5 поддерживает динамические тесты — тесты, которые создаются во время выполнения через `@TestFactory`. Если в нашем классе был бы такой метод:
+
+```kotlin
+@TestFactory
+fun dynamicTests(): Stream<DynamicTest> {
+    return Stream.of(
+        DynamicTest.dynamicTest("Test 1") { /* логика теста 1 */ },
+        DynamicTest.dynamicTest("Test 2") { /* логика теста 2 */ }
+    )
+}
+```
+
+То эти тесты регистрировались бы через `DynamicTestExecutor`:
+
+```java
+public interface DynamicTestExecutor {
+    void execute(TestDescriptor dynamicTestDescriptor);
+    void awaitFinished();
+}
+```
+
+Во время выполнения фабричного метода динамические тесты регистрируются через `execute()`, а их реальное выполнение происходит при вызове `awaitFinished()` в `NodeTestTask`. Это позволяет поддерживать правильный порядок выполнения и корректно обрабатывать результаты динамических тестов.
+
+### Заключение
+
+Путь от команды `./gradlew test` до выполнения вашего тестового метода проходит через множество архитектурных слоев, каждый из которых решает свою задачу:
+
+- **Gradle** организует сборку и координирует запуск тестов
+- **JUnit Platform** предоставляет универсальную платформу для разных тестовых движков
+- **JUnit Jupiter** реализует специфичную для JUnit 5 логику обнаружения и выполнения тестов
+- **Hierarchical Test Executor** управляет иерархическим выполнением узлов тестов
+- **Node Test Tasks** реализуют жизненный цикл before/execute/after для каждого узла
+
+Такая архитектура может показаться избыточно сложной для простого вызова тестового метода, но она дает важные преимущества: модульность, расширяемость, поддержку параллельного выполнения, корректную обработку исключений и богатые возможности отчетности. Понимание этих внутренних механизмов поможет вам лучше отлаживать проблемы с тестами и эффективнее использовать возможности JUnit 5.
+
 
 ### `@VisibleForTesting`: не тест, но для теста
 
@@ -1301,7 +1199,6 @@ internal fun recalculateChecksum() {
 }
 ```
 
----
 
 ### Почему JUnit 5 — это уже не просто про юниты
 
@@ -1315,7 +1212,6 @@ internal fun recalculateChecksum() {
 На этом контракте уже сегодня построено множество других библиотек. Они не используют JUnit «как есть», они строят свои абстракции, свои
 DSL’ы, но под капотом всё это всё равно исполняется через JUnit Platform. Ниже — несколько ярких примеров:
 
-⸻
 
 Kotest
 Фреймворк, который кардинально переосмысливает, как должен выглядеть тест в языке Kotlin. Вместо привычной структуры “класс + методы”, здесь
@@ -1323,35 +1219,30 @@ Kotest
 поддерживает property-based testing, матчер-DSL, тестовые генераторы и детерминированные стратегии повторения. Но что важно — всё это
 работает через JUnit Platform, а значит, совместимо с IDE, Gradle и CI из коробки.
 
-⸻
 
 Spek
 Минималистичный фреймворк, ориентированный на спецификацию поведения, а не реализацию. Тесты в Spek пишутся как цепочки вложенных блоков
 given / on / it, приближаясь к форме технического задания. В отличие от Kotest, Spek делает акцент на чистоте и лаконичности, особенно в
 микросервисных сценариях. И снова — под всей этой структурой лежит не собственный раннер, а именно JUnit Platform.
 
-⸻
 
 Cucumber
 BDD-фреймворк, который строится вокруг Gherkin-сценариев. Вы описываете поведение системы в .feature-файле на естественном языке, а
 реализацию шагов связываете с кодом. Для запуска этих сценариев, Cucumber использует свой адаптер, который регистрирует себя как TestEngine
 JUnit Platform. Это позволяет запускать BDD-тесты в той же среде, что и обычные unit или integration тесты, не ломая пайплайн.
 
-⸻
 
 JQwik
 Property-based testing на Java и Kotlin, вдохновлённый QuickCheck. Вместо написания конкретных примеров, вы описываете свойства, которые
 система должна удовлетворять для произвольных входов. Генерация данных, shrink’инг, случайность — всё встроено. И опять же: он не делает
 свою экосистему — он интегрируется через JUnit Platform.
 
-⸻
 
 JUnit 5 — это не вершина тестирования. Это скорее почва, на которой растут разные формы тестирования: декларативные, спецификационные, BDD,
 property-based. И возможность строить поверх него — это не побочный эффект, это основа архитектурного замысла.
 
 Это не библиотека для “написать тест и забыть”, это платформа, к которой можно подключить своё видение того, что такое тест вообще.
 
----
 
 ## 7. Kotlin Test: Строгая минималистика
 
@@ -1360,7 +1251,6 @@ property-based. И возможность строить поверх него �
 * Пример теста без boilerplate.
 * Почему многие так и не поняли силу `kotest`, `kotlin.test`, `assertSoftly` и т.д.
 
----
 
 ## 8. Заключение: Тест как управляемая иллюзия реальности
 
@@ -1368,4 +1258,3 @@ property-based. И возможность строить поверх него �
 * Но именно потому, что это иллюзия, она должна быть контролируемой.
 * И чем честнее тест, тем проще продакшен.
 
----
