@@ -1185,7 +1185,7 @@ public final class ReflectionUtils {
 И вот здесь, наконец, происходит то, ради чего была запущена вся эта машинерия выполняется `Method.invoke()` на экземпляре нашего класса
 `ImageDownloaderTest`, вызывая метод `downloaded image is saved to file()`.
 
-###### Этап 11: Обработка динамических тестов
+### Этап 11: Обработка динамических тестов
 
 JUnit 5 поддерживает динамические тесты тесты, которые создаются во время выполнения через `@TestFactory`. Если в нашем классе был бы
 такой метод:
@@ -1213,6 +1213,329 @@ public interface DynamicTestExecutor {
 Во время выполнения фабричного метода динамические тесты регистрируются через `execute()`, а их реальное выполнение происходит при вызове
 `awaitFinished()` в `NodeTestTask`. Это позволяет поддерживать правильный порядок выполнения и корректно обрабатывать результаты
 динамических тестов.
+
+
+### Как собираются тестовые классы?
+
+В ходе этой главы на самом деле в исходниках была кодовая база которая показывает как собираются тестовые классы, но мы не уделили
+им внимание что бы не усложнять:
+```java
+public class GradleWorkerMain {
+
+    public void run() throws Exception {
+        ...
+        @SuppressWarnings("unchecked")
+        Class<? extends Callable<Void>> workerClass = (Class<? extends Callable<Void>>) implementationClassLoader.loadClass("org.gradle.process.internal.worker.child.SystemApplicationClassLoaderWorker").asSubclass(Callable.class);
+        Callable<Void> main = workerClass.getConstructor(DataInputStream.class).newInstance(instr);
+        main.call();
+    }
+
+    public static void main(String[] args) {
+        try {
+            new GradleWorkerMain().run();
+            System.exit(0);
+        } catch (Throwable throwable) {
+            throwable.printStackTrace(System.err);
+            System.exit(1);
+        }
+    }
+
+}
+```
+```java
+
+public class SystemApplicationClassLoaderWorker implements Callable<Void> {
+
+    @Override
+    public Void call() throws Exception {
+        ...
+            ActionExecutionWorker worker = new ActionExecutionWorker(config.getWorkerAction());
+            worker.execute(new ContextImpl(config.getWorkerId(), config.getDisplayName(), connection, workerServices));
+        ...
+    }
+
+}
+```
+```java
+
+public class ActionExecutionWorker implements Action<WorkerProcessContext> {
+    private static final Logger LOGGER = LoggerFactory.getLogger(ActionExecutionWorker.class);
+    private final Action<? super WorkerProcessContext> action;
+
+    public ActionExecutionWorker(Action<? super WorkerProcessContext> action) {
+        this.action = action;
+    }
+
+    @Override
+    public void execute(final WorkerProcessContext workerContext) {
+        LOGGER.debug("Starting {}.", workerContext.getDisplayName());
+
+        ObjectConnection clientConnection = workerContext.getServerConnection();
+        clientConnection.addUnrecoverableErrorHandler(new Action<Throwable>() {
+            @Override
+            public void execute(Throwable throwable) {
+                if (action instanceof Stoppable) {
+                    ((Stoppable) action).stop();
+                }
+            }
+        });
+
+        ClassLoader contextClassLoader = Thread.currentThread().getContextClassLoader();
+        Thread.currentThread().setContextClassLoader(action.getClass().getClassLoader());
+        try {
+            action.execute(workerContext);
+        } finally {
+            Thread.currentThread().setContextClassLoader(contextClassLoader);
+        }
+
+        LOGGER.debug("Completed {}.", workerContext.getDisplayName());
+    }
+}
+
+```
+```java
+public class TestWorker implements Action<WorkerProcessContext>, RemoteTestClassProcessor, Serializable, Stoppable {
+
+    @Override
+    public void execute(final WorkerProcessContext workerProcessContext) {
+        Thread.currentThread().setName(WORK_THREAD_NAME);
+
+        LOGGER.info("{} started executing tests.", workerProcessContext.getDisplayName());
+
+        SecurityManager securityManager = System.getSecurityManager();
+
+        System.setProperty(WORKER_ID_SYS_PROPERTY, workerProcessContext.getWorkerId().toString());
+
+        CloseableServiceRegistry testServices = TestFrameworkServiceRegistry.create(workerProcessContext);
+        startReceivingTests(workerProcessContext, testServices);
+
+        try {
+            try {
+                while (state != State.STOPPED) {
+                    executeAndMaintainThreadName(runQueue.take());
+                }
+            } catch (InterruptedException e) {
+                throw UncheckedException.throwAsUncheckedException(e);
+            }
+        } finally {
+            LOGGER.info("{} finished executing tests.", workerProcessContext.getDisplayName());
+
+            // In the event that the main thread exits with an uncaught exception, stop processing
+            // and clear out the run queue to unblock any running communication threads
+            synchronized (this) {
+                state = State.STOPPED;
+                runQueue.clear();
+            }
+
+            if (System.getSecurityManager() != securityManager) {
+                try {
+                    // Reset security manager the tests seem to have installed
+                    System.setSecurityManager(securityManager);
+                } catch (SecurityException e) {
+                    LOGGER.warn("Unable to reset SecurityManager. Continuing anyway...", e);
+                }
+            }
+            testServices.close();
+        }
+    }
+
+    private static void executeAndMaintainThreadName(Runnable action) {
+        try {
+            action.run();
+        } finally {
+            // Reset the thread name if the action changes it (e.g. if a test sets the thread name without resetting it afterwards)
+            Thread.currentThread().setName(WORK_THREAD_NAME);
+        }
+    }
+}
+```
+```java
+
+public class ProxyDispatchAdapter<T> {
+    private final Class<T> type;
+    private final T source;
+
+    public ProxyDispatchAdapter(Dispatch<? super MethodInvocation> dispatch, Class<T> type, Class<?>... extraTypes) {
+        this.type = type;
+        List<Class<?>> types = new ArrayList<Class<?>>();
+        ClassLoader classLoader = type.getClassLoader();
+        types.add(type);
+        for (Class<?> extraType : extraTypes) {
+            ClassLoader candidate = extraType.getClassLoader();
+            if (candidate != classLoader && candidate != null) {
+                try {
+                    if (candidate.loadClass(type.getName()) != null) {
+                        classLoader = candidate;
+                    }
+                } catch (ClassNotFoundException e) {
+                    // Ignore
+                }
+            }
+            types.add(extraType);
+        }
+        source = type.cast(Proxy.newProxyInstance(classLoader, types.toArray(new Class<?>[0]),
+            new DispatchingInvocationHandler(type, dispatch)));
+    }
+
+    public Class<T> getType() {
+        return type;
+    }
+
+    public T getSource() {
+        return source;
+    }
+
+    private static class DispatchingInvocationHandler implements InvocationHandler {
+        private final Class<?> type;
+        private final Dispatch<? super MethodInvocation> dispatch;
+
+        private DispatchingInvocationHandler(Class<?> type, Dispatch<? super MethodInvocation> dispatch) {
+            this.type = type;
+            this.dispatch = dispatch;
+        }
+
+        @Override
+        public Object invoke(Object target, Method method, Object[] parameters) throws Throwable {
+            if (method.getName().equals("equals")) {
+                Object parameter = parameters[0];
+                if (parameter == null || !Proxy.isProxyClass(parameter.getClass())) {
+                    return false;
+                }
+                Object handler = Proxy.getInvocationHandler(parameter);
+                if (!DispatchingInvocationHandler.class.isInstance(handler)) {
+                    return false;
+                }
+
+                DispatchingInvocationHandler otherHandler = (DispatchingInvocationHandler) handler;
+                return otherHandler.type.equals(type) && otherHandler.dispatch == dispatch;
+            }
+
+            if (method.getName().equals("hashCode")) {
+                return dispatch.hashCode();
+            }
+            if (method.getName().equals("toString")) {
+                return type.getSimpleName() + " broadcast";
+            }
+            dispatch.dispatch(new MethodInvocation(method, parameters));
+            return null;
+        }
+    }
+}
+```
+```java
+
+public class ContextClassLoaderDispatch<T> implements Dispatch<T> {
+    private final Dispatch<? super T> dispatch;
+    private final ClassLoader contextClassLoader;
+
+    public ContextClassLoaderDispatch(Dispatch<? super T> dispatch, ClassLoader contextClassLoader) {
+        this.dispatch = dispatch;
+        this.contextClassLoader = contextClassLoader;
+    }
+
+    @Override
+    public void dispatch(T message) {
+        ClassLoader original = Thread.currentThread().getContextClassLoader();
+        Thread.currentThread().setContextClassLoader(contextClassLoader);
+        try {
+            dispatch.dispatch(message);
+        } finally {
+            Thread.currentThread().setContextClassLoader(original);
+        }
+    }
+}
+```
+```java
+
+public class ReflectionDispatch implements Dispatch<MethodInvocation> {
+    private final Object target;
+
+    public ReflectionDispatch(Object target) {
+        this.target = target;
+    }
+
+    @Override
+    public void dispatch(MethodInvocation message) {
+        try {
+            Method method = message.getMethod();
+            method.setAccessible(true);
+            method.invoke(target, message.getArguments());
+        } catch (InvocationTargetException e) {
+            throw UncheckedException.throwAsUncheckedException(e.getCause());
+        } catch (Throwable throwable) {
+            throw UncheckedException.throwAsUncheckedException(throwable);
+        }
+    }
+}
+
+```
+
+```java
+
+public class SuiteTestClassProcessor implements TestClassProcessor {
+    private final TestClassProcessor processor;
+
+    @Override
+    public void processTestClass(TestClassRunInfo testClass) {
+        try {
+            processor.processTestClass(testClass);
+        } catch (Throwable t) {
+            Throwable rawFailure = new TestSuiteExecutionException(String.format("Could not execute test class '%s'.", testClass.getTestClassName()), t);
+            resultProcessor.failure(suiteDescriptor.getId(), TestFailure.fromTestFrameworkFailure(rawFailure));
+        }
+    }
+}
+```
+
+Далее переменной executor присваевается резултат фукнций createTestExecutor, а в методе processTestClass идет обращение к этому executor
+
+```java
+public abstract class AbstractJUnitTestClassProcessor implements TestClassProcessor {
+
+    private Action<String> executor;
+
+    @Override
+    public void startProcessing(TestResultProcessor resultProcessor) {
+        executor = createTestExecutor(resultProcessorActor);
+    }
+    
+    @Override
+    public void processTestClass(TestClassRunInfo testClass) {
+        LOGGER.debug("Executing test class {}", testClass.getTestClassName());
+        executor.execute(testClass.getTestClassName());
+    }
+}
+```
+JUnitPlatformTestClassProcessor наследуется от AbstractJUnitTestClassProcessor, и предоставляет реализацию метода createTestExecutor
+```java
+public class JUnitPlatformTestClassProcessor extends AbstractJUnitTestClassProcessor {
+
+    @Override
+    protected Action<String> createTestExecutor(Actor resultProcessorActor) {
+        ...
+        testClassExecutor = new CollectAllTestClassesExecutor(threadSafeResultProcessor);
+        return testClassExecutor;
+    }
+}
+```
+
+Взлянем на сам CollectAllTestClassesExecutor который вызывается из AbstractJUnitTestClassProcessor в методе processTestClass:
+
+
+```java
+private class CollectAllTestClassesExecutor implements Action<String> {
+    private final List<Class<?>> testClasses = new ArrayList<>();
+
+    @Override
+    public void execute(@Nonnull String testClassName) {
+        Class<?> klass = loadClass(testClassName);
+        testClasses.add(klass);
+    }
+}
+```
+
+Тут он добавляется в список testClasses
+
 
 ### Заключение
 
