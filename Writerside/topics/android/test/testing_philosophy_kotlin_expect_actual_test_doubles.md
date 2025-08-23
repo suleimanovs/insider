@@ -1,5 +1,5 @@
 ---
-title: "Философия тестирования в Kotlin: Expect/Actual, Unit-тесты и природа Test Doubles"
+title: Философия тестирования в Kotlin: Expect/Actual, Unit-тесты и природа Test Doubles
 excerpt: "Глубокое погружение в философский фундамент тестирования на Kotlin: что означают expect/actual, в чём разница между Unit и JUnit
 тестами, а также концептуальные роли mocks, stubs, fakes и spies. Понимание тестов как контролируемых симуляций реальности."
 publishDate: 2025-08-01
@@ -1407,6 +1407,7 @@ public class TestWorker implements Action<WorkerProcessContext>, RemoteTestClass
 
 В этом этапе мы находимся чуть выше JUnit Platform, на уровне Gradle Test Framework. Здесь через прокси и диспатчер происходит вызов
 методов, которые в итоге передают управление JUnit Engine'у.
+
 ---
 
 #### `ProxyDispatchAdapter` - создание прокси, который делегирует вызовы через `Dispatch`
