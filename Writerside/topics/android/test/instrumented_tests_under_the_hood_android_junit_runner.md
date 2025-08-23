@@ -51,10 +51,10 @@ Android решает эту проблему через **концепцию и�
 ```xml
 <instrumentation 
     android:name="androidx.test.runner.AndroidJUnitRunner"
-    android:targetPackage="com.example.myapp" />
+    android:targetPackage="com.suleimanov.instrumentation" />
 ```
 
-Эта строчка говорит Android: *тестовый APK должен иметь права на управление приложением `com.example.myapp`*. Это не обычные права из `uses-permission`. Это **системные привилегии**, которые позволяют инструментации:
+Эта строчка говорит Android: *тестовый APK должен иметь права на управление приложением `com.suleimanov.instrumentation`*. Это не обычные права из `uses-permission`. Это **системные привилегии**, которые позволяют инструментации:
 
 - Запускать и останавливать Activity тестируемого приложения
 - Вызывать методы жизненного цикла принудительно
@@ -72,21 +72,26 @@ Android решает эту проблему через **концепцию и�
 
 ```java
 public class Instrumentation {
+
     // Управление Activity
     public Activity startActivitySync(Intent intent) { ... }
     public void callActivityOnCreate(Activity activity, Bundle icicle) { ... }
     public void callActivityOnStart(Activity activity) { ... }
     public void callActivityOnResume(Activity activity) { ... }
     public void callActivityOnPause(Activity activity) { ... }
-    
-    // Отправка событий
+    public void callActivityOnStop(Activity activity) { ... }      
+    public void callActivityOnDestroy(Activity activity) { ... }   
+
+    // Отправка событий ввода
     public void sendKeyDownUpSync(int key) { ... }
     public void sendPointerSync(MotionEvent event) { ... }
-    
-    // Мониторинг приложения
+
+    // Мониторинг запуска Activity
     public ActivityMonitor addMonitor(ActivityMonitor monitor) { ... }
-    public Activity waitForActivity(String cls) { ... }
+    public Activity waitForMonitor(ActivityMonitor monitor) { ... }                 
+    public Activity waitForMonitorWithTimeout(ActivityMonitor m, long timeout) { ... } 
 }
+
 ```
 
 Каждый из этих методов — это **прямое вмешательство в работу тестируемого приложения**. `callActivityOnCreate()` принудительно вызывает `onCreate()` у Activity. `startActivitySync()` запускает Activity и **блокирует выполнение до тех пор, пока Activity не будет полностью инициализирована**. `sendKeyDownUpSync()` эмулирует нажатия клавиш на уровне системы.
