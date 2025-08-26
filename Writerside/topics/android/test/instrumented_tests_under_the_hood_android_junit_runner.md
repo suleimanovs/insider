@@ -106,20 +106,60 @@ public class Instrumentation {
 2. **Application Process** — процесс тестируемого приложения  
 3. **Instrumentation Bridge** — механизм связи между ними
 
-Когда вы в тесте пишете:
-
+Возьмем простой Activity с одной кнопкой которая меняет свой текст в зависимости от клика:
 ```kotlin
-@Test
-fun testButtonClick() {
-    val activity = activityScenario.launch(MainActivity::class.java)
-    onView(withId(R.id.button)).perform(click())
-    onView(withId(R.id.textView)).check(matches(withText("Clicked!")))
+class MainActivity : AppCompatActivity() {
+
+    private val button: AppCompatButton by lazy { findViewById(R.id.button) }
+    private var isButtonClicked: Boolean = false
+    private val buttonText: String get() = if (isButtonClicked) "Clicked!" else "Click Me"
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        setContentView(R.layout.activity_main)
+
+        button.text = buttonText
+        button.setOnClickListener {
+            isButtonClicked = !isButtonClicked
+            button.text = buttonText
+        }
+    }
 }
 ```
+Далее xml файл с одной кнопкой внутри конейнера:
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
 
+    <androidx.appcompat.widget.AppCompatButton
+        android:id="@+id/button"
+        android:layout_width="match_parent"
+        android:layout_height="56dp"
+        android:layout_gravity="center"
+        android:layout_margin="48.dp" />
+</FrameLayout>
+```
+
+Теперь напишем тест с комбинацией Junit и Espresso:
+```kotlin
+@RunWith(AndroidJUnit4::class)
+class ExampleInstrumentedTest {
+
+    @get:Rule
+    val activityRule = ActivityScenarioRule(MainActivity::class.java)
+
+    @Test
+    fun testButtonClick() {
+        onView(withId(R.id.button)).perform(click())
+        onView(withId(R.id.button)).check(matches(withText("Clicked!")))
+    }
+}
+```
 На самом деле происходит следующее:
 
-1. Тестовый код (в Test Process) вызывает `activityScenario.launch()`
+1. Тестовый код (в Test Process) находит Rule и activityRule и запускается
 2. ActivityScenario через IPC обращается к Instrumentation Bridge
 3. Instrumentation (работающий в Application Process) запускает MainActivity
 4. `onView().perform(click())` снова идёт через Bridge и эмулирует клик в Application Process
