@@ -419,11 +419,6 @@ private void resetSystemState() {
 
 private void cleanupResources() {
     // Закрытие всех тестовых баз данных
-    clearTestFiles();
-    
-    // Отписка от BroadcastReceiver
-    unregisterTestReceivers();
-}
     closeTestDatabases();
     
     // Удаление временных файлов
@@ -456,13 +451,17 @@ AndroidJUnitRunner — это архитектурный компромисс м
 
 ## 4. От ActivityTestRule к ActivityScenario: Эволюция контроля
 
-В предыдущих главах мы разобрали, как AndroidJUnitRunner управляет общим жизненным циклом тестового процесса. Но что происходит, когда нужно управлять жизненным циклом **конкретной Activity**? Как запустить Activity в нужном состоянии, как протестировать её поведение при смене конфигурации или восстановлении из savedInstanceState?
+В предыдущей главе мы изучили AndroidJUnitRunner — дирижёра, который координирует весь оркестр инструментального тестирования. Но даже самый талантливый дирижёр не может играть на каждом инструменте. У AndroidJUnitRunner есть своя область ответственности: он управляет процессами, потоками, системной интеграцией. Но кто управляет жизнью и смертью конкретной Activity?
 
-Эту задачу решают специальные инструменты управления Activity. За годы развития Android тестирования их было несколько, и каждый отражал понимание того, как должна быть устроена архитектура тестов. История этой эволюции — от `ActivityTestRule` к `ActivityScenario` — показывает переход от **декларативного подхода к императивному**.
+Эта задача кажется простой только на первый взгляд. В обычном приложении Activity создаёт и управляет ею Android система в ответ на действия пользователя или системные события. В тестах эту роль должен взять на себя тестовый код. Но как точно воспроизвести сложный танец жизненного цикла Activity — от создания до уничтожения, через все промежуточные состояния, включая пересоздание при смене конфигурации и восстановление из savedInstanceState?
 
-### ActivityTestRule: Наследие JUnit Rules
+За годы развития Android-тестирования было несколько попыток решить эту проблему. Каждое решение отражало понимание того времени о том, как должна быть устроена архитектура тестов, какой уровень контроля должен быть у программиста, какой баланс между простотой и гибкостью является оптимальным. История эволюции от `ActivityTestRule` к `ActivityScenario` — это история перехода от декларативной простоты к императивному контролю, от автоматизации к ручному управлению, от ограничений к свободе.
 
-`ActivityTestRule` появился в эпоху, когда Android тестирование только формировалось. Он построен на концепции **JUnit Rules** — механизме, позволяющем встраивать дополнительную логику в жизненный цикл теста.
+### ActivityTestRule: философия автоматизации
+
+`ActivityTestRule` появился в эпоху, когда Android-тестирование делало первые неуверенные шаги. Тогда казалось, что лучший способ упростить тестирование — это максимально автоматизировать рутинные операции. Зачем заставлять программиста каждый раз писать код для создания Activity, если можно сделать это автоматически?
+
+ActivityTestRule воплощал философию доброжелательной опеки. Он брал на себя всю ответственность за жизненный цикл Activity, освобождая программиста от необходимости думать о технических деталях. Создать Activity, настроить окружение, обеспечить правильную очистку после теста — всё это ActivityTestRule делал незаметно, за кулисами.
 
 ```kotlin
 class MainActivityTest {
@@ -472,18 +471,16 @@ class MainActivityTest {
     
     @Test
     fun testButtonVisibility() {
-        // Activity уже запущена благодаря Rule
+        // Activity уже живёт и готова к работе
         val activity = activityRule.activity
         onView(withId(R.id.button)).check(matches(isDisplayed()))
     }
 }
 ```
 
-Принцип простой: `ActivityTestRule` **автоматически запускает Activity перед каждым тестом** и **закрывает её после**. Тест не управляет жизненным циклом — он только использует уже готовую Activity.
+В этом коде скрыта целая философия тестирования. Тест не заботится о том, как создалась Activity, в каком она состоянии, что произошло в её `onCreate()`. Тест просто использует готовый объект, как если бы Activity всегда существовала. ActivityTestRule превращает тестирование в декларативное искусство: "дай мне MainActivity, и я проверю, что кнопка видна".
 
-#### Внутреннее устройство ActivityTestRule
-
-Под капотом `ActivityTestRule` реализует интерфейс `TestRule` и встраивается в JUnit жизненный цикл:
+Магия ActivityTestRule основана на элегантном использовании JUnit Rules — механизма, который позволяет встраивать дополнительную логику в стандартный жизненный цикл теста. Правило (Rule) в JUnit — это способ сказать: "перед выполнением теста сделай это, а после теста — то". ActivityTestRule превращает этот простой механизм в мощный инструмент управления жизненным циклом Activity.
 
 ```java
 public class ActivityTestRule<T extends Activity> implements TestRule {
@@ -498,14 +495,14 @@ public class ActivityTestRule<T extends Activity> implements TestRule {
         @Override
         public void evaluate() throws Throwable {
             try {
-                // Запуск Activity перед тестом
+                // Рождение Activity перед тестом
                 launchActivity();
                 
-                // Выполнение теста
+                // Тест работает с живой Activity
                 base.evaluate();
                 
             } finally {
-                // Закрытие Activity после теста
+                // Смерть Activity после теста
                 finishActivity();
             }
         }
@@ -513,7 +510,7 @@ public class ActivityTestRule<T extends Activity> implements TestRule {
 }
 ```
 
-`launchActivity()` использует уже знакомый нам механизм Instrumentation:
+Внутри `launchActivity()` скрывается уже знакомый нам механизм Instrumentation — тот самый мост между тестовым и приложенческим процессами, который мы изучали в предыдущих главах:
 
 ```java
 private void launchActivity() {
@@ -522,58 +519,54 @@ private void launchActivity() {
 }
 ```
 
-Это выглядит элегантно, но имеет фундаментальное ограничение: **Activity запускается только один раз, в начале теста**. Если вы хотите протестировать поведение при пересоздании Activity (например, при повороте экрана), `ActivityTestRule` не поможет.
+ActivityTestRule создаёт иллюзию простоты, но за этой простотой скрывается фундаментальное ограничение. Activity рождается один раз, в начале теста, живёт на протяжении всего теста и умирает в конце. Это предопределённый жизненный цикл, где нет места для экспериментов. Если вы хотите протестировать, что происходит при повороте экрана, при пересоздании Activity, при восстановлении из savedInstanceState — ActivityTestRule беспомощен. Он знает только один сценарий: родиться, жить, умереть.
 
-#### Проблемы декларативного подхода
+Проблемы декларативной философии стали очевидными, когда Android-приложения усложнились, а требования к тестированию выросли. ActivityTestRule создавался в эпоху относительно простых приложений, где Activity была в основном контейнером для UI. Но современные приложения используют Activity как сложные компоненты с собственным жизненным циклом, состоянием, взаимодействием с архитектурными компонентами.
 
 ```kotlin
 @Test
 fun testConfigurationChange() {
-    // Activity уже создана в состоянии RESUMED
+    // Activity уже создана и живёт в RESUMED
     
-    // Как протестировать поведение при повороте экрана?
-    // Как получить доступ к savedInstanceState?
-    // Как убедиться, что onDestroy() вызвался корректно?
+    // Но как протестировать самый критический сценарий — поворот экрана?
+    // Как убедиться, что onSaveInstanceState() сохраняет правильные данные?
+    // Как проверить, что onCreate() корректно восстанавливает состояние?
+    // Как протестировать полный цикл уничтожения и пересоздания?
     
-    // ActivityTestRule не даёт таких возможностей
+    // ActivityTestRule может только наблюдать, но не управлять
 }
 ```
 
-`ActivityTestRule` построен вокруг предположения: **тест работает с уже готовой Activity**. Но современное Android-приложение должно корректно обрабатывать весь жизненный цикл, включая:
+ActivityTestRule построен на философии статичности: Activity создаётся один раз и существует в неизменном виде на протяжении всего теста. Но реальная жизнь Android-приложения динамична. Activity рождается из Intent с параметрами, переходит через состояния CREATED → STARTED → RESUMED, может быть приостановлена системой, может быть уничтожена при нехватке памяти, может быть пересоздана при смене конфигурации. Весь этот сложный танец жизненного цикла остаётся за рамками возможностей ActivityTestRule.
 
-- Создание из Intent с дополнительными параметрами
-- Пересоздание при смене конфигурации  
-- Восстановление состояния из `savedInstanceState`
-- Переходы между состояниями CREATED → STARTED → RESUMED → PAUSED → STOPPED → DESTROYED
+### ActivityScenario: императивная свобода
 
-### ActivityScenario: Императивная революция
-
-`ActivityScenario` появился как ответ на ограничения `ActivityTestRule`. Вместо автоматического управления жизненным циклом он даёт **полный контроль** над каждым этапом существования Activity.
+Появление `ActivityScenario` ознаменовало философскую революцию в Android-тестировании. Вместо доброжелательной опеки ActivityTestRule, которая упрощала жизнь программисту ценой ограничения возможностей, ActivityScenario предложил императивную свободу. Он не предполагает, что тест хочет делать с Activity — он даёт полный контроль над каждым аспектом её существования.
 
 ```kotlin
 @Test
 fun testActivityLifecycle() {
-    // Явное создание Activity
+    // Осознанное создание Activity
     val scenario = ActivityScenario.launch<MainActivity>()
     
-    // Перевод в различные состояния
+    // Точное управление каждым переходом
     scenario.moveToState(Lifecycle.State.CREATED)
     scenario.moveToState(Lifecycle.State.STARTED)  
     scenario.moveToState(Lifecycle.State.RESUMED)
     
-    // Эмуляция поворота экрана
+    // Эмуляция реальных системных событий
     scenario.recreate()
     
-    // Явное закрытие
+    // Контролируемое завершение
     scenario.close()
 }
 ```
 
-Разница принципиальна. `ActivityTestRule` говорит: *вот тебе готовая Activity, делай с ней что хочешь*. `ActivityScenario` говорит: *ты сам управляешь каждым шагом жизни Activity*.
+Различие не только техническое, но и философское. ActivityTestRule воплощает принцип "удобство через ограничения": он делает простые случаи очень простыми, но сложные случаи невозможными. ActivityScenario воплощает принцип "свобода через ответственность": он не делает ничего автоматически, но даёт возможность сделать всё вручную. Это переход от декларативного "дай мне Activity" к императивному "я сам управляю Activity".
 
-#### Архитектура ActivityScenario
+#### Архитектурная философия ActivityScenario
 
-`ActivityScenario` построен вокруг **архитектурных компонентов Android Jetpack**, особенно `Lifecycle` и `LifecycleOwner`. Это не случайность — это отражение современного понимания жизненного цикла в Android.
+ActivityScenario представляет собой не просто техническое улучшение над ActivityTestRule, а философское переосмысление того, как должно быть устроено тестирование в эпоху современных архитектурных компонентов. Он построен на фундаменте Jetpack Architecture Components — особенно `Lifecycle` и `LifecycleOwner` — что делает его не внешним инструментом для манипуляции Activity, а интегральной частью современной Android-архитектуры.
 
 ```java
 public final class ActivityScenario<A extends Activity> implements AutoCloseable {
@@ -581,7 +574,7 @@ public final class ActivityScenario<A extends Activity> implements AutoCloseable
     private final Instrumentation instrumentation;
     private final Class<A> activityClass;
     
-    // Состояние Activity управляется через Lifecycle
+    // Текущее состояние контролируется через современный Lifecycle API
     private Lifecycle.State currentState;
     
     public static <A extends Activity> ActivityScenario<A> launch(Class<A> activityClass) {
@@ -598,9 +591,9 @@ public final class ActivityScenario<A extends Activity> implements AutoCloseable
 }
 ```
 
-#### Управление состояниями
+Обратите внимание на деталь, которая может показаться незначительной, но на самом деле революционна: ActivityScenario хранит `Lifecycle.State currentState`. Это не просто техническая подробность — это философская декларация. ActivityScenario не просто манипулирует Activity как чёрным ящиком, он понимает её внутреннее состояние, думает в терминах современной архитектуры, говорит на языке Lifecycle API.
 
-Ключевая возможность `ActivityScenario` — **программное управление состояниями Lifecycle**:
+Ключевая магия ActivityScenario кроется в методе `moveToState()` — возможности программно переводить Activity между состояниями жизненного цикла:
 
 ```java
 public ActivityScenario<A> moveToState(Lifecycle.State newState) {
@@ -624,101 +617,91 @@ public ActivityScenario<A> moveToState(Lifecycle.State newState) {
 }
 ```
 
-Каждый переход состояния вызывает соответствующие методы жизненного цикла Activity:
+Но самое интересное происходит внутри каждого перехода. ActivityScenario не просто вызывает один метод — он понимает, что переход между состояниями в Android может требовать прохождения через промежуточные состояния:
 
 ```java
 private void moveToStartedState() {
     if (currentState == Lifecycle.State.CREATED) {
-        // CREATED → STARTED
+        // Прямой переход CREATED → STARTED
         instrumentation.callActivityOnStart(activity);
     } else if (currentState == Lifecycle.State.RESUMED) {
-        // RESUMED → STARTED (через PAUSED)
+        // Переход RESUMED → STARTED требует промежуточного PAUSED
         instrumentation.callActivityOnPause(activity);
     }
     currentState = Lifecycle.State.STARTED;
 }
 ```
 
-#### Эмуляция пересоздания Activity
+Это уже не просто техническая реализация — это понимание семантики Android жизненного цикла. ActivityScenario знает, что переход из RESUMED в STARTED не может произойти напрямую, он должен пройти через состояние PAUSED. Это отражение реальности Android-системы в тестовом коде.
 
-Одна из самых мощных возможностей `ActivityScenario` — метод `recreate()`, который **эмулирует полное пересоздание Activity**, как это происходит при повороте экрана:
+Самая впечатляющая возможность ActivityScenario — метод `recreate()`, который воспроизводит один из самых сложных и критических сценариев в жизни Android-приложения: полное пересоздание Activity. Этот сценарий происходит при повороте экрана, изменении языка, переключении в тёмную тему — во всех случаях, когда система решает, что проще создать Activity заново, чем адаптировать существующую.
 
 ```java
 public ActivityScenario<A> recreate() {
     instrumentation.runOnMainSync(() -> {
-        // 1. Сохранение состояния
+        // Этап 1: Система просит Activity сохранить своё состояние
         Bundle savedInstanceState = new Bundle();
         instrumentation.callActivityOnSaveInstanceState(activity, savedInstanceState);
         
-        // 2. Уничтожение старой Activity
+        // Этап 2: Полный цикл смерти Activity
         instrumentation.callActivityOnPause(activity);
         instrumentation.callActivityOnStop(activity); 
         instrumentation.callActivityOnDestroy(activity);
         
-        // 3. Создание новой Activity
+        // Этап 3: Рождение новой Activity из пепла старой
         recreateActivity(savedInstanceState);
         
-        // 4. Восстановление состояния
+        // Этап 4: Восстановление души через savedInstanceState
         instrumentation.callActivityOnRestoreInstanceState(activity, savedInstanceState);
     });
     return this;
 }
 ```
 
-Это **настоящее пересоздание**, не эмуляция. Activity проходит полный цикл уничтожения и создания, со всеми промежуточными состояниями.
+Это не имитация пересоздания — это настоящее пересоздание. Activity действительно умирает и рождается заново. Старый объект Activity уничтожается сборщиком мусора, создаётся новый объект с новым состоянием памяти. Единственная связь между старой и новой Activity — это Bundle savedInstanceState, который Activity должна правильно заполнить перед смертью и правильно прочитать после рождения. Именно эта связь определяет, насколько хорошо приложение переживёт пересоздание.
 
-### Сравнение подходов: Декларативность vs Контроль
+### Два взгляда на мир: философское противопоставление
 
-| Аспект | ActivityTestRule | ActivityScenario |
-|--------|------------------|------------------|
-| **Философия** | Декларативная: "дай мне готовую Activity" | Императивная: "я сам управляю жизненным циклом" |
-| **Момент запуска** | Автоматически перед каждым тестом | Явно в тестовом коде |
-| **Управление состояниями** | Нет (только RESUMED) | Полное (все состояния Lifecycle) |
-| **Пересоздание** | Невозможно | `recreate()` с сохранением состояния |
-| **Кастомные Intent** | Ограниченная поддержка | Полная поддержка |
-| **Интеграция с Architecture Components** | Нет | Полная (Lifecycle, ViewModel, LiveData) |
-| **Сложность** | Простой | Более сложный, но гибкий |
+Сравнение ActivityTestRule и ActivityScenario — это не просто техническое сопоставление возможностей, это столкновение двух философий понимания того, каким должно быть тестирование в мире с ограниченными ресурсами и бесконечными потребностями.
 
-### Практические различия
+ActivityTestRule воплощает философию защитительного программирования: система берёт на себя всё, что может пойти не так, оставляя программисту только то, что точно безопасно. Это мир предсказуемости, где Activity всегда существует, всегда готова к работе, всегда в правильном состоянии. Но за эту предсказуемость приходится платить ограниченностью возможностей.
 
-#### Тестирование с ActivityTestRule
+ActivityScenario воплощает философию доверия к программисту: система предоставляет все инструменты, но ответственность за их правильное использование лежит на том, кто пишет код. Это мир возможностей, где программист может имитировать любой сценарий, проверить любое поведение, протестировать любую ситуацию. Но за эту свободу приходится платить сложностью и ответственностью.
+
+Практические различия проявляются уже в самых простых сценариях:
 
 ```kotlin
-class OldStyleTest {
-    
+// ActivityTestRule: защитительная простота
+class ConservativeTest {
     @get:Rule
     val activityRule = ActivityTestRule(MainActivity::class.java)
     
     @Test 
-    fun testRotation() {
-        // Activity уже в состоянии RESUMED
-        // Как протестировать поворот? Никак.
-        
+    fun testWhatWeCanTest() {
+        // Activity уже живёт, но что мы можем с ней сделать?
         onView(withId(R.id.text)).check(matches(withText("Hello")))
         
-        // После теста Activity автоматически закроется
+        // Хотим протестировать поворот экрана? Извините, это невозможно
+        // Хотим проверить восстановление состояния? Увы, не предусмотрено
+        // Хотим эмулировать background/foreground? Не получится
     }
 }
-```
 
-#### Тестирование с ActivityScenario
-
-```kotlin
-class ModernStyleTest {
-    
+// ActivityScenario: императивная свобода
+class ModernTest {
     @Test
-    fun testRotation() {
+    fun testWhatWeWantToTest() {
         val scenario = ActivityScenario.launch<MainActivity>()
         
-        // Проверяем исходное состояние
+        // Проверяем нормальное состояние
         scenario.onActivity { activity ->
             assertEquals("Hello", activity.findViewById<TextView>(R.id.text).text)
         }
         
-        // Эмулируем поворот экрана
+        // Эмулируем смерть и воскрешение Activity
         scenario.recreate()
         
-        // Проверяем, что состояние восстановилось
+        // Проверяем, выжила ли она
         scenario.onActivity { activity ->
             assertEquals("Hello", activity.findViewById<TextView>(R.id.text).text)
         }
@@ -728,142 +711,124 @@ class ModernStyleTest {
 }
 ```
 
-### Интеграция с современной архитектурой
+Разница не только в коде, но и в мышлении. ActivityTestRule заставляет думать в терминах "что есть", ActivityScenario позволяет думать в терминах "что должно быть".
 
-`ActivityScenario` создавался с учётом современных паттернов Android разработки — Architecture Components, MVVM, односторонний поток данных.
+### Дитя современной архитектуры
 
-#### Тестирование с ViewModel
+ActivityScenario не просто адаптировался к современным паттернам Android-разработки — он создавался как их неотъемлемая часть. Когда появились Architecture Components с их ViewModel, LiveData, Navigation, стало очевидно, что старые инструменты тестирования не понимают новой реальности. ActivityTestRule был создан в эпоху, когда Activity была толстым контроллером со всей бизнес-логикой внутри. ActivityScenario создавался в эпоху, когда Activity стала тонким слоем презентации, а настоящая логика живёт в ViewModel.
+
+Различие философий особенно ярко проявляется при тестировании одного из фундаментальных принципов современной архитектуры: ViewModel должна переживать пересоздание Activity. Это критический тест на зрелость архитектуры приложения.
 
 ```kotlin
 @Test
-fun testViewModelSurvivesRecreation() {
+fun testArchitectureMaturity() {
     val scenario = ActivityScenario.launch<MainActivity>()
     
     var originalViewModel: MainViewModel? = null
     var recreatedViewModel: MainViewModel? = null
     
-    // Получаем ViewModel до пересоздания
+    // Этап 1: Инициализация и настройка состояния
     scenario.onActivity { activity ->
         originalViewModel = ViewModelProvider(activity)[MainViewModel::class.java]
-        originalViewModel!!.data.value = "Test Data"
+        originalViewModel!!.data.value = "Critical Data"
     }
     
-    // Пересоздаём Activity
+    // Этап 2: Системная катастрофа (пересоздание Activity)
     scenario.recreate()
     
-    // Проверяем, что ViewModel осталась той же
+    // Этап 3: Проверка выживания архитектуры
     scenario.onActivity { activity ->
         recreatedViewModel = ViewModelProvider(activity)[MainViewModel::class.java]
     }
     
+    // Проверка философии: одна ViewModel, пережившая катастрофу
     assertSame(originalViewModel, recreatedViewModel)
-    assertEquals("Test Data", recreatedViewModel!!.data.value)
+    assertEquals("Critical Data", recreatedViewModel!!.data.value)
 }
 ```
 
-#### Тестирование с LiveData
+Этот тест невозможен с ActivityTestRule — не потому что технически сложно, а потому что философски неосуществимо. ActivityTestRule не понимает концепции ViewModel, не знает о LiveData, не может эмулировать пересоздание. Он создан для мира, где Activity — это всё приложение, а не тонкий слой над архитектурными компонентами.
+
+### Цена свободы и ответственности
+
+Переход к ActivityScenario — это переход от защитительного программирования к программированию ответственности. ActivityTestRule защищал программиста от ошибок, делая невозможными большинство неправильных действий. ActivityScenario доверяет программисту, предоставляя ему все инструменты и рассчитывая на его мудрость в их использовании.
+
+Эта философия имеет свою цену. Тесты становятся сложнее — нужно явно управлять каждым аспектом жизненного цикла, помнить о закрытии ресурсов, правильно обрабатывать переходы между состояниями. Простые тесты требуют больше кода. Появляется возможность ошибок — забыть вызвать `close()`, неправильно интерпретировать состояния, создать тесты, которые проходят случайно, а не закономерно.
+
+Но за эту цену программист получает то, что невозможно купить никакими деньгами — возможность тестировать реальное поведение приложения в условиях, максимально приближенных к production. Возможность убедиться, что приложение не просто работает в идеальных условиях, но выдерживает испытания реального мира с его поворотами экранов, нехваткой памяти, переходами в фоновый режим и возвращениями на передний план.
+
+### Эволюция мышления: от правил к сценариям
+
+Переход от ActivityTestRule к ActivityScenario — это не просто техническая миграция, это эволюция мышления. Это переход от декларативного "дай мне Activity" к императивному "я создаю свой собственный сценарий". Этот переход требует не только изменения кода, но и переосмысления того, что такое тест и как он должен взаимодействовать с тестируемой системой.
+
+Первый этап эволюции — механическая замена. Старый код, который полагался на автоматическое управление жизненным циклом, получает минимальные изменения, необходимые для работы с новым API:
 
 ```kotlin
-@Test  
-fun testLiveDataUpdates() {
-    val scenario = ActivityScenario.launch<MainActivity>()
-    
-    scenario.onActivity { activity ->
-        val viewModel = ViewModelProvider(activity)[MainViewModel::class.java]
-        
-        // Подписываемся на LiveData
-        viewModel.status.observe(activity) { status ->
-            activity.findViewById<TextView>(R.id.status).text = status
-        }
-        
-        // Изменяем данные
-        viewModel.updateStatus("Updated")
-    }
-    
-    // Проверяем, что UI обновилось
-    onView(withId(R.id.status)).check(matches(withText("Updated")))
-    
-    scenario.close()
-}
-```
-
-### Цена гибкости
-
-`ActivityScenario` предоставляет беспрецедентный контроль над жизненным циклом Activity, но эта гибкость имеет свою цену:
-
-**Сложность тестов** — нужно явно управлять каждым аспектом жизненного цикла
-**Больше кода** — простые тесты требуют больше строк кода  
-**Возможность ошибок** — легко забыть вызвать `close()` или неправильно управлять состояниями
-
-Но эти недостатки меркнут перед преимуществами: **возможностью тестировать реальное поведение приложения** в сложных сценариях, которые раньше было невозможно воспроизвести.
-
-### Миграция: Стратегия перехода
-
-Переход от `ActivityTestRule` к `ActivityScenario` не всегда тривиален. Вот стратегия поэтапной миграции:
-
-#### Этап 1: Простая замена
-
-```kotlin
-// Было
+// Прошлое: полное доверие автоматизации
 @get:Rule
 val activityRule = ActivityTestRule(MainActivity::class.java)
 
 @Test
-fun simpleTest() {
+fun whenButtonClicked_thenSomethingHappens() {
     onView(withId(R.id.button)).perform(click())
 }
 
-// Стало  
+// Настоящее: осознанное управление жизненным циклом
 @Test
-fun simpleTest() {
+fun whenButtonClicked_thenSomethingHappens() {
     ActivityScenario.launch<MainActivity>().use { scenario ->
         onView(withId(R.id.button)).perform(click())
     }
 }
 ```
 
-#### Этап 2: Добавление управления жизненным циклом
+Второй этап — принятие ответственности за жизненный цикл. Программист начинает использовать возможности, которых не было в старом мире:
 
 ```kotlin
 @Test
-fun advancedTest() {
+fun whenAppGoesToBackground_thenStatePreserved() {
     ActivityScenario.launch<MainActivity>().use { scenario ->
-        // Проверяем исходное состояние
-        onView(withId(R.id.text)).check(matches(withText("Initial")))
+        // Устанавливаем начальное состояние
+        onView(withId(R.id.input)).perform(typeText("Important Data"))
         
-        // Переводим в фоновый режим
+        // Эмулируем переход в фоновый режим
         scenario.moveToState(Lifecycle.State.CREATED)
         
         // Возвращаем на передний план
         scenario.moveToState(Lifecycle.State.RESUMED) 
         
-        // Проверяем, что состояние не потерялось
-        onView(withId(R.id.text)).check(matches(withText("Initial")))
+        // Проверяем выживание данных
+        onView(withId(R.id.input)).check(matches(withText("Important Data")))
     }
 }
 ```
 
-#### Этап 3: Полное использование возможностей
+Третий этап — полное принятие новой философии. Тесты начинают использовать весь арсенал возможностей, тестируя сценарии, которые раньше были технически невозможны:
 
 ```kotlin
 @Test
-fun comprehensiveTest() {
-    val intent = Intent().apply {
-        putExtra("user_id", 123)
+fun whenConfigurationChanges_thenArchitectureProvesSolid() {
+    val customIntent = Intent().apply {
+        putExtra("critical_data", "Must Survive")
     }
     
-    ActivityScenario.launch<MainActivity>(intent).use { scenario ->
-        // Тестируем обработку Intent
+    ActivityScenario.launch<MainActivity>(customIntent).use { scenario ->
+        // Проверяем правильную обработку Intent
         scenario.onActivity { activity ->
-            assertEquals(123, activity.intent.getIntExtra("user_id", -1))
+            assertEquals("Must Survive", activity.intent.getStringExtra("critical_data"))
         }
         
-        // Тестируем пересоздание
+        // Тестируем архитектурную устойчивость
         scenario.recreate()
         
-        // Тестируем различные состояния
+        // Проверяем полный цикл состояний
         scenario.moveToState(Lifecycle.State.STARTED)
         scenario.moveToState(Lifecycle.State.RESUMED)
+        
+        // Убеждаемся, что приложение не просто выжило, но процветает
+        scenario.onActivity { activity ->
+            assertNotNull(activity.findViewById<View>(R.id.main_content))
+        }
     }
 }
 ```
