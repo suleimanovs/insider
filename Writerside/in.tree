@@ -14,7 +14,6 @@
         </toc-element>
 
         <toc-element toc-title="Test">
-            <toc-element  topic="instrumented_tests_under_the_hood_android_junit_runner.md"/>
         </toc-element>
     </toc-element>
 
@@ -23,6 +22,8 @@
         <toc-element toc-title="Test">
             <toc-element  topic="testing_philosophy_kotlin_expect_actual_test_doubles.md"/>
         </toc-element>
+        <toc-element topic="serialzation.md"/>
+
     </toc-element>
 
     <toc-element toc-title="Java">
