@@ -255,7 +255,7 @@ public class ObjectOutputStream
 **1. Record.**
 Если `desc.isRecord()` возвращает `true`, то текущий класс является Java Record. Сериализация record-классов подчиняется отдельной логике, введённой начиная с Java 16. В отличие от обычных классов, record не имеет изменяемого состояния, все его поля являются компонентами, определёнными в сигнатуре конструктора.
 Метод `writeRecordData` проходит по всем компонентам record в порядке их объявления и записывает их значения напрямую, без вызова `writeObject` или `writeExternal`. Это обеспечивает стабильный, детерминированный формат сериализации, независимый от пользовательских переопределений.
-> Если вы из старой школы, и писали на Java 8,11 то вы не успели достать Record классы, это своего рода аналог data class в Kotlin 
+> Если вы из той самой(старой) школы, где последняя знакомая версия Java это 8 или 11, то record-классы могли пройти мимо вас. Они появились только с Java 16 и стали для Java тем, чем data class давно является для Kotlin, то есть лаконичным способом объявить неизменяемую структуру данных, где конструктор, equals, hashCode и toString генерируются компилятором. Разница лишь в том, что Java сделала это без излишнего синтаксического романтизма.
 
 **2. Externalizable.**
 Про Externalizable мы так же подробно пройдемся в этой статье, но пока для контекста его стоит тоже учитывать.
@@ -288,12 +288,7 @@ public class ObjectOutputStream
                 PutFieldImpl oldPut = curPut;
                 curPut = null;
                 SerialCallbackContext oldContext = curContext;
-
-                if (extendedDebugInfo) {
-                    debugInfoStack.push(
-                            "custom writeObject data (class \"" +
-                                    slotDesc.getName() + "\")");
-                }
+                
                 try {
                     curContext = new SerialCallbackContext(obj, slotDesc);
                     bout.setBlockDataMode(true);
@@ -303,9 +298,6 @@ public class ObjectOutputStream
                 } finally {
                     curContext.setUsed();
                     curContext = oldContext;
-                    if (extendedDebugInfo) {
-                        debugInfoStack.pop();
-                    }
                 }
 
                 curPut = oldPut;
@@ -410,3 +402,194 @@ object DatabaseConnection : Serializable {
 Что если мы хотим большего? Что если нам нужен реальный контроль над тем, как именно сериализуются наши объекты? Для таких случаев у `Serializable` есть брат на стероидах.
 
 ## Интерфейс Externalizable
+
+Если вы помните, в начале статьи мы говорили, что `Serializable` является маркерным интерфейсом без единого метода. JVM видит этот маркер и автоматически запускает механизм рефлексии. `Externalizable` работает совершенно иначе. Это не маркер, это контракт с двумя явными методами:
+
+```java
+public interface Externalizable extends java.io.Serializable {
+    void writeExternal(ObjectOutput out) throws IOException;
+    void readExternal(ObjectInput in) throws IOException, ClassNotFoundException;
+}
+```
+
+Обратите внимание, что `Externalizable` наследуется от `Serializable`. Это важная деталь, которая означает, что объекты `Externalizable` по-прежнему участвуют в общем механизме Java сериализации, но с принципиально другим подходом. JVM больше не использует рефлексию для обхода полей. Вместо этого она просто вызывает ваши методы `writeExternal` и `readExternal`, полностью перекладывая ответственность на вас. Полностью напоминает Parcelable из Android, не так ли?
+
+Давайте перепишем наш класс `Person` с использованием `Externalizable`:
+
+```kotlin
+class Person(
+    var name: String = "",
+    var dateOfBirth: Int = 0,
+    var address: String = ""
+) : Externalizable {
+    
+    override fun writeExternal(out: ObjectOutput) {
+        out.writeUTF(name)
+        out.writeInt(dateOfBirth)
+        out.writeUTF(address)
+    }
+    
+    override fun readExternal(input: ObjectInput) {
+        name = input.readUTF()
+        dateOfBirth = input.readInt()
+        address = input.readUTF()
+    }
+}
+```
+
+Сразу видна первая особенность: класс должен иметь конструктор без параметров. Это критическое требование. При десериализации JVM сначала создает экземпляр класса через этот конструктор, а затем вызывает `readExternal` для заполнения полей. Если конструктор отсутствует, вы получите `InvalidClassException`. В Kotlin это решается через параметры со значениями по умолчанию, как показано выше.
+Далее попробуем так же сериализоваться, на этот раз наш класс реализует Externalizable, по этому фаил назовем "externalization.bin"
+```kotlin
+fun main(args: Array<String>) {
+    val person = Person("John Wick", 1964, "New York")
+    val file = File("externalization.bin").apply(File::createNewFile)
+
+    val fileOutputStream = FileOutputStream(file)
+    val objectOutputStream = ObjectOutputStream(fileOutputStream).use { stream ->
+        stream.writeObject(person)
+        stream.flush()
+    }
+}
+```
+Попробуем открыть файл как текстовый, видим что информации гораздо меньше, чем в случае с Serializable. Первым идет полное имя класса. Далее бросается в глаза, что отсутствуют имена полей и явные типы значений, привязанные к классам. За нечитаемым текстом находятся служебные маркеры протокола сериализации и последовательности байтов, соответствующие данным, записанным в writeExternal. Эти маркеры, такие как STREAM_MAGIC, STREAM_VERSION, TC_OBJECT, TC_CLASSDESC, TC_STRING, TC_ENDBLOCKDATA, TC_NULL, TC_REFERENCE, TC_BLOCKDATA и другие, играют роль структурных разделителей, позволяя JVM при десериализации понимать, где начинается и где заканчивается каждый элемент, а также определять их тип и контекст.
+
+```text
+�� sr ExternalizablePerson��K��T  xpw 	John Wick  � New Yorkx
+```
+
+Теперь посмотрим, что происходит внутри. Помните метод `writeOrdinaryObject` из разбора `Serializable`? Тот самый каскад проверок типа объекта? Там была проверка на `Externalizable`, и если класс реализует этот интерфейс, управление передается в метод `writeExternalData`. 
+
+Давайте посмотрим на его реализацию:
+
+```java
+public class ObjectOutputStream
+        extends OutputStream implements ObjectOutput, ObjectStreamConstants {
+
+    private void writeExternalData(Externalizable obj) throws IOException {
+        PutFieldImpl oldPut = curPut;
+        curPut = null;
+
+        SerialCallbackContext oldContext = curContext;
+        try {
+            curContext = null;
+            if (protocol == PROTOCOL_VERSION_1) {
+                obj.writeExternal(this);
+            } else {
+                bout.setBlockDataMode(true);
+                obj.writeExternal(this);
+                bout.setBlockDataMode(false);
+                bout.writeByte(TC_ENDBLOCKDATA);
+            }
+        } finally {
+            curContext = oldContext;
+        }
+
+        curPut = oldPut;
+    }
+}
+```
+
+Код выглядит значительно проще, чем вся та сложная машинерия с дескрипторами классов и обходом полей через рефлексию, которую мы видели в `writeSerialData`. Здесь нет вызовов `ObjectStreamClass.lookup`, нет рекурсивного обхода иерархии классов, нет `defaultWriteFields`. JVM просто вызывает `obj.writeExternal(this)`, передавая управление вашему коду. Вся ответственность за то, что и как записывать, лежит на вас.
+
+Обратите внимание на работу с блочным режимом данных (`setBlockDataMode`). Это технический момент, который обеспечивает правильную структуру сериализационного потока. В PROTOCOL_VERSION_2 (который используется по умолчанию с Java 1.2) данные записываются блоками, и каждый блок завершается маркером `TC_ENDBLOCKDATA`. Это позволяет JVM корректно определять границы данных объекта в потоке.
+
+Процесс десериализации работает зеркально. Вместо сложного механизма восстановления полей через рефлексию, JVM создает объект через конструктор без параметров и вызывает `readExternal`:
+
+```java
+private void readExternalData(Externalizable obj, ObjectStreamClass desc)
+    throws IOException
+{
+    SerialCallbackContext oldContext = curContext;
+    if (oldContext != null)
+        oldContext.check();
+    curContext = null;
+    try {
+        boolean blocked = desc.hasBlockExternalData();
+        if (blocked) {
+            bin.setBlockDataMode(true);
+        }
+        if (obj != null) {
+            try {
+                obj.readExternal(this);
+            } catch (ClassNotFoundException ex) {
+                handles.markException(passHandle, ex);
+            }
+        }
+        if (blocked) {
+            skip();
+        }
+    } finally {
+        if (oldContext != null)
+            oldContext.check();
+        curContext = oldContext;
+    }
+}
+```
+
+Снова видим, насколько это проще по сравнению с `Serializable`. Нет восстановления метаданных, нет рекурсивного чтения иерархии классов. Вызов `obj.readExternal(this)` и всё. Вы сами решаете, в каком порядке читать поля и как их интерпретировать.
+
+Здесь важно понимать ключевое различие. При использовании `Serializable` JVM автоматически записывает в поток метаданные класса (имена полей, типы, информацию о пакетах). Помните тот "грязный" вывод файла serialization.bin, где среди байтов мы видели названия полей и типов? Всё это метаинформация, которую JVM добавляет автоматически. С `Externalizable` этого не происходит. В поток попадают только те данные, которые вы явно записали. Это делает сериализованные объекты значительно меньше по размеру.
+
+Но с большой силой приходит большая ответственность. Вы должны гарантировать, что порядок записи в `writeExternal` точно соответствует порядку чтения в `readExternal`. Если вы запишете сначала String, потом Int, потом String, вы обязаны читать в том же порядке. Любое несоответствие приведет к неправильной десериализации или исключению. JVM больше не следит за этим за вас.
+
+```kotlin
+class Person(
+    var name: String = "",
+    var dateOfBirth: Int = 0,
+    var address: String = ""
+) : Externalizable {
+    
+    override fun writeExternal(out: ObjectOutput) {
+        out.writeUTF(name)
+        out.writeInt(dateOfBirth)
+        out.writeUTF(address)
+    }
+    
+    override fun readExternal(input: ObjectInput) {
+        name = input.readUTF()          // Порядок совпадает!
+        dateOfBirth = input.readInt()   // Порядок совпадает!
+        address = input.readUTF()       // Порядок совпадает!
+    }
+}
+```
+
+Еще один важный момент касается версионирования. С `Serializable` мы использовали `serialVersionUID` для контроля совместимости версий. С `Externalizable` вы можете реализовать собственную логику версионирования:
+
+```kotlin
+class Person(
+    var name: String = "",
+    var dateOfBirth: Int = 0,
+    var address: String = "",
+    var phoneNumber: String = ""
+) : Externalizable {
+    
+    companion object {
+        private const val VERSION = 2
+    }
+    
+    override fun writeExternal(out: ObjectOutput) {
+        out.writeInt(VERSION)
+        out.writeUTF(name)
+        out.writeInt(dateOfBirth)
+        out.writeUTF(address)
+        out.writeUTF(phoneNumber)
+    }
+    
+    override fun readExternal(input: ObjectInput) {
+        val version = input.readInt()
+        name = input.readUTF()
+        dateOfBirth = input.readInt()
+        address = input.readUTF()
+        
+        if (version >= 2) {
+            phoneNumber = input.readUTF()
+        }
+    }
+}
+```
+
+Такой подход дает гибкость в управлении обратной совместимостью. Вы можете добавлять новые поля, изменять формат данных, и всё это будет работать, пока ваша логика в `readExternal` корректно обрабатывает разные версии.
+
+Производительность `Externalizable` теоретически выше, чем у `Serializable`, потому что отсутствует overhead рефлексии. Но это не означает автоматический выигрыш. Если вы пишете неэффективный код в `writeExternal` или `readExternal`, производительность может быть хуже. Реальные цифры мы увидим в разделе бенчмарков.
+
+Когда стоит использовать `Externalizable`? Когда вам нужен полный контроль над форматом данных, когда критичен размер сериализованных объектов, или когда стандартная сериализация работает неэффективно для вашей структуры данных. Но помните, что с этим контролем приходит и ответственность за корректность реализации. Один промах в порядке чтения/записи, и ваша десериализация сломается способами, которые сложно диагностировать.
