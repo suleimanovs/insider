@@ -110,8 +110,7 @@ Exception in thread "main" java.io.NotSerializableException: Person
 
 Теперь давайте погрузимся глубже и посмотрим, как работает сериализация под капотом. Рассмотрим исходный код метода `writeObject` класса `ObjectOutputStream`, ведь именно он принимает объект класса `Person` и преобразует его в набор байтов:
 ```java
-public class ObjectOutputStream
-        extends OutputStream implements ObjectOutput, ObjectStreamConstants {
+public class ObjectOutputStream extends OutputStream implements ObjectOutput, ObjectStreamConstants {
     
     public final void writeObject(Object obj) throws IOException {
         if (enableOverride) {
@@ -135,8 +134,7 @@ public class ObjectOutputStream
 поэтому мы попадаем в метод `writeObject0`:
 
 ```java
-public class ObjectOutputStream
-        extends OutputStream implements ObjectOutput, ObjectStreamConstants {
+public class ObjectOutputStream extends OutputStream implements ObjectOutput, ObjectStreamConstants {
     
     private void writeObject0(Object obj, boolean unshared)
             throws IOException
@@ -199,8 +197,7 @@ public class ObjectOutputStream
 Именно он отвечает за запись «обычного» объекта в поток(stream), то есть объекта, не являющегося строкой, массивом, перечислением или экземпляром `Externalizable`(про него будет далее в статье). 
 В этом месте начинается реальная работа сериализационного механизма. Метод выглядит следующим образом, далее мы увидим его разбор:
 ```java
-public class ObjectOutputStream
-        extends OutputStream implements ObjectOutput, ObjectStreamConstants {
+public class ObjectOutputStream extends OutputStream implements ObjectOutput, ObjectStreamConstants {
     
     private void writeOrdinaryObject(Object obj,
                                      ObjectStreamClass desc,
@@ -276,8 +273,7 @@ public class ObjectOutputStream
 После выполнения одной из ветвей (record, externalizable или serializable) объект полностью записан в поток, а таблица хэндлов зафиксирована для поддержания ссылочной целостности. Нас особенно интересует третья ветвь, то есть обычная сериализация через `Serializable`. Давайте рассмотрим метод `writeSerialData` более подробно:
 
 ```java
-public class ObjectOutputStream
-        extends OutputStream implements ObjectOutput, ObjectStreamConstants {
+public class ObjectOutputStream extends OutputStream implements ObjectOutput, ObjectStreamConstants {
 
     private void writeSerialData(Object obj, ObjectStreamClass desc)
             throws IOException
@@ -455,7 +451,7 @@ fun main(args: Array<String>) {
 Попробуем открыть файл как текстовый, видим что информации гораздо меньше, чем в случае с Serializable. Первым идет полное имя класса. Далее бросается в глаза, что отсутствуют имена полей и явные типы значений, привязанные к классам. За нечитаемым текстом находятся служебные маркеры протокола сериализации и последовательности байтов, соответствующие данным, записанным в writeExternal. Эти маркеры, такие как STREAM_MAGIC, STREAM_VERSION, TC_OBJECT, TC_CLASSDESC, TC_STRING, TC_ENDBLOCKDATA, TC_NULL, TC_REFERENCE, TC_BLOCKDATA и другие, играют роль структурных разделителей, позволяя JVM при десериализации понимать, где начинается и где заканчивается каждый элемент, а также определять их тип и контекст.
 
 ```text
-�� sr ExternalizablePerson��K��T  xpw 	John Wick  � New Yorkx
+�� sr Person��K��T  xpw 	John Wick  � New Yorkx
 ```
 
 Теперь посмотрим, что происходит внутри. Помните метод `writeOrdinaryObject` из разбора `Serializable`? Тот самый каскад проверок типа объекта? Там была проверка на `Externalizable`, и если класс реализует этот интерфейс, управление передается в метод `writeExternalData`. 
@@ -463,8 +459,7 @@ fun main(args: Array<String>) {
 Давайте посмотрим на его реализацию:
 
 ```java
-public class ObjectOutputStream
-        extends OutputStream implements ObjectOutput, ObjectStreamConstants {
+public class ObjectOutputStream extends OutputStream implements ObjectOutput, ObjectStreamConstants {
 
     private void writeExternalData(Externalizable obj) throws IOException {
         PutFieldImpl oldPut = curPut;
@@ -497,32 +492,34 @@ public class ObjectOutputStream
 Процесс десериализации работает зеркально. Вместо сложного механизма восстановления полей через рефлексию, JVM создает объект через конструктор без параметров и вызывает `readExternal`:
 
 ```java
-private void readExternalData(Externalizable obj, ObjectStreamClass desc)
-    throws IOException
-{
-    SerialCallbackContext oldContext = curContext;
-    if (oldContext != null)
-        oldContext.check();
-    curContext = null;
-    try {
-        boolean blocked = desc.hasBlockExternalData();
-        if (blocked) {
-            bin.setBlockDataMode(true);
-        }
-        if (obj != null) {
-            try {
-                obj.readExternal(this);
-            } catch (ClassNotFoundException ex) {
-                handles.markException(passHandle, ex);
-            }
-        }
-        if (blocked) {
-            skip();
-        }
-    } finally {
+public class ObjectOutputStream extends OutputStream implements ObjectOutput, ObjectStreamConstants {
+
+    private void readExternalData(Externalizable obj, ObjectStreamClass desc)
+            throws IOException {
+        SerialCallbackContext oldContext = curContext;
         if (oldContext != null)
             oldContext.check();
-        curContext = oldContext;
+        curContext = null;
+        try {
+            boolean blocked = desc.hasBlockExternalData();
+            if (blocked) {
+                bin.setBlockDataMode(true);
+            }
+            if (obj != null) {
+                try {
+                    obj.readExternal(this);
+                } catch (ClassNotFoundException ex) {
+                    handles.markException(passHandle, ex);
+                }
+            }
+            if (blocked) {
+                skipCustomData();
+            }
+        } finally {
+            if (oldContext != null)
+                oldContext.check();
+            curContext = oldContext;
+        }
     }
 }
 ```
@@ -570,17 +567,13 @@ class Person(
     
     override fun writeExternal(out: ObjectOutput) {
         out.writeInt(VERSION)
-        out.writeUTF(name)
-        out.writeInt(dateOfBirth)
-        out.writeUTF(address)
-        out.writeUTF(phoneNumber)
+        // ... запись остальных полей
+        out.writeUTF(phoneNumber)  // Новое поле в версии 2
     }
     
     override fun readExternal(input: ObjectInput) {
         val version = input.readInt()
-        name = input.readUTF()
-        dateOfBirth = input.readInt()
-        address = input.readUTF()
+        // ... чтение остальных полей
         
         if (version >= 2) {
             phoneNumber = input.readUTF()
