@@ -618,3 +618,270 @@ Binder работает иначе. Он минимизирует копиров
 Для тех кто сразу же начал распознавать Parcelable в Externalizable, да, `Externalizable` стал философской основой для `Parcelable`. Оба говорят: "не доверяй автоматике, возьми контроль в свои руки". Но `Parcelable` идет дальше, отбрасывая весь багаж JVM сериализации и создавая решение с нуля, оптимизированное под специфику Android: минимальное копирование через ядро, отсутствие временных объектов, прямая работа с бинарным буфером без типизации.
 
 ## Интерфейс Parcelable
+
+Если вы когда-либо разрабатывали под Android, вы наверняка сталкивались с необходимостью передать объект между Activity или Fragment. Открываете документацию, видите рекомендацию использовать `Parcelable`, начинаете читать и понимаете, что вам предстоит написать довольно много boilerplate кода. Давайте посмотрим на сам интерфейс:
+
+```java
+public interface Parcelable {
+    int describeContents();
+    void writeToParcel(Parcel dest, int flags);
+    
+    interface Creator<T> {
+        T createFromParcel(Parcel source);
+        T[] newArray(int size);
+    }
+}
+```
+
+Как видите, интерфейс требует реализации двух методов: `describeContents()` и `writeToParcel()`. Плюс к этому каждый класс должен иметь статическое поле `CREATOR`, которое реализует интерфейс `Creator<T>` с двумя методами. Уже чувствуете объем работы?
+
+Раньше, когда вы писали Android приложения на Java, это выглядело примерно так:
+
+```java
+public class Person implements Parcelable {
+    private String name;
+    private int dateOfBirth;
+    private String address;
+    
+    public Person(String name, int dateOfBirth, String address) {
+        this.name = name;
+        this.dateOfBirth = dateOfBirth;
+        this.address = address;
+    }
+    
+    protected Person(Parcel in) {
+        name = in.readString();
+        dateOfBirth = in.readInt();
+        address = in.readString();
+    }
+    
+    @Override
+    public void writeToParcel(Parcel dest, int flags) {
+        dest.writeString(name);
+        dest.writeInt(dateOfBirth);
+        dest.writeString(address);
+    }
+    
+    @Override
+    public int describeContents() {
+        return 0;
+    }
+    
+    public static final Creator<Person> CREATOR = new Creator<Person>() {
+        @Override
+        public Person createFromParcel(Parcel in) {
+            return new Person(in);
+        }
+        
+        @Override
+        public Person[] newArray(int size) {
+            return new Person[size];
+        }
+    };
+}
+```
+
+Для трех полей мы написали почти 40 строк кода. И это еще простой случай. Представьте класс с десятью полями, где половина nullable, а некоторые сами `Parcelable`. Кошмар для поддержки. Малейшая ошибка в порядке записи и чтения приведет к багам, которые сложно отловить.
+
+Разработчики Android Studio это понимали. Поэтому в IDE появился готовый шаблон кода для реализации `Parcelable`. Вы ставили курсор на имя класса, нажимали Alt+Insert (или Cmd+N на Mac), выбирали "Parcelable implementation" и IDE генерировала весь необходимый код. Это помогало, но не решало проблему полностью. Каждый раз, когда вы добавляли или удаляли поле, приходилось вручную обновлять методы `writeToParcel` и конструктор из `Parcel`. Забыли обновить? Получите баг на продакшене.
+
+С приходом Kotlin ситуация начала меняться. Появился плагин `kotlinx-android-extensions`, который среди прочего включал аннотацию `@Parcelize`. Добавляете эту аннотацию к data классу, и компилятор автоматически генерирует всю реализацию `Parcelable`:
+
+```kotlin
+@Parcelize
+data class Person(
+    val name: String,
+    val dateOfBirth: Int,
+    val address: String
+) : Parcelable
+```
+
+Три строки вместо сорока. Но `kotlinx-android-extensions` был слишком широким плагином, включавшим в себя не только `@Parcelize`, но и синтетические импорты для view (которые позже признали антипаттерном и deprecated). В итоге плагин разделили, и `@Parcelize` переехала в отдельный модуль `kotlin-parcelize`. Сейчас для использования вам нужно добавить в build.gradle:
+
+```kotlin
+plugins {
+    id("kotlin-parcelize")
+}
+```
+
+Теперь давайте разберемся, что происходит под капотом. Когда вы вызываете `parcel.writeString("John Wick")`, данные не просто записываются в поток байтов. `Parcel` это обертка над нативной структурой данных, реализованной на C++. Если откроете исходники Android, найдете класс `android.os.Parcel`, который через JNI вызывает нативные методы:
+
+```java
+public final class Parcel {
+    private long mNativePtr; // Указатель на нативную структуру
+    
+    public final void writeString(String val) {
+        nativeWriteString(mNativePtr, val);
+    }
+    
+    private static native void nativeWriteString(long nativePtr, String val);
+}
+```
+
+Нативная реализация в C++ (frameworks/native/libs/binder/Parcel.cpp) работает напрямую с памятью. Когда вы пишете строку, она конвертируется в UTF-16, добавляется длина строки как integer, и всё это пишется в линейный буфер памяти. Никаких промежуточных объектов, никаких потоков, просто байты в памяти.
+
+Когда вы передаете `Parcel` через `Intent.putExtra()` или любой другой IPC механизм, этот буфер памяти передается через Binder driver. Binder не копирует данные множество раз. Он использует механизм copy-on-write и передает данные между процессами через ядро Linux максимально эффективно. На принимающей стороне создается новый `Parcel` с указателем на тот же или скопированный буфер памяти, и вы читаете данные в том же порядке, в котором записали.
+
+Давайте посмотрим, что именно генерирует `@Parcelize` для нашего класса `Person`. Вы можете увидеть сгенерированный код, если откроете скомпилированный .class файл через декомпилятор. Вот что там будет:
+
+```kotlin
+@Parcelize
+data class Person(
+    val name: String,
+    val dateOfBirth: Int,
+    val address: String
+) : Parcelable {
+    
+    // Сгенерировано компилятором
+    override fun writeToParcel(parcel: Parcel, flags: Int) {
+        parcel.writeString(name)
+        parcel.writeInt(dateOfBirth)
+        parcel.writeString(address)
+    }
+    
+    override fun describeContents(): Int = 0
+    
+    companion object {
+        @JvmField
+        val CREATOR = object : Parcelable.Creator<Person> {
+            override fun createFromParcel(parcel: Parcel): Person {
+                return Person(
+                    parcel.readString()!!,
+                    parcel.readInt(),
+                    parcel.readString()!!
+                )
+            }
+            
+            override fun newArray(size: Int): Array<Person?> {
+                return arrayOfNulls(size)
+            }
+        }
+    }
+}
+```
+
+Обратите внимание на порядок: `writeString`, `writeInt`, `writeString` при записи, и `readString`, `readInt`, `readString` при чтении. Порядок идентичен. Это критически важно, потому что `Parcel` это untyped buffer. Когда вы вызываете `parcel.readInt()`, он просто читает следующие 4 байта из буфера и интерпретирует их как integer. Если порядок не совпадает, вы прочитаете garbage данные.
+
+А что насчет nullable полей? Kotlin-parcelize достаточно умный, чтобы обрабатывать их:
+
+```kotlin
+@Parcelize
+data class Person(
+    val name: String,
+    val dateOfBirth: Int,
+    val address: String?
+) : Parcelable
+```
+
+Для nullable `address` генерируется код с проверкой:
+
+```kotlin
+override fun writeToParcel(parcel: Parcel, flags: Int) {
+    parcel.writeString(name)
+    parcel.writeInt(dateOfBirth)
+    parcel.writeString(address) // writeString обрабатывает null автоматически
+}
+```
+
+`Parcel.writeString()` при получении null записывает специальный маркер (-1 как длина строки), а `readString()` при чтении этого маркера возвращает null. Это встроенная поддержка nullable типов на уровне `Parcel`.
+
+Теперь поговорим о методе `describeContents()`. В большинстве случаев он просто возвращает 0. Но есть исключение. Если ваш объект содержит file descriptor, вы должны вернуть `Parcelable.CONTENTS_FILE_DESCRIPTOR`. Это сигнал системе, что объект содержит системные ресурсы, которые требуют особой обработки при передаче между процессами:
+
+```kotlin
+@Parcelize
+data class FileWrapper(val fd: ParcelFileDescriptor) : Parcelable {
+    override fun describeContents(): Int = Parcelable.CONTENTS_FILE_DESCRIPTOR
+}
+```
+
+Флаг `flags` в методе `writeToParcel(Parcel dest, int flags)` обычно игнорируется, но может содержать `Parcelable.PARCELABLE_WRITE_RETURN_VALUE`, который указывает, что объект передается как возвращаемое значение из Binder транзакции. В таком случае вы можете освободить некоторые ресурсы после записи.
+
+Что происходит с вложенными `Parcelable` объектами? Они тоже поддерживаются:
+
+```kotlin
+@Parcelize
+data class Address(val city: String, val street: String) : Parcelable
+
+@Parcelize
+data class Person(
+    val name: String,
+    val dateOfBirth: Int,
+    val address: Address
+) : Parcelable
+```
+
+При записи `Person` вызывается `parcel.writeParcelable(address, flags)`, который в свою очередь вызывает `address.writeToParcel()`. При чтении вызывается `parcel.readParcelable<Address>(Address::class.java.classLoader)`. Рекурсия работает, и вся иерархия объектов корректно сериализуется.
+
+А как быть с коллекциями? `Parcel` имеет специальные методы:
+
+```kotlin
+@Parcelize
+data class Team(
+    val name: String,
+    val members: List<String>
+) : Parcelable
+```
+
+Генерируется код:
+
+```kotlin
+override fun writeToParcel(parcel: Parcel, flags: Int) {
+    parcel.writeString(name)
+    parcel.writeStringList(members)
+}
+```
+
+`writeStringList` сначала записывает размер списка, затем каждую строку по очереди. `readStringList` читает размер, создает список нужного размера и читает строки.
+
+Важный момент: `@Parcelize` работает только с data классами и обычными классами, где все свойства объявлены в primary конструкторе. Если у вас есть свойство вне конструктора, оно не будет сериализовано:
+
+```kotlin
+@Parcelize
+data class Person(
+    val name: String,
+    val dateOfBirth: Int
+) : Parcelable {
+    var address: String = "" // Это поле НЕ будет сериализовано!
+}
+```
+
+Если вам нужно кастомизировать процесс сериализации, вы можете реализовать интерфейс `Parceler`:
+
+```kotlin
+data class Person(
+    val name: String,
+    val dateOfBirth: Int,
+    val address: String
+)
+
+object PersonParceler : Parceler<Person> {
+    override fun create(parcel: Parcel): Person {
+        return Person(
+            parcel.readString()!!,
+            parcel.readInt(),
+            parcel.readString()!!
+        )
+    }
+    
+    override fun Person.write(parcel: Parcel, flags: Int) {
+        parcel.writeString(name)
+        parcel.writeInt(dateOfBirth)
+        parcel.writeString(address)
+    }
+}
+
+@Parcelize
+@TypeParceler<Person, PersonParceler>
+data class Team(
+    val name: String,
+    val leader: Person
+) : Parcelable
+```
+
+Это полезно, когда вы хотите сериализовать класс, который не реализует `Parcelable` (например, из сторонней библиотеки), или когда нужна специальная логика сериализации.
+
+Производительность `Parcelable` впечатляет. Благодаря нативной реализации, отсутствию рефлексии и прямой интеграции с Binder, передача объектов через IPC работает на порядок быстрее, чем через `Serializable`. В бенчмарках `Parcelable` обычно показывает результаты в 10-20 раз лучше, чем `Serializable` для того же объекта. Мы увидим конкретные цифры в разделе с бенчмарками.
+
+Но есть и недостатки. Первый: `Parcelable` привязан к Android. Если вы пишете Kotlin Multiplatform код, `Parcelable` не будет работать на iOS, JVM или нативных платформах. Второй: отсутствие встроенного версионирования. Если структура класса изменится между версиями приложения, вам придется вручную обрабатывать совместимость. Третий: `Parcel` оптимизирован для IPC, но не для долговременного хранения. Сохранять `Parcelable` объекты в SharedPreferences или базу данных не рекомендуется, формат может измениться между версиями Android.
+
+Именно эти ограничения привели к появлению следующего героя нашей статьи, который обещает дать нам и производительность, и кроссплатформенность, и безопасность типов.
