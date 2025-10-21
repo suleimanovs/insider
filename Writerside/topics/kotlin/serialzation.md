@@ -701,7 +701,79 @@ plugins {
 
 И всё. Никаких runtime зависимостей, никаких дополнительных библиотек. Вся генерация происходит на уровне компилятора, создавая оптимальный байткод.
 
-Но давайте остановимся и зададим важный вопрос: что же такое этот `Parcel`, в который мы пишем данные? Помните, мы говорили о том, что Android нужен механизм, работающий напрямую с памятью, без промежуточных слоев абстракции? Вот здесь и начинается самое интересное. `Parcel` - это не просто еще один Java класс для работы с данными. Это тонкая обертка над нативной C++ структурой, и работает он через JNI (Java Native Interface):
+### Как это работает на практике
+
+Прежде чем погружаться в технические детали, давайте посмотрим на реальное использование `Parcelable` в Android. Если вы заметили, в отличие от примеров с `Serializable` и `Externalizable`, где мы создавали файлы и смотрели их содержимое, здесь мы этого не делали. Почему?
+
+Причина проста: `Parcelable` создавался не для сохранения в файлы, а для передачи данных между компонентами Android. Давайте посмотрим типичный сценарий: передача объекта из одного Activity в другой.
+
+```kotlin
+// FirstActivity.kt
+val person = Person("John Wick", 1964, "New York")
+val intent = Intent(this, SecondActivity::class.java)
+intent.putExtra("person_data", person) // person реализует Parcelable
+startActivity(intent)
+```
+
+```kotlin
+// SecondActivity.kt
+override fun onCreate(savedInstanceState: Bundle?) {
+    super.onCreate(savedInstanceState)
+    
+    val person = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        intent.getParcelableExtra("person_data", Person::class.java)
+    } else {
+        @Suppress("DEPRECATION")
+        intent.getParcelableExtra<Person>("person_data")
+    }
+    
+    println(person) // Person(name=John Wick, dateOfBirth=1964, address=New York)
+}
+```
+
+Что происходит за кулисами? Когда вы вызываете `intent.putExtra()`, Android сериализует объект `Person` в `Parcel`, передает этот буфер через Binder в новый процесс (если Activity запускается в другом процессе) или просто в новый компонент, а там десериализует обратно. Весь процесс занимает микросекунды. Никаких файлов, никаких потоков ввода-вывода, никакого длительного хранения.
+
+А что если мы все-таки захотим посмотреть, как выглядят сериализованные данные? Технически это возможно:
+
+```kotlin
+val person = Person("John Wick", 1964, "New York")
+val parcel = Parcel.obtain()
+
+try {
+    person.writeToParcel(parcel, 0)
+    val bytes = parcel.marshall() // Получаем ByteArray
+    
+    println("Размер: ${bytes.size} байт")
+    println("Данные (hex): ${bytes.joinToString(" ") { "%02x".format(it) }}")
+    
+    // Первые несколько байт в читаемом виде
+    val readable = bytes.filter { it in 32..126 }.map { it.toInt().toChar() }.joinToString("")
+    println("Читаемые символы: $readable")
+} finally {
+    parcel.recycle()
+}
+```
+
+Вывод будет примерно таким:
+```
+Размер: 56 байт
+Данные (hex): 09 00 00 00 4a 6f 68 6e 20 57 69 63 6b ac 07 00 00 08 00 00 00 4e 65 77 20 59 6f 72 6b
+Читаемые символы: John WickNew York
+```
+
+Видите разницу с `Serializable`? Вспомните тот файл, где было полно метаданных: имя класса `Person`, типы полей `Ljava/lang/String`, маркеры протокола. Здесь только чистые данные: длина строки (4 байта), сама строка "John Wick", число 1964 (4 байта), длина и строка "New York". Ни одного лишнего байта. Именно поэтому размер всего 56 байт против примерно 130-150 байт у `Serializable`.
+
+Кстати, `Serializable` тоже работает в Android через Intent:
+
+```kotlin
+// Это тоже валидный код, если Person реализует Serializable
+val person = Person("John Wick", 1964, "New York")
+intent.putExtra("person_data", person) // Android поддерживает и Serializable
+```
+
+Но за кулисами творится совсем другое. Android вынужден создать `ObjectOutputStream`, запустить рефлексию, записать все метаданные, создать множество временных объектов. На другой стороне то же самое: `ObjectInputStream`, рефлексия, парсинг метаданных, создание объектов. Результат тот же, но работает в 10-20 раз медленнее и создает значительную нагрузку на Garbage Collector. Именно поэтому в документации Android вы везде увидите рекомендацию: используйте `Parcelable` для передачи данных между компонентами.
+
+Но давайте вернемся к вопросу: что же такое этот `Parcel`, в который мы пишем данные? Помните, мы говорили о том, что Android нужен механизм, работающий напрямую с памятью, без промежуточных слоев абстракции? Вот здесь и начинается самое интересное. `Parcel` - это не просто еще один Java класс для работы с данными. Это тонкая обертка над нативной C++ структурой, и работает он через JNI (Java Native Interface):
 
 ```java
 public final class Parcel {
