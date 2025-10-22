@@ -733,33 +733,44 @@ override fun onCreate(savedInstanceState: Bundle?) {
 
 Что происходит за кулисами? Когда вы вызываете `intent.putExtra()`, Android сериализует объект `Person` в `Parcel`, передает этот буфер через Binder в новый процесс (если Activity запускается в другом процессе) или просто в новый компонент, а там десериализует обратно. Весь процесс занимает микросекунды. Никаких файлов, никаких потоков ввода-вывода, никакого длительного хранения.
 
-А что если мы все-таки захотим посмотреть, как выглядят сериализованные данные? Технически это возможно:
+А что если мы все-таки захотим посмотреть, как выглядят сериализованные данные и что действительно происходит под капотом? Давайте посмотрим на полный цикл работы с `Parcel` - от сериализации до десериализации:
 
 ```kotlin
 val person = Person("John Wick", 1964, "New York")
-val parcel = Parcel.obtain()
 
-try {
-    person.writeToParcel(parcel, 0)
-    val bytes = parcel.marshall() // Получаем ByteArray
-    
-    println("Размер: ${bytes.size} байт")
-    println("Данные (hex): ${bytes.joinToString(" ") { "%02x".format(it) }}")
-    
-    // Первые несколько байт в читаемом виде
-    val readable = bytes.filter { it in 32..126 }.map { it.toInt().toChar() }.joinToString("")
-    println("Читаемые символы: $readable")
-} finally {
-    parcel.recycle()
-}
+val source = Parcel.obtain()
+source.writeParcelable(person, 0)
+val bytes = source.marshall()
+source.recycle()
+
+println("Размер: ${bytes.size} байт")
+println("Данные (hex): ${bytes.joinToString(" ") { "%02x".format(it) }}")
+
+val readable = bytes.filter { it in 32..126 }.map { it.toInt().toChar() }.joinToString("")
+println("Читаемые символы: $readable")
+
+val destination = Parcel.obtain()
+destination.unmarshall(bytes, 0, bytes.size)
+destination.setDataPosition(0)
+
+val classLoader = Person::class.java.classLoader
+val result = destination.readParcelable<Person>(classLoader)
+destination.recycle()
+
+println("Восстановленный объект: $result")
 ```
 
-Вывод будет примерно таким:
+Вывод покажет:
 ```
 Размер: 56 байт
 Данные (hex): 09 00 00 00 4a 6f 68 6e 20 57 69 63 6b ac 07 00 00 08 00 00 00 4e 65 77 20 59 6f 72 6b
 Читаемые символы: John WickNew York
+Восстановленный объект: Person(name=John Wick, dateOfBirth=1964, address=New York)
 ```
+
+Что здесь происходит? Сначала мы получаем экземпляр `Parcel` через `obtain()` - это не создание нового объекта, а получение из пула. `Parcel` использует object pooling для минимизации аллокаций. Затем вызываем `writeParcelable()`, который в свою очередь вызывает наш метод `writeToParcel()` из сгенерированного кода. Метод `marshall()` возвращает сырой `ByteArray` - содержимое внутреннего буфера. После завершения работы обязательно вызываем `recycle()`, возвращая `Parcel` в пул.
+
+Для десериализации процесс обратный: получаем новый `Parcel`, вызываем `unmarshall()` чтобы загрузить байты в буфер, сбрасываем позицию чтения на начало через `setDataPosition(0)`, и читаем объект обратно через `readParcelable()`, передавая `ClassLoader` для загрузки нужного класса. И снова не забываем `recycle()`.
 
 Видите разницу с `Serializable`? Вспомните тот файл, где было полно метаданных: имя класса `Person`, типы полей `Ljava/lang/String`, маркеры протокола. Здесь только чистые данные: длина строки (4 байта), сама строка "John Wick", число 1964 (4 байта), длина и строка "New York". Ни одного лишнего байта. Именно поэтому размер всего 56 байт против примерно 130-150 байт у `Serializable`.
 
