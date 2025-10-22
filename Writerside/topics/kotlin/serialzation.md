@@ -26,7 +26,7 @@
 
 **Рефлексия (Reflection)** — это механизм времени выполнения, позволяющий программе анализировать и модифицировать свою собственную структуру и поведение. В контексте сериализации рефлексия используется для динамического обхода полей объектов без предварительной генерации кода. Естественно неформально рефлексия в мире разработки считается темной магией.
 
-**Кодогенерация (Code Generation)** — это автоматическое создание исходного кода во время компиляции на основе аннотаций, схем данных или других метаданных. Кодогенерация устраняет накладные расходы рефлексии за счёт создания специализированных классов-сериализаторов. Сама кодогенерация так же достигается благодаря рефлексии или же hook-ов компилятора. В мире JVM это долгое время было APT, позже KAPT, далее эволюция Kotlin подарила KSP. Начиная с Kotlin 2.0 теперь так же есть возможность реализовать плагины компилятора, которая ранее была закрыта для сторонних разработчиков.
+**Кодогенерация (Code Generation)** — это автоматическое создание исходного кода во время компиляции на основе аннотаций, схем данных или других метаданных. Кодогенерация устраняет накладные расходы рефлексии за счёт создания специализированных классов-сериализаторов. Сама кодогенерация достигается благодаря плагинам компилятора или анализаторов кода. В мире JVM это долгое время было APT, позже KAPT, далее эволюция Kotlin подарила KSP. Начиная с Kotlin 2.0 теперь так же есть возможность реализовать плагины компилятора, которая ранее была закрыта для сторонних разработчиков.
 ![codeGeneration.svg](codeGeneration.svg)
 
 
@@ -34,7 +34,7 @@
 ![codeProtocolScheme.svg](codeProtocolScheme.svg)
 
 Теперь, когда мы определились с базовой терминологией, перейдем к рассмотрению конкретных способов сериализации. Мы рассмотрим их в порядке исторической эволюции с точки зрения Kotlin и Android. Что интересно, в мире Java эволюции как таковой не произошло: первое решение, появившееся еще в ранних версиях JDK, продолжает использоваться и по сей день.
-Сначала мы пройдемся по каждому из подходов, разберем их под лупой, но никаких выводов по производительности не будем пока не рассмотрим все способы, в конце мы рсавним каждый из подходов что бы понять какой из них оптимальнее в использований.
+Сначала мы пройдемся по каждому из подходов, разберем их под лупой, но никаких выводов по производительности делать не будем пока не рассмотрим все способы, в конце мы сравним каждый из подходов что бы понять какой из них оптимальнее в использований.
 
 ## Интерфейс Serializable
 
@@ -979,6 +979,8 @@ data class Team(
 
 ### История появления и философия
 
+![kotlin.png](kotlin.png)
+
 В 2017 году Kotlin переживал настоящий бум. Google объявила его официальным языком для Android разработки, сообщество активно росло, а JetBrains начала амбициозный проект - Kotlin Multiplatform (KMP). Идея была революционной: писать код один раз и запускать его везде. На Android через Kotlin/JVM и Android Runtime, на iOS через Kotlin/Native с компиляцией в нативный код, в браузере через Kotlin/JS, на сервере через обычный JVM. Но для реализации этой идеи не хватало одного критически важного элемента.
 
 Представьте разработчика, который пишет мобильное приложение с общим бизнес-слоем. Модели данных, сетевые запросы, работа с API - всё это должно работать одинаково на Android и iOS. На Android у него есть `Parcelable` для IPC, есть Gson или Moshi для JSON, есть множество готовых решений. Но стоит скомпилировать этот код для iOS через Kotlin/Native, и всё ломается. `Parcelable` не существует. Gson использует рефлексию, которая работает совсем по-другому (или вообще не работает) в native окружении. Moshi требует кодогенерации через KAPT, который не поддерживается в Kotlin/Native.
@@ -1000,3 +1002,489 @@ data class Team(
 К 2020 году библиотека вышла из experimental статуса и достигла версии 1.0, став стабильной и готовой к production использованию. Сегодня это де-факто стандарт для сериализации в Kotlin Multiplatform проектах и серьезная альтернатива Gson/Moshi в чистых JVM/Android приложениях.
 
 Давайте посмотрим, как это работает на практике.
+
+### Первое знакомство: простота использования
+
+Для начала нужно добавить плагин компилятора и зависимость. В `build.gradle.kts`:
+
+```kotlin
+plugins {
+    kotlin("jvm") version "1.9.0"
+    kotlin("plugin.serialization") version "1.9.0"
+}
+
+dependencies {
+    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.0")
+}
+```
+
+Всё. Два плагина и одна зависимость. Плагин `kotlin("plugin.serialization")` - это тот самый компилятор плагин, который будет генерировать код. А `kotlinx-serialization-json` - это реализация формата JSON.
+
+Теперь возьмем наш знакомый класс `Person` и посмотрим, как его сериализовать:
+
+```kotlin
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.decodeFromString
+
+@Serializable
+data class Person(
+    val name: String,
+    val dateOfBirth: Int,
+    val address: String
+)
+
+fun main() {
+    val person = Person("John Wick", 1964, "New York")
+    
+    // Сериализация в JSON
+    val json = Json.encodeToString(person)
+    println(json)
+    // {"name":"John Wick","dateOfBirth":1964,"address":"New York"}
+    
+    // Десериализация обратно
+    val personFromJson = Json.decodeFromString<Person>(json)
+    println(personFromJson)
+    // Person(name=John Wick, dateOfBirth=1964, address=New York)
+}
+```
+
+Посмотрите на простоту. Одна аннотация `@Serializable` над классом, и он готов к сериализации. Не нужно реализовывать интерфейсы, не нужно писать методы `writeObject`/`readObject`, не нужно создавать CREATOR объекты. Просто аннотация. Синтаксис напоминает `@Parcelize`, но работает совершенно по-другому и на всех платформах.
+
+Обратите внимание на JSON вывод. Это не тот страшный бинарный формат из `Serializable` с метаданными и маркерами протокола. Это чистый, читаемый JSON. Вы можете открыть его в любом редакторе, отправить по HTTP API, сохранить в базу данных, и любая система, понимающая JSON, сможет его прочитать.
+
+А теперь давайте сделаем то же самое, но с сохранением в файл, как мы делали для `Serializable`:
+
+```kotlin
+import java.io.File
+
+fun main() {
+    val person = Person("John Wick", 1964, "New York")
+    val file = File("person.json")
+    
+    // Сериализация и запись в файл
+    val json = Json.encodeToString(person)
+    file.writeText(json)
+    
+    println("Размер файла: ${file.length()} байт")
+    println("Содержимое: ${file.readText()}")
+}
+```
+
+Вывод:
+```
+Размер файла: 67 байт
+Содержимое: {"name":"John Wick","dateOfBirth":1964,"address":"New York"}
+```
+
+67 байт чистого JSON против 130-150 байт с метаданными у `Serializable` и 56 байт у бинарного `Parcel`. JSON занимает чуть больше места, чем `Parcel`, но он читаемый человеком и универсальный. Если вам нужна компактность, можно использовать `kotlinx-serialization-protobuf` или `kotlinx-serialization-cbor`, и размер будет сравним с `Parcel`, сохраняя при этом кроссплатформенность.
+
+Десериализация работает зеркально:
+
+```kotlin
+fun main() {
+    val file = File("person.json")
+    val json = file.readText()
+    
+    val person = Json.decodeFromString<Person>(json)
+    println(person) // Person(name=John Wick, dateOfBirth=1964, address=New York)
+}
+```
+
+Никаких `ObjectInputStream`, никаких кастов `as Person`, никаких checked exceptions. Компилятор знает тип благодаря reified type parameter, и если JSON не соответствует структуре класса, вы получите понятное исключение с указанием, что именно пошло не так.
+
+### Что происходит под капотом
+
+Помните, как мы разбирали `ObjectOutputStream` и видели там рефлексию, обход полей, создание дескрипторов классов? С `kotlinx.serialization` все иначе. Давайте посмотрим, что генерирует компилятор для нашего класса `Person`.
+
+Когда вы добавляете аннотацию `@Serializable`, плагин компилятора генерирует специальный companion object с сериализатором. Если декомпилировать байткод, вы увидите что-то вроде этого:
+
+```kotlin
+@Serializable
+data class Person(
+    val name: String,
+    val dateOfBirth: Int,
+    val address: String
+) {
+    companion object {
+        fun serializer(): KSerializer<Person> = PersonSerializer
+    }
+}
+
+object PersonSerializer : KSerializer<Person> {
+    override val descriptor: SerialDescriptor = buildClassSerialDescriptor("Person") {
+        element<String>("name")
+        element<Int>("dateOfBirth")
+        element<String>("address")
+    }
+    
+    override fun serialize(encoder: Encoder, value: Person) {
+        val composite = encoder.beginStructure(descriptor)
+        composite.encodeStringElement(descriptor, 0, value.name)
+        composite.encodeIntElement(descriptor, 1, value.dateOfBirth)
+        composite.encodeStringElement(descriptor, 2, value.address)
+        composite.endStructure(descriptor)
+    }
+    
+    override fun deserialize(decoder: Decoder): Person {
+        val composite = decoder.beginStructure(descriptor)
+        var name: String? = null
+        var dateOfBirth: Int? = null
+        var address: String? = null
+        
+        loop@ while (true) {
+            when (val index = composite.decodeElementIndex(descriptor)) {
+                0 -> name = composite.decodeStringElement(descriptor, 0)
+                1 -> dateOfBirth = composite.decodeIntElement(descriptor, 1)
+                2 -> address = composite.decodeStringElement(descriptor, 2)
+                CompositeDecoder.DECODE_DONE -> break@loop
+            }
+        }
+        
+        composite.endStructure(descriptor)
+        return Person(
+            name ?: throw MissingFieldException("name"),
+            dateOfBirth ?: throw MissingFieldException("dateOfBirth"),
+            address ?: throw MissingFieldException("address")
+        )
+    }
+}
+```
+
+Это упрощенная версия, реальный код более оптимизирован, но суть такая. Обратите внимание на несколько ключевых вещей.
+
+**Никакой рефлексии.** Метод `serialize` просто берет поля объекта напрямую: `value.name`, `value.dateOfBirth`, `value.address`. Компилятор знает структуру класса на этапе компиляции и генерирует прямые обращения к полям. Никаких `getDeclaredFields()`, никаких `field.setAccessible(true)`, никаких вызовов через reflection API.
+
+**SerialDescriptor** - это метаданные о структуре класса, но они создаются один раз при инициализации сериализатора, а не при каждой сериализации, как в `Serializable`. Дескриптор описывает, что класс `Person` имеет три поля: строку `name`, число `dateOfBirth`, строку `address`. Эта информация нужна для корректной работы с форматами данных.
+
+**Encoder/Decoder** - это абстракции форматов. `Encoder` знает, как записать строку, число или структуру в конкретный формат (JSON, Protobuf, CBOR). `Decoder` знает, как их прочитать. Сериализатор `PersonSerializer` не знает ничего о JSON, он просто вызывает методы encoder'а. А за кулисами `Json.encodeToString()` передает `JsonEncoder`, который и превращает вызовы в JSON строку.
+
+Это ключевое архитектурное решение. Благодаря разделению логики сериализации (что сериализовать) и формата (как сериализовать), один и тот же `PersonSerializer` работает с любым форматом:
+
+```kotlin
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.protobuf.ProtoBuf
+import kotlinx.serialization.cbor.Cbor
+
+val person = Person("John Wick", 1964, "New York")
+
+// JSON
+val json = Json.encodeToString(person)
+// {"name":"John Wick","dateOfBirth":1964,"address":"New York"}
+
+// Protocol Buffers (бинарный формат)
+val protobuf = ProtoBuf.encodeToByteArray(Person.serializer(), person)
+// Компактный бинарный формат, похожий на Parcel
+
+// CBOR (еще один бинарный формат)
+val cbor = Cbor.encodeToByteArray(Person.serializer(), person)
+```
+
+Тот же класс, та же аннотация `@Serializable`, но три разных формата. Просто меняем экземпляр encoder'а, и готово. Попробуйте сделать такое с `Parcelable` или `Serializable` - не получится, они жестко привязаны к своему формату.
+
+### Работа с реальными данными: nullable и default значения
+
+В реальных проектах данные редко бывают идеальными. API может вернуть null, поле может отсутствовать в JSON, структура данных может измениться между версиями. Давайте посмотрим, как `kotlinx.serialization` справляется с этими ситуациями.
+
+```kotlin
+@Serializable
+data class Person(
+    val name: String,
+    val dateOfBirth: Int,
+    val address: String? = null,  // Nullable с default значением
+    val phoneNumber: String = ""   // Non-null с default значением
+)
+```
+
+Что произойдет, если мы попытаемся десериализовать JSON, в котором отсутствуют некоторые поля?
+
+```kotlin
+val json1 = """{"name":"John Wick","dateOfBirth":1964}"""
+val person1 = Json.decodeFromString<Person>(json1)
+println(person1)
+// Person(name=John Wick, dateOfBirth=1964, address=null, phoneNumber=)
+
+val json2 = """{"name":"John Wick","dateOfBirth":1964,"address":"New York"}"""
+val person2 = Json.decodeFromString<Person>(json2)
+println(person2)
+// Person(name=John Wick, dateOfBirth=1964, address=New York, phoneNumber=)
+```
+
+Библиотека умная: если поле имеет default значение и отсутствует в JSON, используется значение по умолчанию. Если попытаться десериализовать JSON без обязательного поля `name`:
+
+```kotlin
+val invalidJson = """{"dateOfBirth":1964}"""
+try {
+    Json.decodeFromString<Person>(invalidJson)
+} catch (e: SerializationException) {
+    println(e.message)
+    // Field 'name' is required for type 'Person', but it was missing
+}
+```
+
+Получаем понятное исключение с указанием, какое именно поле отсутствует. В отличие от Gson, который молча подставил бы null (даже для non-null типов!), здесь type-safety работает и в runtime.
+
+### Кастомизация сериализации
+
+Часто структура ваших Kotlin классов не совпадает с форматом API. Может быть, сервер использует snake_case, а вы предпочитаете camelCase. Или нужно исключить какие-то поля из сериализации. Или переименовать поле без изменения кода.
+
+```kotlin
+@Serializable
+data class Person(
+    val name: String,
+    
+    @SerialName("date_of_birth")  // В JSON будет "date_of_birth"
+    val dateOfBirth: Int,
+    
+    val address: String,
+    
+    @Transient  // Это поле не будет сериализовано
+    val cachedData: String = ""
+)
+```
+
+Теперь при сериализации:
+
+```kotlin
+val person = Person("John Wick", 1964, "New York", "some cache")
+val json = Json.encodeToString(person)
+println(json)
+// {"name":"John Wick","date_of_birth":1964,"address":"New York"}
+```
+
+Поле `cachedData` исчезло из JSON, а `dateOfBirth` превратилось в `date_of_birth`. При десериализации JSON с snake_case всё работает корректно:
+
+```kotlin
+val json = """{"name":"John Wick","date_of_birth":1964,"address":"New York"}"""
+val person = Json.decodeFromString<Person>(json)
+println(person.dateOfBirth) // 1964
+```
+
+Это решает частую проблему: вам не нужно создавать отдельные DTO классы для сетевого слоя и доменных моделей. Просто аннотируйте поля, и Kotlin класс с идиоматичными именами корректно маппится на JSON с любым соглашением об именовании.
+
+### Конфигурация JSON encoder
+
+По умолчанию `Json` использует строгий режим, но его можно настроить. Например, делать pretty-print для читаемости или игнорировать неизвестные ключи:
+
+```kotlin
+val json = Json {
+    prettyPrint = true  // Форматирование с отступами
+    ignoreUnknownKeys = true  // Игнорировать поля, которых нет в классе
+    coerceInputValues = true  // Преобразовывать null в default значения
+    encodeDefaults = false  // Не записывать поля с default значениями
+}
+
+val person = Person("John Wick", 1964, "New York", "")
+println(json.encodeToString(person))
+```
+
+Вывод:
+```json
+{
+    "name": "John Wick",
+    "date_of_birth": 1964,
+    "address": "New York"
+}
+```
+
+Параметр `ignoreUnknownKeys = true` особенно полезен при работе с эволюционирующими API. Представьте, что сервер добавил новое поле `email`, но ваше приложение еще не обновлено. Без этого флага десериализация упадет с исключением. С ним - просто проигнорирует неизвестное поле.
+
+### Кастомные сериализаторы
+
+Иногда встроенной логики недостаточно. Например, вам нужно сериализовать `java.util.Date` или шифровать данные перед записью. Для таких случаев можно написать собственный сериализатор:
+
+```kotlin
+import kotlinx.serialization.KSerializer
+import kotlinx.serialization.descriptors.PrimitiveKind
+import kotlinx.serialization.descriptors.PrimitiveSerialDescriptor
+import kotlinx.serialization.encoding.Decoder
+import kotlinx.serialization.encoding.Encoder
+import java.util.Date
+
+object DateSerializer : KSerializer<Date> {
+    override val descriptor = PrimitiveSerialDescriptor("Date", PrimitiveKind.LONG)
+    
+    override fun serialize(encoder: Encoder, value: Date) {
+        encoder.encodeLong(value.time)
+    }
+    
+    override fun deserialize(decoder: Decoder): Date {
+        return Date(decoder.decodeLong())
+    }
+}
+
+@Serializable
+data class Event(
+    val title: String,
+    
+    @Serializable(with = DateSerializer::class)
+    val timestamp: Date
+)
+```
+
+Теперь `Date` будет сериализоваться как unix timestamp (long), а не как объект со всеми внутренними полями. При десериализации автоматически восстановится обратно:
+
+```kotlin
+val event = Event("Meeting", Date())
+val json = Json.encodeToString(event)
+println(json)
+// {"title":"Meeting","timestamp":1698765432000}
+
+val eventFromJson = Json.decodeFromString<Event>(json)
+println(eventFromJson.timestamp) // Sat Nov 01 12:37:12 MSK 2023
+```
+
+Это мощный инструмент. Вы можете создать сериализатор для любого типа: для классов из сторонних библиотек, для legacy Java кода, для специальной логики (шифрование, компрессия, кастомные форматы дат).
+
+### Полиморфизм и sealed классы
+
+Одна из самых сильных сторон `kotlinx.serialization` - работа с полиморфизмом. Представьте, что у вас есть иерархия классов:
+
+```kotlin
+@Serializable
+sealed class Shape {
+    abstract val area: Double
+}
+
+@Serializable
+@SerialName("circle")
+data class Circle(val radius: Double) : Shape() {
+    override val area: Double get() = Math.PI * radius * radius
+}
+
+@Serializable
+@SerialName("rectangle")
+data class Rectangle(val width: Double, val height: Double) : Shape() {
+    override val area: Double get() = width * height
+}
+
+@Serializable
+data class Drawing(val shapes: List<Shape>)
+```
+
+Sealed классы - идеальный кандидат для полиморфной сериализации. Компилятор знает все возможные подтипы, поэтому может сгенерировать корректный код:
+
+```kotlin
+val drawing = Drawing(
+    shapes = listOf(
+        Circle(5.0),
+        Rectangle(10.0, 20.0),
+        Circle(3.0)
+    )
+)
+
+val json = Json { prettyPrint = true }
+println(json.encodeToString(drawing))
+```
+
+Вывод:
+```json
+{
+    "shapes": [
+        {
+            "type": "circle",
+            "radius": 5.0
+        },
+        {
+            "type": "rectangle",
+            "width": 10.0,
+            "height": 20.0
+        },
+        {
+            "type": "circle",
+            "radius": 3.0
+        }
+    ]
+}
+```
+
+Обратите внимание: библиотека автоматически добавила поле `"type"` с именем конкретного подтипа. При десериализации она использует это поле, чтобы понять, какой класс создавать:
+
+```kotlin
+val jsonString = """
+{
+    "shapes": [
+        {"type": "circle", "radius": 5.0},
+        {"type": "rectangle", "width": 10.0, "height": 20.0}
+    ]
+}
+"""
+
+val drawing = Json.decodeFromString<Drawing>(jsonString)
+println(drawing.shapes[0]) // Circle(radius=5.0)
+println(drawing.shapes[1]) // Rectangle(width=10.0, height=20.0)
+```
+
+Это работает безопасно: если в JSON придет неизвестный тип, вы получите исключение. Если структура не соответствует ожидаемому подтипу, тоже исключение. Type-safety сохраняется даже для полиморфных иерархий.
+
+Попробуйте сделать такое с `Serializable` или `Parcelable` - придется писать километры boilerplate кода с проверками типов и ручным маппингом.
+
+### Ограничения и особенности
+
+При всех своих преимуществах, `kotlinx.serialization` не лишена ограничений. Важно понимать их, чтобы принимать правильные архитектурные решения.
+
+**Требование плагина компилятора.** Это не обычная библиотека, которую можно просто добавить в зависимости. Нужен плагин компилятора, что усложняет настройку проекта (хотя и минимально). В некоторых специфических сценариях, где контроль над компиляцией ограничен, это может быть проблемой.
+
+**Ограничения на структуру классов.** Как и в случае с `@Parcelize`, сериализуются только свойства из primary конструктора. Свойства, объявленные в теле класса, игнорируются. Это сознательное архитектурное решение: плагин компилятора анализирует сигнатуру конструктора, а не всю структуру класса. Для большинства случаев это не проблема, но требует определенной дисциплины в дизайне классов.
+
+**Производительность reflection-based альтернатив.** Хотя `kotlinx.serialization` быстрее Gson благодаря кодогенерации, она все же медленнее специализированных ручных реализаций. `Parcelable` в контексте Android IPC будет быстрее для передачи данных между компонентами, потому что работает на нативном уровне. Но для сериализации в JSON или другие текстовые форматы `kotlinx.serialization` - лучший выбор среди Kotlin решений.
+
+**Размер кода.** Генерация сериализаторов для каждого класса увеличивает размер итогового APK/JAR. Для небольших проектов это незаметно, но в крупных приложениях с сотнями data классов накладные расходы могут быть ощутимы. Впрочем, это цена за производительность и type-safety.
+
+**Версионирование.** В отличие от `Serializable` с его `serialVersionUID`, здесь нет встроенного механизма версионирования. Обратная совместимость обеспечивается через default значения и nullable типы, но это требует внимательности при изменении структуры классов. Если вы удаляете обязательное поле, старый JSON не десериализуется. Нужно явно планировать эволюцию схемы данных.
+
+Но все эти ограничения меркнут перед главным преимуществом: это единственное полноценное кроссплатформенное решение для сериализации в экосистеме Kotlin. Один код работает на всех платформах с одинаковой производительностью и гарантиями type-safety.
+
+### Когда использовать что
+
+После детального разбора всех четырех подходов давайте подведем итог и определим, когда какой инструмент уместен.
+
+**Используйте `Serializable`, если:**
+- Работаете с legacy Java кодом, где уже используется этот механизм
+- Нужна максимальная совместимость с существующими системами
+- Производительность не критична, а простота важнее
+- Версионирование через `serialVersionUID` необходимо
+
+**НЕ используйте `Serializable`, если:**
+- Производительность важна
+- Пишете новый код (есть лучшие альтернативы)
+- Работаете с ненадежными источниками данных (risk)
+
+**Используйте `Externalizable`, если:**
+- Нужен полный контроль над форматом сериализации в JVM
+- Важна обратная совместимость с Java
+- Работаете в чистой JVM среде без Android
+- Понимаете risk и готовы писать безопасный код
+
+**НЕ используйте `Externalizable`, если:**
+- Нужна кроссплатформенность
+- Используете Android (есть `Parcelable`)
+- Не готовы поддерживать сложную логику версионирования
+
+**Используйте `Parcelable`, если:**
+- Передаете данные между Android компонентами (Activity, Service, BroadcastReceiver)
+- Работаете исключительно в Android экосистеме
+- Нужна максимальная производительность для IPC
+- С помощью `@Parcelize` это просто
+
+**НЕ используйте `Parcelable`, если:**
+- Пишете Kotlin Multiplatform код
+- Нужно сохранять данные долговременно
+- Требуется сериализация в JSON/XML для API
+- Код должен работать вне Android
+
+**Используйте `kotlinx.serialization`, если:**
+- Пишете Kotlin Multiplatform проект
+- Нужна сериализация в JSON/Protobuf/CBOR для сети или хранения
+- Важна type-safety и производительность
+- Хотите современный, идиоматичный Kotlin код
+- Работаете с complex схемами данных и полиморфизмом
+
+**НЕ используйте `kotlinx.serialization`, если:**
+- Работаете с чистым Java проектом
+- Не можете добавить плагин компилятора
+- Нужен специфичный legacy формат
+- Для Android IPC (используйте `Parcelable`)
+
+Универсального решения не существует. В реальных проектах часто используется комбинация подходов: `Parcelable` для передачи между Activity, `kotlinx.serialization` для работы с API, возможно `Serializable` для интеграции с legacy системами. Главное - понимать сильные и слабые стороны каждого инструмента и применять их по назначению.
