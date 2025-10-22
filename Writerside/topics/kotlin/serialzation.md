@@ -1081,17 +1081,152 @@ val cbor = Cbor.encodeToByteArray(Person.serializer(), person)
 
 Попробуйте сделать такое с `Parcelable` или `Serializable` - они жестко привязаны к своему формату.
 
-### Ключевые особенности
+### Контроль над процессом сериализации
 
-В отличие от предыдущих подходов, `kotlinx.serialization` имеет несколько уникальных возможностей, делающих её универсальным решением.
+Как и в случае с `Serializable`, иногда требуется вмешаться в процесс сериализации. Представьте, что у вас есть поле с кешированными данными или временными вычислениями, которые не нужно сохранять. В `Serializable` мы использовали ключевое слово `transient`, здесь работает аннотация `@Transient`:
 
-**Type-safety в runtime.** Если JSON не содержит обязательного поля, вы получите понятное исключение: `Field 'name' is required for type 'Person', but it was missing`. В отличие от Gson, который молча подставит null даже для non-null типов, здесь компилятор контролирует безопасность.
+```kotlin
+@Serializable
+data class User(
+    val id: String,
+    val username: String,
+    @Transient val cachedAvatar: Bitmap? = null,
+    @Transient var lastAccessTime: Long = 0L
+)
+```
 
-**Гибкая конфигурация.** Библиотека настраивается под реальные сценарии: `ignoreUnknownKeys` игнорирует новые поля от API, `encodeDefaults` контролирует запись default значений, `coerceInputValues` преобразует некорректные значения. Это решает проблемы эволюции API без изменения кода.
+При сериализации поля `cachedAvatar` и `lastAccessTime` будут проигнорированы. JSON будет содержать только `id` и `username`. Обратите внимание: transient поля должны иметь default значения, иначе при десериализации компилятор не сможет создать объект.
 
-**Кастомизация через аннотации.** Аннотация `@SerialName("date_of_birth")` меняет имя поля в JSON без изменения Kotlin класса, `@Transient` исключает поля из сериализации. Не нужны отдельные DTO классы для сетевого слоя.
+Другая частая проблема: ваши Kotlin классы используют camelCase, но API сервера требует snake_case. В `Serializable` пришлось бы либо переименовывать поля в коде, либо писать кастомные `writeObject`/`readObject`. Здесь достаточно аннотации `@SerialName`:
 
-**Полиморфизм.** Sealed классы сериализуются автоматически с добавлением discriminator поля `"type"`. При десериализации библиотека сама определяет конкретный подтип. Попробуйте реализовать такое с `Serializable` или `Parcelable` - потребуется огромное количество boilerplate кода.
+```kotlin
+@Serializable
+data class ApiResponse(
+    @SerialName("user_id") val userId: String,
+    @SerialName("created_at") val createdAt: Long,
+    @SerialName("is_active") val isActive: Boolean
+)
+```
+
+При сериализации будет `{"user_id":"123","created_at":1698765432,"is_active":true}`, но в Kotlin коде вы продолжаете работать с идиоматичными именами `userId`, `createdAt`, `isActive`. Не нужны отдельные DTO классы или маппинг слои.
+
+Третья проблема: API эволюционирует, добавляются новые поля, старые становятся опциональными. В `Serializable` версионирование решается через `serialVersionUID`, но это хрупкий механизм. Здесь работают nullable типы и default значения:
+
+```kotlin
+@Serializable
+data class User(
+    val id: String,
+    val username: String,
+    val email: String? = null,  // Опциональное поле, может отсутствовать в JSON
+    val premium: Boolean = false  // Default значение, если поле отсутствует
+)
+```
+
+Если JSON содержит `{"id":"123","username":"john"}`, библиотека создаст объект с `email = null` и `premium = false`. Если JSON содержит все поля, используются значения из него. Но если попытаться десериализовать JSON без обязательного поля:
+
+```kotlin
+val json = """{"username":"john"}"""  // Отсутствует обязательное поле id
+val user = Json.decodeFromString<User>(json)  // SerializationException: Field 'id' is required
+```
+
+Type-safety работает и в runtime. В отличие от Gson, который молча подставит null даже для non-null типа (и приложение упадет позже с NullPointerException в production), здесь вы получите понятное исключение сразу при десериализации.
+
+### Работа с типами вне вашего контроля
+
+Серьезная проблема возникает, когда нужно сериализовать класс, на который вы не можете навесить `@Serializable`. Это может быть класс из сторонней библиотеки, legacy Java код, или стандартные типы вроде `java.util.Date`. В `Serializable` такие классы просто не сериализуются корректно или создают огромные бинарные данные.
+
+В `kotlinx.serialization` для этого существуют кастомные сериализаторы. Создаете объект, реализующий `KSerializer<T>`, и указываете, как именно сериализовать и десериализовать этот тип:
+
+```kotlin
+object DateAsLongSerializer : KSerializer<Date> {
+    override val descriptor = PrimitiveSerialDescriptor("Date", PrimitiveKind.LONG)
+    
+    override fun serialize(encoder: Encoder, value: Date) {
+        encoder.encodeLong(value.time)
+    }
+    
+    override fun deserialize(decoder: Decoder): Date {
+        return Date(decoder.decodeLong())
+    }
+}
+```
+
+Теперь можно использовать этот сериализатор для полей типа `Date`:
+
+```kotlin
+@Serializable
+data class Event(
+    val title: String,
+    @Serializable(with = DateAsLongSerializer::class)
+    val timestamp: Date
+)
+```
+
+`Date` будет сериализоваться как простое число (unix timestamp), а не как объект со всеми внутренними полями. При десериализации число автоматически превратится обратно в `Date`. Это работает для любых типов: библиотек работы с UUID, кастомных классов из closed-source зависимостей, Java коллекций со специфичной логикой.
+
+### Полиморфизм и sealed классы
+
+Одна из самых мощных возможностей, которой нет ни в `Serializable`, ни в `Parcelable`, ни в `Externalizable` без огромного количества boilerplate кода. Представьте API, который возвращает разные типы событий:
+
+```kotlin
+@Serializable
+sealed class Event {
+    abstract val timestamp: Long
+}
+
+@Serializable
+@SerialName("user_login")
+data class UserLoginEvent(
+    override val timestamp: Long,
+    val userId: String
+) : Event()
+
+@Serializable
+@SerialName("purchase")
+data class PurchaseEvent(
+    override val timestamp: Long,
+    val amount: Double,
+    val currency: String
+) : Event()
+
+@Serializable
+data class EventLog(val events: List<Event>)
+```
+
+Sealed классы - это закрытая иерархия типов, компилятор знает все возможные подтипы. При сериализации библиотека автоматически добавляет discriminator поле `"type"` с именем конкретного класса:
+
+```kotlin
+val log = EventLog(
+    events = listOf(
+        UserLoginEvent(1698765432000, "user123"),
+        PurchaseEvent(1698765433000, 99.99, "USD")
+    )
+)
+
+val json = Json.encodeToString(log)
+```
+
+Результат:
+```json
+{
+  "events": [
+    {"type":"user_login","timestamp":1698765432000,"userId":"user123"},
+    {"type":"purchase","timestamp":1698765433000,"amount":99.99,"currency":"USD"}
+  ]
+}
+```
+
+При десериализации библиотека смотрит на поле `"type"`, понимает, какой именно подкласс создавать, и восстанавливает корректную иерархию:
+
+```kotlin
+val log = Json.decodeFromString<EventLog>(json)
+when (val event = log.events[0]) {
+    is UserLoginEvent -> println("User ${event.userId} logged in")
+    is PurchaseEvent -> println("Purchase: ${event.amount} ${event.currency}")
+}
+```
+
+Type-safety сохраняется полностью. Если в JSON придет неизвестный тип, получите исключение. Если структура не соответствует, тоже исключение. Попробуйте реализовать такое с `Serializable` - придется писать километры кода с проверками типов, instanceof, кастами, и ручной маршрутизацией десериализации.
 
 ### Ограничения
 
