@@ -1378,7 +1378,7 @@ class SerializationBenchmark {
         val baos = ByteArrayOutputStream()
         ObjectOutputStream(baos).use { it.writeObject(user) }
         val serialized = baos.toByteArray()
-        print(serialized)
+
         // Десериализация
         ByteArrayInputStream(serialized).use { bais ->
             ObjectInputStream(bais).use { it.readObject() as User }
@@ -1397,14 +1397,14 @@ class SerializationBenchmark {
             ObjectInputStream(bais).use { it.readObject() as User }
         }
     }
-    
+
     @[Test OptIn(ExperimentalSerializationApi::class)]
     fun kotlinxSerializable() = benchmarkRule.measureRepeated {
         // Сериализация
-        val protobuf = ProtoBuf.encodeToByteArray(User.serializer(), user)
+        val protobufArray = ProtoBuf.encodeToByteArray(User.serializer(), user)
 
         // Десериализация
-        val result: User = ProtoBuf.decodeFromByteArray(User.serializer(), protobuf)
+        val result: User = ProtoBuf.decodeFromByteArray(User.serializer(), protobufArray)
     }
 
 
@@ -1422,7 +1422,7 @@ class SerializationBenchmark {
         destination.setDataPosition(0)
 
         val classLoader = User::class.java.classLoader
-        val result: User?  = destination.readParcelable<User>(classLoader, User::class.java)
+        val result: User? = destination.readParcelable<User>(classLoader, User::class.java)
         destination.recycle()
     }
 }
