@@ -1,0 +1,871 @@
+<!DOCTYPE html SYSTEM "about:legacy-compat">
+<html lang="en-US" data-preset="contrast" data-primary-color="#1B9F8E" data-link-color="#57B747" data-content-max-width="1600" data-resizable-sidebar="true"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8"><meta charset="UTF-8"><meta name="built-on" content="2025-10-29T00:01:30.42178"><title>Введение | insider</title><script type="application/json" id="virtual-toc-data">[{"id":"-nyyrua_11","level":0,"title":"Базис","anchor":"#-nyyrua_11"},{"id":"serializable","level":0,"title":"Интерфейс Serializable","anchor":"#serializable"},{"id":"externalizable","level":0,"title":"Интерфейс Externalizable","anchor":"#externalizable"},{"id":"parcelable","level":0,"title":"Интерфейс Parcelable","anchor":"#parcelable"},{"id":"kotlinx-serialization","level":0,"title":"kotlinx.serialization","anchor":"#kotlinx-serialization"},{"id":"-nyyrua_16","level":0,"title":"Бенчмарки: сравнение производительности","anchor":"#-nyyrua_16"},{"id":"-nyyrua_17","level":0,"title":"Заключение: Так говорили бенчмарки","anchor":"#-nyyrua_17"}]</script><script type="application/json" id="topic-shortcuts"></script><link href="https://resources.jetbrains.com/writerside/apidoc/6.22.0-b776/app.css" rel="stylesheet"><link href="static/style.css" rel="stylesheet"><link rel="icon" type="image/png" sizes="16x16" href="https://iili.io/3eop8YX.png"><meta name="image" content=""><!-- Open Graph --><meta property="og:title" content="Введение | insider"><meta property="og:description" content=""><meta property="og:image" content=""><meta property="og:site_name" content="insider Help"><meta property="og:type" content="website"><meta property="og:locale" content="en_US"><meta property="og:url" content="writerside-documentation//1.0/serialzation.html"><!-- End Open Graph --><!-- Twitter Card --><meta name="twitter:card" content="summary_large_image"><meta name="twitter:site" content=""><meta name="twitter:title" content="Введение | insider"><meta name="twitter:description" content=""><meta name="twitter:creator" content=""><meta name="twitter:image:src" content=""><!-- End Twitter Card --><!-- Schema.org WebPage --><script type="application/ld+json">{
+    "@context": "http://schema.org",
+    "@type": "WebPage",
+    "@id": "writerside-documentation//1.0/serialzation.html#webpage",
+    "url": "writerside-documentation//1.0/serialzation.html",
+    "name": "Введение | insider",
+    "description": "",
+    "image": "",
+    "inLanguage":"en-US"
+}</script><!-- End Schema.org --><!-- Schema.org WebSite --><script type="application/ld+json">{
+    "@type": "WebSite",
+    "@id": "writerside-documentation/#website",
+    "url": "writerside-documentation/",
+    "name": "insider Help"
+}</script><!-- End Schema.org --></head><body data-id="serialzation" data-main-title="Введение" data-article-props="{&quot;seeAlsoStyle&quot;:&quot;links&quot;}" data-template="article" data-breadcrumbs="Kotlin"><div class="wrapper"><main class="panel _main"><header class="panel__header"><div class="container"><h3>insider 1.0 Help</h3><div class="panel-trigger"></div></div></header><section class="panel__content"><div class="container"><article class="article" data-shortcut-switcher="inactive"><h1 data-toc="serialzation" id="serialzation.md">Введение</h1><figure id="-nyyrua_2"><img alt="serializationBanner.svg" src="images/serializationBanner.svg" title="serializationBanner.svg" width="1237" height="396"></figure><p id="-nyyrua_4">В этой статье мы рассмотрим технологии сериализации и десериализации данных в контексте экосистемы Android, Java, Kotlin JVM и Kotlin Native.</p><p id="-nyyrua_5">Сериализация и десериализация являются фундаментальными операциями в современной разработке. Эти процессы используются повсеместно: от хранения данных в локальном хранилище устройства до передачи информации по сети. Многие NoSQL базы данных применяют собственные форматы сериализации для оптимизации производительности. Наиболее распространённые форматы обмена данными (JSON, XML, Protocol Buffers, MessagePack и другие) тесно связаны с процессами сериализации.</p><p id="-nyyrua_6">Существует два основных подхода к реализации сериализации. Первый основан на рефлексии (reflection), которая позволяет анализировать структуру объектов во время выполнения (runtime), но сопряжена с накладными расходами на производительность. Второй подход использует кодогенерацию во время компиляции (compile-time), что значительно ускоряет обработку данных за счёт генерации специализированного кода. Например, Protocol Buffers требует предварительного описания контракта данных в <code class="code" id="-nyyrua_18">.proto</code> файлах, что позволяет генерировать оптимизированный код и устранять избыточные операции при десериализации.</p><p id="-nyyrua_7">При оценке решений для сериализации обычно приоритетным является скорость обработки, затем размер сериализованных данных, и лишь потом потребление оперативной памяти. Впрочем, для мобильных устройств и встраиваемых систем баланс этих факторов может смещаться в пользу минимизации памяти и размера данных.</p><p id="-nyyrua_8">В рамках данной статьи мы проанализируем существующие библиотеки и подходы к сериализации объектов в JVM и Native экосистемах. Мы детально рассмотрим четыре основных подхода: классический <code class="code" id="-nyyrua_19">Serializable</code> из Java, его расширение <code class="code" id="-nyyrua_20">Externalizable</code>, специфичный для Android <code class="code" id="-nyyrua_21">Parcelable</code>, а также современный <code class="code" id="-nyyrua_22">kotlinx.serialization</code>. Для каждого из них мы проведём сравнительное тестирование производительности и выясним, какие решения являются наиболее эффективными в различных сценариях использования. Помимо получения конкретных метрик, мы также исследуем технические причины, определяющие производительность каждого подхода.</p><p id="-nyyrua_9">Разработчики часто утверждают, что <code class="code" id="-nyyrua_23">Parcelable</code> лучше, не понимая, в чём именно он лучше: в использовании памяти или в скорости выполнения? В последнее время появилась тенденция миграции на <code class="code" id="-nyyrua_24">kotlinx.serialization</code>. С какой целью? Мало кто знает о существовании <code class="code" id="-nyyrua_25">Externalizable</code>. Новые технологии не появляются ради забавы. Каждый новый способ призван решить проблемы своего предшественника. Без знания полной эволюции от фундамента невозможно по-настоящему оценить современные решения. На собеседованиях разработчики заявляют: &quot;X лучше, чем Y&quot; или &quot;X быстрее, чем Y&quot;. Быстрее в чём? Лучше в чём? Когда же вопрос углубляется (&quot;Почему быстрее? Как это работает?&quot;), следует молчание. Знание оказывается заимствованным из заголовка статьи. Даже если в документации API указано, что одно решение превосходит другое, необходимо самостоятельно проверить и убедиться, а не доверять абстрактным тезисам. Всё относительно.</p><p id="-nyyrua_10">Для единообразия терминологии начнём с определения базовых понятий и терминов.</p><section class="chapter"><h2 id="-nyyrua_11" data-toc="-nyyrua_11">Базис</h2><p id="-nyyrua_26"><span class="control" id="-nyyrua_33">Сериализация</span> - это процесс преобразования структурированных данных (объектов, структур данных) в последовательность байтов или текстовое представление, пригодное для хранения или передачи. Сериализация &laquo;упаковывает&raquo; состояние объекта в формат, который можно сохранить в файл, передать по сети или поместить в базу данных.</p><p id="-nyyrua_27"><span class="control" id="-nyyrua_34">Десериализация</span> - это обратный процесс восстановления объекта из его сериализованного представления. Десериализация &laquo;распаковывает&raquo; последовательность байтов или текст обратно в структурированный объект с сохранением его типа и данных.</p><figure id="-nyyrua_28"><img alt="serialization.svg" src="images/serialization.svg" title="serialization.svg" width="1420" height="420"></figure><p id="-nyyrua_29"><span class="control" id="-nyyrua_35">Рефлексия (Reflection)</span> - это механизм времени выполнения, позволяющий программе анализировать и модифицировать свою собственную структуру и поведение. В контексте сериализации рефлексия используется для динамического обхода полей объектов без предварительной генерации кода. Естественно неформально рефлексия в мире разработки считается темной магией.</p><p id="-nyyrua_30"><span class="control" id="-nyyrua_36">Кодогенерация (Code Generation)</span> - это автоматическое создание исходного кода во время компиляции на основе аннотаций, схем данных или других метаданных. Кодогенерация устраняет накладные расходы рефлексии за счёт создания специализированных классов-сериализаторов. Сама кодогенерация достигается благодаря плагинам компилятора или анализаторов кода. В мире JVM это долгое время было APT, позже KAPT, далее эволюция Kotlin подарила KSP. Начиная с Kotlin 2.0 теперь так же есть возможность реализовать плагины компилятора, которая ранее была закрыта для сторонних разработчиков. <figure id="-nyyrua_37"><img alt="codeGeneration.svg" src="images/codeGeneration.svg" title="codeGeneration.svg" width="12544" height="3843"></figure></p><p id="-nyyrua_31"><span class="control" id="-nyyrua_38">Контракт данных (Data Contract/Schema)</span> - это формальное описание структуры данных, определяющее типы полей, их названия и правила валидации. Используется в Protocol Buffers (.proto файлы), Apache Avro и других схемо-ориентированных форматах. <figure id="-nyyrua_39"><img alt="codeProtocolScheme.svg" src="images/codeProtocolScheme.svg" title="codeProtocolScheme.svg" width="12544" height="3843"></figure></p><p id="-nyyrua_32">Теперь, когда мы определились с базовой терминологией, перейдем к рассмотрению конкретных способов сериализации. Мы рассмотрим их в порядке исторической эволюции с точки зрения Kotlin и Android. Что интересно, в мире Java эволюции как таковой не произошло: первое решение, появившееся еще в ранних версиях JDK, продолжает использоваться и по сей день. Сначала мы пройдемся по каждому из подходов, разберем их под лупой, но никаких выводов по производительности делать не будем пока не рассмотрим все способы, в конце мы сравним каждый из подходов что бы понять какой из них оптимальнее в использований.</p></section><section class="chapter"><h2 id="serializable" data-toc="serializable">Интерфейс Serializable</h2><p id="-nyyrua_40">Начнем наше погружение с интерфейса <code class="code" id="-nyyrua_63">Serializable</code>, который является самым первым и, пожалуй, наиболее распространенным способом сериализации в мире JVM. <code class="code" id="-nyyrua_64">Serializable</code> представляет собой интерфейс-маркер, то есть интерфейс, не содержащий никакой логики. Рассмотрим его исходный код:</p><div class="code-block" data-lang="java">
+package java.io;
+
+public interface Serializable {
+}
+</div><p id="-nyyrua_42">Как видите, интерфейс абсолютно пуст. Возникает логичный вопрос: как же пустой интерфейс может что-то делать? На самом деле, <code class="code" id="-nyyrua_65">Serializable</code> работает как маркер для JVM, сигнализирующий, что класс разрешает свою сериализацию. Вся магия происходит на уровне runtime через рефлексию, о чем мы подробно поговорим дальше.</p><p id="-nyyrua_43">Давайте создадим простой класс и посмотрим, как работает сериализация на практике. Для примера возьмем класс <code class="code" id="-nyyrua_66">Person</code> с базовой информацией о человеке:</p><div class="code-block" data-lang="kotlin">
+data class Person( 
+    val name: String, 
+    val dateOfBirth: Int, 
+    val address: String
+): Serializable
+</div><p id="-nyyrua_45">Обратите внимание, что для превращения обычного класса в сериализуемый нам достаточно добавить <code class="code" id="-nyyrua_67">: Serializable</code> после объявления класса. Никаких дополнительных методов или полей реализовывать не нужно.</p><p id="-nyyrua_46">Теперь давайте попробуем сериализовать объект этого класса и сохранить его в файл. Процесс будет выглядеть следующим образом:</p><div class="code-block" data-lang="kotlin">
+fun main(args: Array&lt;String&gt;) {
+    val person = Person(&quot;John Wick&quot;, 1964, &quot;New York&quot;)
+    val file = File(&quot;serialization.bin&quot;).apply(File::createNewFile)
+
+    val fileOutputStream = FileOutputStream(file)
+    val objectOutputStream = ObjectOutputStream(fileOutputStream).use { stream -&gt;
+        stream.writeObject(person)
+        stream.flush()
+    }
+}
+</div><p id="-nyyrua_48">Что здесь происходит? Мы создаём объект <code class="code" id="-nyyrua_68">Person</code> с данными о John Wick, затем создаём файл <code class="code" id="-nyyrua_69">serialization.bin</code>, открываем поток(FileOutputStream) для записи в этот файл и, наконец, оборачиваем его в <code class="code" id="-nyyrua_70">ObjectOutputStream</code>. Именно вызов <code class="code" id="-nyyrua_71">writeObject(person)</code> запускает весь механизм сериализации, превращая наш объект в последовательность байтов.</p><p id="-nyyrua_49">После выполнения кода мы получим файл <code class="code" id="-nyyrua_72">serialization.bin</code> с нашими сериализованными данными. Из любопытства давайте попробуем открыть этот файл в текстовом редакторе. Вот что мы увидим:</p><div class="code-block" data-lang="none">
+���sr�application.Person2�v��9��I�dateOfBirthL�addresst�Ljava/lang/String;L�nameq�~�xp���t�New Yorkt�	John Wick
+</div><p id="-nyyrua_51">Выглядит жутковато, не правда ли? Файл явно не предназначен для чтения человеком из-за бинарного формата, и текстовый редактор с трудом пытается интерпретировать байты как UTF-8 символы. Тем не менее, если присмотреться, среди &quot;кракозябр&quot; можно разглядеть вполне читаемые фрагменты: названия полей (<code class="code" id="-nyyrua_73">name</code>, <code class="code" id="-nyyrua_74">address</code>), их типы (<code class="code" id="-nyyrua_75">Ljava/lang/String</code>), название класса (<code class="code" id="-nyyrua_76">Person</code>) и даже значения полей (<code class="code" id="-nyyrua_77">New York</code>, <code class="code" id="-nyyrua_78">John Wick</code>).</p><p id="-nyyrua_52">Вы можете задаться вопросом: если сериализация представляет собой превращение объекта в байты, то почему мы видим не нули и единицы, а относительно читаемый текст? Ответ прост: текстовый редактор пытается интерпретировать байты как символы UTF-8. Некоторые байтовые последовательности случайно совпадают с кодами печатных символов, поэтому мы и видим эти фрагменты текста среди непонятных символов.</p><p id="-nyyrua_53">Но откуда же в файле взялась вся эта информация о структуре нашего класса? Мы ведь нигде явно не указывали, какие поля сохранять и как их называть. Здесь начинается самое интересное: <code class="code" id="-nyyrua_79">Serializable</code> полностью работает на основе Reflection API. JVM автоматически анализирует структуру нашего класса во время выполнения и извлекает всю необходимую метаинформацию.</p><p id="-nyyrua_54">Рефлексия и вся магия <code class="code" id="-nyyrua_80">Serializable</code> проявляется с момента создания <code class="code" id="-nyyrua_81">ObjectOutputStream</code>, а если быть точнее, с момента вызова функции <code class="code" id="-nyyrua_82">writeObject</code>. Именно в этом методе происходит вся основная работа: он берет наш объект класса <code class="code" id="-nyyrua_83">Person</code>, сериализует его и затем записывает в файл <code class="code" id="-nyyrua_84">serialization.bin</code>.</p><p id="-nyyrua_55">Важно понимать архитектуру: сам <code class="code" id="-nyyrua_85">ObjectOutputStream</code> на самом деле ничего не знает о нашем файле <code class="code" id="-nyyrua_86">serialization.bin</code>. Вместо этого <code class="code" id="-nyyrua_87">ObjectOutputStream</code> работает с <code class="code" id="-nyyrua_88">FileOutputStream</code>, который и является посредником между файлом и объектом. Это классический паттерн проектирования &quot;Декоратор&quot; (Decorator). На самом деле, большинство видов Stream-ов (наследники <code class="code" id="-nyyrua_89">InputStream</code> и <code class="code" id="-nyyrua_90">OutputStream</code>) являются декораторами, добавляющие дополнительную функциональность к базовому потоку(stream).</p><p id="-nyyrua_56">Процесс десериализации работает зеркально:</p><div class="code-block" data-lang="kotlin">
+fun main(args: Array&lt;String&gt;) {
+    val file = File(&quot;serialization.bin&quot;)
+    val fileInputStream = FileInputStream(file)
+    val objectInputStream = ObjectInputStream(fileInputStream).use { stream -&gt;
+        print(stream.readObject() as Person)
+    }
+}
+</div><p id="-nyyrua_58">Мы находим файл и затем передаем его в <code class="code" id="-nyyrua_91">FileInputStream</code>, чтобы восстановить объект <code class="code" id="-nyyrua_92">Person</code> из сохраненного набора байтов. Давайте убедимся, что интерфейс <code class="code" id="-nyyrua_93">Serializable</code> действительно необходим. Если мы уберем у класса <code class="code" id="-nyyrua_94">Person</code> наследование от интерфейса <code class="code" id="-nyyrua_95">Serializable</code>, то получим такую ошибку:</p><div class="code-block" data-lang="none">
+Exception in thread &quot;main&quot; java.io.NotSerializableException: Person
+</div><p id="-nyyrua_60">Эта ошибка подтверждает, что маркерный интерфейс <code class="code" id="-nyyrua_96">Serializable</code> является обязательным условием для сериализации объекта.</p><section class="chapter"><h3 id="serializable" data-toc="serializable">Внутреннее устройство Serializable</h3><p id="-nyyrua_97">Теперь давайте погрузимся глубже и посмотрим, как работает сериализация под капотом. Рассмотрим исходный код метода <code class="code" id="-nyyrua_135">writeObject</code> класса <code class="code" id="-nyyrua_136">ObjectOutputStream</code>, ведь именно он принимает объект класса <code class="code" id="-nyyrua_137">Person</code> и преобразует его в набор байтов:</p><div class="code-block" data-lang="java">
+public class ObjectOutputStream extends OutputStream implements ObjectOutput, ObjectStreamConstants {
+    
+    public final void writeObject(Object obj) throws IOException {
+        if (enableOverride) {
+            writeObjectOverride(obj);
+            return;
+        }
+        try {
+            writeObject0(obj, false);
+        } catch (IOException ex) {
+            if (depth == 0) {
+                writeFatalException(ex);
+            }
+            throw ex;
+        }
+    }
+}
+</div><p id="-nyyrua_99">Этот метод своего рода Provider, если от класса унаследовались и переопределили открытый метод для переопределения, то будет использована логика наследника, иначе вызов передается методу <code class="code" id="-nyyrua_138">writeObject0</code> который является стандартным у <code class="code" id="-nyyrua_139">ObjectOutputStream</code>, в нашем случае мы не наследовались от ObjectOutputStream поэтому мы попадаем в метод <code class="code" id="-nyyrua_140">writeObject0</code>:</p><div class="code-block" data-lang="java">
+public class ObjectOutputStream extends OutputStream implements ObjectOutput, ObjectStreamConstants {
+    
+    private void writeObject0(Object obj, boolean unshared)
+            throws IOException
+    {
+        ...
+        ObjectStreamClass desc = ObjectStreamClass.lookup(cl, true);
+        ...
+        
+        if (obj instanceof String) {
+            writeString((String) obj, unshared);
+        } else if (cl.isArray()) {
+            writeArray(obj, desc, unshared);
+        } else if (obj instanceof Enum) {
+            writeEnum((Enum&lt;?&gt;) obj, desc, unshared);
+        } else if (obj instanceof Serializable) {
+            writeOrdinaryObject(obj, desc, unshared);
+        } else {
+            if (extendedDebugInfo) {
+                throw new NotSerializableException(
+                        cl.getName() + &quot;\n&quot; + debugInfoStack.toString());
+            } else {
+                throw new NotSerializableException(cl.getName());
+            }
+        }
+        ...
+    }
+}
+</div><p id="-nyyrua_101">Метод <code class="code" id="-nyyrua_141">writeObject0</code> содержит обширную логику по проверке объекта (например, проверки на not nullable, no classable, not streamable). В приведенном выше фрагменте оставлена только та часть логики, которая непосредственно отвечает за работу сериализации стандартного объекта.</p><p id="-nyyrua_102">Обратите внимание на важную строку, которую мы специально оставили в коде: создание объекта <code class="code" id="-nyyrua_142">ObjectStreamClass</code>. Этот объект играет ключевую роль во всем процессе сериализации. Рассмотрим подробнее вызов <code class="code" id="-nyyrua_143">ObjectStreamClass.lookup(cl, true)</code>. Именно здесь начинается реальная работа сериализации. Этот метод создает дескриптор класса (объект <code class="code" id="-nyyrua_144">ObjectStreamClass</code>), который фиксирует всю метаинформацию о типе, необходимую для его записи в поток. По сути, это сериализационный аналог рефлексии, но не на уровне исполнения, а на уровне протокола (контракта).</p><p id="-nyyrua_103">Метод <code class="code" id="-nyyrua_145">lookup</code> сначала проверяет внутренний кэш. Если дескриптор для данного класса уже существовал, он возвращается повторно. Если нет, то создается новый. В процессе создания выполняется полный анализ структуры класса: определяются сериализуемые поля объекта, вычисляется <code class="code" id="-nyyrua_146">serialVersionUID</code>, проверяется наличие специальных методов (<code class="code" id="-nyyrua_147">writeObject</code>, <code class="code" id="-nyyrua_148">readObject</code>, <code class="code" id="-nyyrua_149">readResolve</code>, <code class="code" id="-nyyrua_150">writeReplace</code>), устанавливается связь с родительским дескриптором, фиксируются флаги, указывающие на природу класса (<code class="code" id="-nyyrua_151">enum</code>, <code class="code" id="-nyyrua_152">proxy</code>, <code class="code" id="-nyyrua_153">externalizable</code>, <code class="code" id="-nyyrua_154">record</code>).</p><p id="-nyyrua_104">Параметр <code class="code" id="-nyyrua_155">true</code> во втором аргументе означает, что дескрипторы создаются не только для самого класса, но и для всей цепочки его сериализуемых предков. Это важно: сериализация в Java всегда знает структуру объекта вплоть до первого не-<code class="code" id="-nyyrua_156">Serializable</code> родителя, и именно <code class="code" id="-nyyrua_157">lookup</code> формирует эту иерархию.</p><p id="-nyyrua_105">Результатом вызова становится объект <code class="code" id="-nyyrua_158">desc</code>, который будет передан в <code class="code" id="-nyyrua_159">writeOrdinaryObject</code>. Все дальнейшие шаги (запись сигнатуры, <code class="code" id="-nyyrua_160">serialVersionUID</code>, набора полей и их значений) выполняются строго в соответствии с тем, что описано в этом дескрипторе. Если дескриптор изменить, изменится и байтовое представление.</p><p id="-nyyrua_106">Таким образом, <code class="code" id="-nyyrua_161">ObjectStreamClass.lookup</code> является точкой перехода от уровня кода к уровню протокола сериализации. До этого момента JVM работала с объектом как с экземпляром типа, после же работает с набором описанных структур и байтов, имея всю информацию о том, кто перед ним сейчас. Сам по себе этот вызов в первый раз занимает очень много времени и памяти, это первый залп использования рефлексии для сериализации.</p><p id="-nyyrua_107">Вернемся к методу <code class="code" id="-nyyrua_162">writeObject0</code> и рассмотрим последовательность проверок, которые он выполняет. После создания дескриптора класса начинается каскад проверок типа объекта:</p><ol class="list _decimal" id="-nyyrua_108" type="1"><li class="list__item" id="-nyyrua_163"><p id="-nyyrua_166">Сначала проверяется, является ли объект строкой (<code class="code" id="-nyyrua_167">String</code>). Строковые значения обрабатываются специальным образом, так как сериализуются более эффективно.</p></li><li class="list__item" id="-nyyrua_164"><p id="-nyyrua_168">Далее проверяется, является ли класс массивом.</p></li><li class="list__item" id="-nyyrua_165"><p id="-nyyrua_169">После идет проверка на <code class="code" id="-nyyrua_170">enum</code>.</p></li></ol><aside class="prompt" data-type="tip" data-title="" id="-nyyrua_109"><p id="-nyyrua_171">Любой enum в JVM является Serializable по умолчанию, все потому что все enum классы не явно наследуются от настоящего класса java.lang.Enum. А класс java.lang.Enum уже наследуется от интерфейса Serializable</p></aside><ol class="list _decimal" id="-nyyrua_110" type="1" start="4"><li class="list__item" id="-nyyrua_172"><p id="-nyyrua_173">Наконец, если объект не подпадает ни под одну из специальных категорий, проверяется, реализует ли он интерфейс <code class="code" id="-nyyrua_174">Serializable</code>.</p></li></ol><p id="-nyyrua_111">По итогу всех этих проверок происходит одно из двух: либо мы попадаем под категорию <code class="code" id="-nyyrua_175">Serializable</code> и продолжаем сериализацию, либо получаем ошибку <code class="code" id="-nyyrua_176">NotSerializableException</code>.</p><p id="-nyyrua_112">Для классов, реализующих <code class="code" id="-nyyrua_177">Serializable</code>, вызывается метод <code class="code" id="-nyyrua_178">writeOrdinaryObject</code>. После того как <code class="code" id="-nyyrua_179">writeObject0</code> определяет, что данный объект действительно реализует интерфейс <code class="code" id="-nyyrua_180">Serializable</code>, управление передаётся в этот метод. Именно он отвечает за запись &laquo;обычного&raquo; объекта в поток(stream), то есть объекта, не являющегося строкой, массивом, перечислением или экземпляром <code class="code" id="-nyyrua_181">Externalizable</code> (про него будет далее в статье). В этом месте начинается реальная работа сериализационного механизма. Метод выглядит следующим образом, далее мы увидим его разбор:</p><div class="code-block" data-lang="java">
+public class ObjectOutputStream extends OutputStream implements ObjectOutput, ObjectStreamConstants {
+    
+    private void writeOrdinaryObject(Object obj,
+                                     ObjectStreamClass desc,
+                                     boolean unshared)
+            throws IOException
+    {
+        ...
+            desc.checkSerialize();
+
+            bout.writeByte(TC_OBJECT);
+            writeClassDesc(desc, false);
+            handles.assign(unshared ? null : obj);
+
+            if (desc.isRecord()) {
+                writeRecordData(obj, desc);
+            } else if (desc.isExternalizable() &amp;&amp; !desc.isProxy()) {
+                writeExternalData((Externalizable) obj);
+            } else {
+                writeSerialData(obj, desc);
+            }
+        }
+        ...
+    }
+}
+</div><p id="-nyyrua_114">Первое, что делает <code class="code" id="-nyyrua_182">writeOrdinaryObject</code>, это вызов <code class="code" id="-nyyrua_183">desc.checkSerialize()</code>. Этот вызов не просто формальность, а гарантия того, что класс, описанный <code class="code" id="-nyyrua_184">ObjectStreamClass desc</code>, удовлетворяет всем требованиям контракта сериализации. Здесь происходит верификация флага <code class="code" id="-nyyrua_185">Serializable</code>, проверка корректности сигнатуры специальных методов <code class="code" id="-nyyrua_186">writeObject</code>, <code class="code" id="-nyyrua_187">readObject</code>, <code class="code" id="-nyyrua_188">readResolve</code>, <code class="code" id="-nyyrua_189">writeReplace</code>, а также проверка соответствия вычисленного <code class="code" id="-nyyrua_190">serialVersionUID</code> тому, что объявлен явно. Если класс нарушает контракт, поток прерывается исключением <code class="code" id="-nyyrua_191">NotSerializableException</code>. Таким образом, сериализация никогда не начнётся для объекта, который не способен пройти эти структурные проверки.</p><p id="-nyyrua_115">После успешной валидации в поток записывается первый управляющий байт <code class="code" id="-nyyrua_192">TC_OBJECT</code>. Этот байт представляет собой сериализационный маркер, используемый <code class="code" id="-nyyrua_193">ObjectInputStream</code> при чтении потока для распознавания того, что далее следует именно объектная структура, а не строка, массив, ссылка или иной тип элемента. Механизм Object Serialization в Java использует фиксированный бинарный протокол, где каждый элемент (объект, класс, поле, массив и т.д.) предваряется своим маркером. Для объекта это <code class="code" id="-nyyrua_194">0x73</code>, то есть байт <code class="code" id="-nyyrua_195">TC_OBJECT</code>. Таким образом, запись объекта всегда начинается с этого маркера.</p><p id="-nyyrua_116">Следом вызывается <code class="code" id="-nyyrua_196">writeClassDesc(desc, false)</code>. В этом месте сериализация переходит от конкретного экземпляра к описанию его класса. Метод <code class="code" id="-nyyrua_197">writeClassDesc</code> отвечает за запись дескриптора класса, то есть структуры, содержащей имя класса, <code class="code" id="-nyyrua_198">serialVersionUID</code>, количество и типы сериализуемых полей, а также ссылки на суперклассы. Если этот дескриптор уже встречался ранее в потоке, то вместо полного описания записывается ссылка <code class="code" id="-nyyrua_199">TC_REFERENCE</code>, указывающая на уже существующий дескриптор. Это экономит место и поддерживает консистентность структуры потока. Если же класс сериализуется впервые, то в поток последовательно записываются имя, версия, список полей и другие метаданные. Именно благодаря <code class="code" id="-nyyrua_200">writeClassDesc</code> десериализация на другой стороне способна понять, как восстанавливать объект: какой класс использовать, какие поля прочитать и в каком порядке.</p><p id="-nyyrua_117">После записи дескриптора выполняется <code class="code" id="-nyyrua_201">handles.assign(unshared ? null : obj)</code>. Это ключевой момент, связанный с таблицей хэндлов (handle table). Object Serialization в Java гарантирует сохранение ссылочной целостности: если один и тот же объект встречается несколько раз в графе, сериализатор не будет писать его заново, а запишет ссылку (<code class="code" id="-nyyrua_202">TC_REFERENCE</code>) на уже записанный экземпляр. Для этого все объекты, прошедшие через поток, регистрируются в таблице хэндлов, где каждому объекту присваивается уникальный идентификатор. Вызов <code class="code" id="-nyyrua_203">assign</code> выполняет именно это назначение. Если же объект помечен как <code class="code" id="-nyyrua_204">unshared</code>, то он не регистрируется, и в дальнейшем на него нельзя будет сослаться повторно. Такой флаг используется редко, но имеет значение при необходимости полного разрыва ссылочной связанности между частями сериализуемого графа.</p><p id="-nyyrua_118">На следующем этапе <code class="code" id="-nyyrua_205">writeOrdinaryObject</code> определяет конкретную природу класса. Здесь начинается развилка на три категории:</p><ol class="list _decimal" id="-nyyrua_119" type="1"><li class="list__item" id="-nyyrua_206"><p id="-nyyrua_209">Если класс является <code class="code" id="-nyyrua_210">record</code>, вызывается <code class="code" id="-nyyrua_211">writeRecordData</code>.</p></li><li class="list__item" id="-nyyrua_207"><p id="-nyyrua_212">Если класс реализует <code class="code" id="-nyyrua_213">Externalizable</code> (и при этом не является proxy), вызывается <code class="code" id="-nyyrua_214">writeExternalData</code>.</p></li><li class="list__item" id="-nyyrua_208"><p id="-nyyrua_215">Во всех остальных случаях используется классическая ветвь <code class="code" id="-nyyrua_216">writeSerialData</code>.</p></li></ol><p id="-nyyrua_120">Рассмотрим их последовательно.</p><p id="-nyyrua_121"><span class="control" id="-nyyrua_217">1. Record.</span> Если <code class="code" id="-nyyrua_218">desc.isRecord()</code> возвращает <code class="code" id="-nyyrua_219">true</code>, то текущий класс является Java Record. Сериализация record-классов подчиняется отдельной логике, введённой начиная с Java 16. В отличие от обычных классов, record не имеет изменяемого состояния, все его поля являются компонентами, определёнными в сигнатуре конструктора. Метод <code class="code" id="-nyyrua_220">writeRecordData</code> проходит по всем компонентам record в порядке их объявления и записывает их значения напрямую, без вызова <code class="code" id="-nyyrua_221">writeObject</code> или <code class="code" id="-nyyrua_222">writeExternal</code>. Это обеспечивает стабильный, детерминированный формат сериализации, независимый от пользовательских переопределений.</p><aside class="prompt" data-type="tip" data-title="" id="-nyyrua_122"><p id="-nyyrua_223">Если вы из той самой(старой) школы, где последняя знакомая версия Java это 8 или 11, то record-классы могли пройти мимо вас. Они появились только с Java 16 и стали для Java тем, чем data class давно является для Kotlin, то есть лаконичным способом объявить неизменяемую структуру данных, где конструктор, equals, hashCode и toString генерируются компилятором. Разница лишь в том, что Java сделала это без излишнего синтаксического романтизма.</p></aside><p id="-nyyrua_123"><span class="control" id="-nyyrua_224">2. Externalizable.</span> Про Externalizable мы так же подробно пройдемся в этой статье, но пока для контекста его стоит тоже учитывать. Если класс реализует интерфейс <code class="code" id="-nyyrua_225">Externalizable</code>, управление передаётся в <code class="code" id="-nyyrua_226">writeExternalData</code>. В этом случае сериализация полностью делегируется самому объекту. Метод <code class="code" id="-nyyrua_227">writeExternalData</code> вызывает <code class="code" id="-nyyrua_228">obj.writeExternal(ObjectOutput)</code>. Здесь именно класс решает, какие данные и в каком порядке записывать в поток. В отличие от <code class="code" id="-nyyrua_229">Serializable</code>, где платформа управляет сериализацией автоматически, <code class="code" id="-nyyrua_230">Externalizable</code> предоставляет полную свободу, но и полную ответственность разработчику. Важно отметить, что <code class="code" id="-nyyrua_231">writeOrdinaryObject</code> вызывает этот путь только если класс действительно Externalizable и не является proxy, поскольку динамические proxy обрабатываются иначе.</p><p id="-nyyrua_124"><span class="control" id="-nyyrua_232">3. Serializable (обычный случай).</span> Если объект не является record и не Externalizable, остаётся классическая сериализация <code class="code" id="-nyyrua_233">Serializable</code>. В этом случае вызывается <code class="code" id="-nyyrua_234">writeSerialData(obj, desc)</code>. Именно этот метод и есть ядро стандартной сериализации Java. Он отвечает за последовательную запись всех сериализуемых полей объекта, включая унаследованные от суперклассов, а также за вызов пользовательских методов <code class="code" id="-nyyrua_235">writeObject</code>, если они определены в классе. Внутри <code class="code" id="-nyyrua_236">writeSerialData</code> сначала записываются данные суперклассов, затем поля текущего класса. Если в классе определён метод <code class="code" id="-nyyrua_237">private void writeObject(ObjectOutputStream oos)</code>, он вызывается с передачей текущего потока, что позволяет переопределить стандартный формат записи. Если такого метода нет, вызывается <code class="code" id="-nyyrua_238">defaultWriteFields</code>, который просто записывает все поля по описанию из <code class="code" id="-nyyrua_239">ObjectStreamClass desc</code>.</p><p id="-nyyrua_125">Таким образом, <code class="code" id="-nyyrua_240">writeOrdinaryObject</code> не содержит непосредственно логики записи самих данных. Он лишь определяет маршрут, то есть какую стратегию применить для конкретного типа класса. Это точка маршрутизации, своего рода диспетчер сериализации, обеспечивающий единообразие протокола при сохранении гибкости для различных типов.</p><p id="-nyyrua_126">После выполнения одной из ветвей (record, externalizable или serializable) объект полностью записан в поток, а таблица хэндлов зафиксирована для поддержания ссылочной целостности. Нас особенно интересует третья ветвь, то есть обычная сериализация через <code class="code" id="-nyyrua_241">Serializable</code>. Давайте рассмотрим метод <code class="code" id="-nyyrua_242">writeSerialData</code> более подробно:</p><div class="code-block" data-lang="java">
+public class ObjectOutputStream extends OutputStream implements ObjectOutput, ObjectStreamConstants {
+
+    private void writeSerialData(Object obj, ObjectStreamClass desc)
+            throws IOException
+    {
+        ObjectStreamClass.ClassDataSlot[] slots = desc.getClassDataLayout();
+        for (int i = 0; i &lt; slots.length; i++) {
+            ObjectStreamClass slotDesc = slots[i].desc;
+            if (slotDesc.hasWriteObjectMethod()) {
+                PutFieldImpl oldPut = curPut;
+                curPut = null;
+                SerialCallbackContext oldContext = curContext;
+
+                try {
+                    curContext = new SerialCallbackContext(obj, slotDesc);
+                    bout.setBlockDataMode(true);
+                    slotDesc.invokeWriteObject(obj, this);
+                    bout.setBlockDataMode(false);
+                    bout.writeByte(TC_ENDBLOCKDATA);
+                } finally {
+                    curContext.setUsed();
+                    curContext = oldContext;
+                }
+
+                curPut = oldPut;
+            } else {
+                defaultWriteFields(obj, slotDesc);
+            }
+        }
+    }
+
+}
+</div><p id="-nyyrua_128">Как мы помним из предыдущего раздела, этот метод вызывается для объектов, которые не являются ни record, ни externalizable, а представляют собой обычные классы, реализующие <code class="code" id="-nyyrua_243">Serializable</code>. Метод <code class="code" id="-nyyrua_244">writeSerialData</code> является тем местом, на который в большинстве случаев и замыкается сериализация. Если <code class="code" id="-nyyrua_245">writeOrdinaryObject</code> можно назвать маршрутизатором, то <code class="code" id="-nyyrua_246">writeSerialData</code> является исполнителем, именно здесь происходит фактическая запись состояния объекта.</p><p id="-nyyrua_129">В начале метода формируется массив <code class="code" id="-nyyrua_247">slots</code>, получаемый через <code class="code" id="-nyyrua_248">desc.getClassDataLayout()</code>. Это внутреннее представление иерархии классов, участвующих в сериализации. Каждый элемент массива представляет собой <code class="code" id="-nyyrua_249">ClassDataSlot</code>, содержащий ссылку на <code class="code" id="-nyyrua_250">ObjectStreamClass</code> конкретного уровня наследования. Таким образом, <code class="code" id="-nyyrua_251">slots</code> задаёт строгий порядок обхода цепочки классов сверху вниз, от самого предка, объявившего сериализуемые поля, до конечного потомка.</p><p id="-nyyrua_130">Далее выполняется цикл по этим слотам. Для каждого класса, представленного в <code class="code" id="-nyyrua_252">slotDesc</code>, сериализатор проверяет, определён ли в нём пользовательский метод <code class="code" id="-nyyrua_253">writeObject(ObjectOutputStream)</code>. Проверка осуществляется вызовом <code class="code" id="-nyyrua_254">slotDesc.hasWriteObjectMethod()</code>. Это та самая возможность, которая позволяет классу вмешаться в процесс сериализации и частично управлять тем, какие данные и в каком виде попадут в поток.</p><p id="-nyyrua_131">Если пользовательский <code class="code" id="-nyyrua_255">writeObject</code> найден, то создаётся контекст сериализационного коллбэка, представляющий собой объект <code class="code" id="-nyyrua_256">SerialCallbackContext</code>. Он необходим для корректного управления вложенными вызовами, в частности для обеспечения симметричной работы с <code class="code" id="-nyyrua_257">readObject</code> при десериализации. После этого включается блочный режим записи (<code class="code" id="-nyyrua_258">bout.setBlockDataMode(true)</code>), который группирует данные, записанные в процессе пользовательского <code class="code" id="-nyyrua_259">writeObject</code>, в единый блок. Это гарантирует, что весь пользовательский сегмент данных будет интерпретирован при чтении как одно логическое целое.</p><p id="-nyyrua_132">Далее вызывается сам метод <code class="code" id="-nyyrua_260">slotDesc.invokeWriteObject(obj, this)</code>. Это точка, где фактическое управление передаётся пользовательскому коду. Если класс переопределил <code class="code" id="-nyyrua_261">writeObject</code>, его логика выполняется здесь, с возможностью напрямую вызывать <code class="code" id="-nyyrua_262">defaultWriteObject()</code> или вручную записывать отдельные поля. После завершения блока запись возвращается в нормальный режим (<code class="code" id="-nyyrua_263">bout.setBlockDataMode(false)</code>), а затем в поток добавляется байт <code class="code" id="-nyyrua_264">TC_ENDBLOCKDATA</code>, обозначающий конец пользовательских данных.</p><p id="-nyyrua_133">Все временные структуры (<code class="code" id="-nyyrua_265">curPut</code>, <code class="code" id="-nyyrua_266">curContext</code>) восстанавливаются, чтобы состояние сериализатора осталось консистентным. Если же <code class="code" id="-nyyrua_267">extendedDebugInfo</code> включён, стек отладочной информации очищается. В случае отсутствия пользовательского метода выполняется стандартный путь: <code class="code" id="-nyyrua_268">defaultWriteFields(obj, slotDesc)</code>. Этот метод последовательно проходит по всем полям, определённым в <code class="code" id="-nyyrua_269">ObjectStreamClass</code>, и записывает их значения с использованием соответствующих механизмов сериализации (для примитивов это прямое бинарное значение, для ссылочных типов это рекурсивный вызов <code class="code" id="-nyyrua_270">writeObject0</code>).</p><p id="-nyyrua_134">Именно здесь завершается реальная работа сериализации объекта. После завершения цикла по всем слотам поток содержит полную бинарную структуру экземпляра, от базовых классов до финальных полей, с учётом всех пользовательских переопределений. Таким образом, <code class="code" id="-nyyrua_271">writeSerialData</code> является той точкой, где логическая модель класса превращается в поток байтов. Всё, что было подготовлено до этого (дескрипторы, таблицы хэндлов, метаданные), служит лишь инфраструктурой, обеспечивающей, чтобы эти байты могли быть восстановлены обратно в идентичный объект. После завершения <code class="code" id="-nyyrua_272">writeSerialData</code> объект считается полностью сериализованным, а поток готов к переходу к следующему элементу.</p></section><section class="chapter"><h3 id="-nyyrua_62" data-toc="-nyyrua_62">Контроль над процессом сериализации</h3><p id="-nyyrua_273">Теперь поговорим о нескольких важных механизмах, которые позволяют контролировать процесс сериализации. Представьте ситуацию: вы сериализовали объект и сохранили его в файл. Спустя месяц вы изменили класс, добавили новое поле или удалили старое. Что произойдет, если попытаться десериализовать старый файл? JVM может просто отказаться это делать, выбросив <code class="code" id="-nyyrua_286">InvalidClassException</code>. Для решения этой проблемы существует специальное поле <code class="code" id="-nyyrua_287">serialVersionUID</code>. Это уникальный идентификатор версии класса, который записывается в поток при сериализации. При десериализации JVM сравнивает <code class="code" id="-nyyrua_288">serialVersionUID</code> из потока с <code class="code" id="-nyyrua_289">serialVersionUID</code> текущего класса. Если они совпадают, десериализация продолжается, если нет, выбрасывается исключение. Если не указывать <code class="code" id="-nyyrua_290">serialVersionUID</code> явно, JVM вычислит его автоматически на основе структуры класса (имен полей, методов, модификаторов доступа). Проблема в том, что любое малейшее изменение в классе изменит этот хеш, и старые сериализованные объекты станут несовместимыми.</p><div class="code-block" data-lang="kotlin">
+data class Person(
+    val name: String,
+    val dateOfBirth: Int,
+    val address: String
+) : Serializable {
+    companion object {
+        private const val serialVersionUID: Long = 1L
+    }
+}
+</div><p id="-nyyrua_275">Иногда в классе есть поля, которые не нужно или нельзя сериализовать. Например, это могут быть временные вычисляемые значения, кеши или чувствительные данные вроде паролей. В Java для этого существует ключевое слово <code class="code" id="-nyyrua_291">transient</code>, а в Kotlin используется аннотация <code class="code" id="-nyyrua_292">@Transient</code>. При сериализации все помеченные поля будут проигнорированы, а при десериализации они получат значения по умолчанию (null для объектов, 0 для чисел, false для boolean).</p><div class="code-block" data-lang="kotlin">
+data class User(
+    val username: String,
+    @Transient val password: String = &quot;&quot;,
+    @Transient val cache: Cache? = null
+) : Serializable
+</div><p id="-nyyrua_277">Что если стандартной сериализации недостаточно? Может быть, вы хотите зашифровать данные перед записью или выполнить какую-то предобработку? Для этого можно переопределить специальные методы <code class="code" id="-nyyrua_293">writeObject</code> и <code class="code" id="-nyyrua_294">readObject</code>:</p><div class="code-block" data-lang="kotlin">
+class SecureUser(
+    val username: String,
+    private var password: String
+) : Serializable {
+    
+    @Throws(IOException::class)
+    private fun writeObject(out: ObjectOutputStream) {
+        out.defaultWriteObject()
+        val encrypted = encrypt(password)
+        out.writeObject(encrypted)
+    }
+    
+    @Throws(IOException::class, ClassNotFoundException::class)
+    private fun readObject(input: ObjectInputStream) {
+        input.defaultReadObject()
+        val encrypted = input.readObject() as String
+        password = decrypt(encrypted)
+    }
+    
+    companion object {
+        private const val serialVersionUID = 1L
+    }
+}
+</div><p id="-nyyrua_279">Обратите внимание, что эти методы должны быть <code class="code" id="-nyyrua_295">private</code>. Это может показаться странным, ведь обычно private методы не вызываются извне, но JVM использует рефлексию для их вызова.</p><p id="-nyyrua_280">Еще один интересный случай связан с синглтонами. При десериализации JVM создаст новый экземпляр объекта, нарушив паттерн Singleton. У вас появятся два &quot;синглтона&quot;! Чтобы этого избежать, используется метод <code class="code" id="-nyyrua_296">readResolve</code>:</p><div class="code-block" data-lang="kotlin">
+object DatabaseConnection : Serializable {
+    private const val serialVersionUID = 1L
+    
+    var host: String = &quot;localhost&quot;
+    var port: Int = 5432
+    
+    private fun readResolve(): Any = DatabaseConnection
+}
+</div><p id="-nyyrua_282">Метод вызывается сразу после десериализации объекта и может вернуть либо тот же объект, либо совершенно другой. В случае синглтона мы просто возвращаем существующий экземпляр, игнорируя десериализованный. Аналогично работает <code class="code" id="-nyyrua_297">writeReplace()</code>, который вызывается перед сериализацией и полезен, когда вы хотите сериализовать объект в более компактном виде.</p><p id="-nyyrua_283">Несмотря на кажущуюся простоту, <code class="code" id="-nyyrua_298">Serializable</code> таит в себе немало проблем. Использование рефлексии делает сериализацию медленной, каждый раз при сериализации JVM анализирует структуру класса через Reflection API. Бинарный формат Java содержит много метаинформации (имена классов, пакеты, типы полей), что увеличивает размер сериализованных данных. Изменение структуры класса легко ломает совместимость, даже добавление нового метода может изменить автоматически вычисляемый <code class="code" id="-nyyrua_299">serialVersionUID</code>. Десериализация непроверенных данных может привести к уязвимостям, когда злоумышленник создает специально сформированный поток байтов, который при десериализации выполнит вредоносный код. Наконец, при десериализации JVM создает объект, обходя конструктор, что означает, что любые проверки валидности в конструкторе будут проигнорированы.</p><p id="-nyyrua_284">При этом, все те возможности, которые мы только что рассмотрели (serialVersionUID, transient, writeObject, readResolve), на самом деле не решают главную проблему. Наше вмешательство минимально. Эти механизмы больше похожи на хуки или стандартные конфигурации, которые позволяют <code class="code" id="-nyyrua_300">Serializable</code> правильно работать в специфических случаях. Поле <code class="code" id="-nyyrua_301">serialVersionUID</code> нужно для версионирования, <code class="code" id="-nyyrua_302">readResolve</code> сохраняет синглтоны, <code class="code" id="-nyyrua_303">@Transient</code> исключает ненужные поля. Но ни один из этих методов не дает нам реального контроля над процессом сериализации и десериализации. Мы по-прежнему не можем влиять на производительность, не можем оптимизировать размер данных, не можем изменить формат записи. JVM продолжает использовать рефлексию, продолжает записывать всю метаинформацию, продолжает работать медленно. Мы просто пассажиры в этом процессе, которым разрешили настроить пару параметров.</p><p id="-nyyrua_285">Что если мы хотим большего? Что если нам нужен реальный контроль над тем, как именно сериализуются наши объекты? Для таких случаев у <code class="code" id="-nyyrua_304">Serializable</code> есть брат на стероидах.</p></section></section><section class="chapter"><h2 id="externalizable" data-toc="externalizable">Интерфейс Externalizable</h2><p id="-nyyrua_305">Если вы помните, в начале статьи мы говорили, что <code class="code" id="-nyyrua_331">Serializable</code> является маркерным интерфейсом без единого метода. JVM видит этот маркер и автоматически запускает механизм рефлексии. <code class="code" id="-nyyrua_332">Externalizable</code> работает совершенно иначе. Это не маркер, это контракт с двумя явными методами:</p><div class="code-block" data-lang="java">
+public interface Externalizable extends java.io.Serializable {
+    void writeExternal(ObjectOutput out) throws IOException;
+    void readExternal(ObjectInput in) throws IOException, ClassNotFoundException;
+}
+</div><p id="-nyyrua_307">Обратите внимание, что <code class="code" id="-nyyrua_333">Externalizable</code> наследуется от <code class="code" id="-nyyrua_334">Serializable</code>. Это важная деталь, которая означает, что объекты <code class="code" id="-nyyrua_335">Externalizable</code> по-прежнему участвуют в общем механизме Java сериализации, но с принципиально другим подходом. JVM больше не использует рефлексию для обхода полей. Вместо этого она просто вызывает ваши методы <code class="code" id="-nyyrua_336">writeExternal</code> и <code class="code" id="-nyyrua_337">readExternal</code>, полностью перекладывая ответственность на вас. Полностью напоминает Parcelable из Android, не так ли?</p><p id="-nyyrua_308">Давайте перепишем наш класс <code class="code" id="-nyyrua_338">Person</code> с использованием <code class="code" id="-nyyrua_339">Externalizable</code>:</p><div class="code-block" data-lang="kotlin">
+class Person(
+    var name: String = &quot;&quot;,
+    var dateOfBirth: Int = 0,
+    var address: String = &quot;&quot;
+) : Externalizable {
+    
+    override fun writeExternal(out: ObjectOutput) {
+        out.writeUTF(name)
+        out.writeInt(dateOfBirth)
+        out.writeUTF(address)
+    }
+    
+    override fun readExternal(input: ObjectInput) {
+        name = input.readUTF()
+        dateOfBirth = input.readInt()
+        address = input.readUTF()
+    }
+}
+</div><p id="-nyyrua_310">Сразу видна первая особенность: класс должен иметь конструктор без параметров. Это критическое требование. При десериализации JVM сначала создает экземпляр класса через этот конструктор, а затем вызывает <code class="code" id="-nyyrua_340">readExternal</code> для заполнения полей. Если конструктор отсутствует, вы получите <code class="code" id="-nyyrua_341">InvalidClassException</code>. В Kotlin это решается через параметры со значениями по умолчанию, как показано выше. Далее попробуем так же сериализоваться, на этот раз наш класс реализует Externalizable, по этому фаил назовем &quot;externalization.bin&quot;</p><div class="code-block" data-lang="kotlin">
+fun main(args: Array&lt;String&gt;) {
+    val person = Person(&quot;John Wick&quot;, 1964, &quot;New York&quot;)
+    val file = File(&quot;externalization.bin&quot;).apply(File::createNewFile)
+
+    val fileOutputStream = FileOutputStream(file)
+    val objectOutputStream = ObjectOutputStream(fileOutputStream).use { stream -&gt;
+        stream.writeObject(person)
+        stream.flush()
+    }
+}
+</div><p id="-nyyrua_312">Попробуем открыть файл как текстовый, видим что информации гораздо меньше, чем в случае с Serializable. Первым идет полное имя класса. Далее бросается в глаза, что отсутствуют имена полей и явные типы значений, привязанные к классам. За нечитаемым текстом находятся служебные маркеры протокола сериализации и последовательности байтов, соответствующие данным, записанным в writeExternal. Эти маркеры, такие как STREAM_MAGIC, STREAM_VERSION, TC_OBJECT, TC_CLASSDESC, TC_STRING, TC_ENDBLOCKDATA, TC_NULL, TC_REFERENCE, TC_BLOCKDATA и другие, играют роль структурных разделителей, позволяя JVM при десериализации понимать, где начинается и где заканчивается каждый элемент, а также определять их тип и контекст.</p><div class="code-block" data-lang="none">
+���sr�application.Person���O�!��xpw�	John Wick����New Yorkx
+</div><p id="-nyyrua_314">Теперь посмотрим, что происходит внутри. Помните метод <code class="code" id="-nyyrua_342">writeOrdinaryObject</code> из разбора <code class="code" id="-nyyrua_343">Serializable</code>? Тот самый каскад проверок типа объекта? Там была проверка на <code class="code" id="-nyyrua_344">Externalizable</code>, и если класс реализует этот интерфейс, управление передается в метод <code class="code" id="-nyyrua_345">writeExternalData</code>.</p><p id="-nyyrua_315">Давайте посмотрим на его реализацию:</p><div class="code-block" data-lang="java">
+public class ObjectOutputStream extends OutputStream implements ObjectOutput, ObjectStreamConstants {
+
+    private void writeExternalData(Externalizable obj) throws IOException {
+        PutFieldImpl oldPut = curPut;
+        curPut = null;
+
+        SerialCallbackContext oldContext = curContext;
+        try {
+            curContext = null;
+            if (protocol == PROTOCOL_VERSION_1) {
+                obj.writeExternal(this);
+            } else {
+                bout.setBlockDataMode(true);
+                obj.writeExternal(this);
+                bout.setBlockDataMode(false);
+                bout.writeByte(TC_ENDBLOCKDATA);
+            }
+        } finally {
+            curContext = oldContext;
+        }
+
+        curPut = oldPut;
+    }
+}
+</div><p id="-nyyrua_317">Код выглядит значительно проще, чем вся та сложная машинерия с обходом полей через рефлексию, которую мы видели в <code class="code" id="-nyyrua_346">writeSerialData</code>. Да, дескриптор класса всё равно создается через <code class="code" id="-nyyrua_347">ObjectStreamClass.lookup</code> в методе <code class="code" id="-nyyrua_348">writeOrdinaryObject</code> до вызова <code class="code" id="-nyyrua_349">writeExternalData</code>, это необходимо для записи информации о самом классе (его имени, иерархии). Но вот чего здесь нет, так это рекурсивного обхода иерархии классов для записи полей каждого уровня, нет вызова <code class="code" id="-nyyrua_350">defaultWriteFields</code>, который через рефлексию читает значения всех полей. JVM просто вызывает <code class="code" id="-nyyrua_351">obj.writeExternal(this)</code>, передавая управление вашему коду. Вся ответственность за то, какие данные и как записывать, лежит на вас.</p><p id="-nyyrua_318">Обратите внимание на работу с блочным режимом данных (<code class="code" id="-nyyrua_352">setBlockDataMode</code>). Это технический момент, который обеспечивает правильную структуру сериализационного потока. В PROTOCOL_VERSION_2 (который используется по умолчанию с Java 1.2) данные записываются блоками, и каждый блок завершается маркером <code class="code" id="-nyyrua_353">TC_ENDBLOCKDATA</code>. Это позволяет JVM корректно определять границы данных объекта в потоке.</p><p id="-nyyrua_319">Процесс десериализации работает зеркально. Вместо сложного механизма восстановления полей через рефлексию, JVM создает объект через конструктор без параметров и вызывает <code class="code" id="-nyyrua_354">readExternal</code>:</p><div class="code-block" data-lang="java">
+public class ObjectOutputStream extends OutputStream implements ObjectOutput, ObjectStreamConstants {
+
+    private void readExternalData(Externalizable obj, ObjectStreamClass desc)
+            throws IOException {
+        SerialCallbackContext oldContext = curContext;
+        if (oldContext != null)
+            oldContext.check();
+        curContext = null;
+        try {
+            boolean blocked = desc.hasBlockExternalData();
+            if (blocked) {
+                bin.setBlockDataMode(true);
+            }
+            if (obj != null) {
+                try {
+                    obj.readExternal(this);
+                } catch (ClassNotFoundException ex) {
+                    handles.markException(passHandle, ex);
+                }
+            }
+            if (blocked) {
+                skipCustomData();
+            }
+        } finally {
+            if (oldContext != null)
+                oldContext.check();
+            curContext = oldContext;
+        }
+    }
+}
+</div><p id="-nyyrua_321">Снова видим, насколько это проще по сравнению с <code class="code" id="-nyyrua_355">Serializable</code>. Нет восстановления метаданных, нет рекурсивного чтения иерархии классов. Вызов <code class="code" id="-nyyrua_356">obj.readExternal(this)</code> и всё. Вы сами решаете, в каком порядке читать поля и как их интерпретировать.</p><p id="-nyyrua_322">Здесь важно понимать ключевое различие. При использовании <code class="code" id="-nyyrua_357">Serializable</code> JVM автоматически записывает в поток метаданные класса (имена полей, типы, информацию о пакетах). Помните тот &quot;грязный&quot; вывод файла serialization.bin, где среди байтов мы видели названия полей и типов? Всё это метаинформация, которую JVM добавляет автоматически. С <code class="code" id="-nyyrua_358">Externalizable</code> этого не происходит. В поток попадают только те данные, которые вы явно записали. Это делает сериализованные объекты значительно меньше по размеру.</p><p id="-nyyrua_323">Но с большой силой приходит большая ответственность. Вы должны гарантировать, что порядок записи в <code class="code" id="-nyyrua_359">writeExternal</code> точно соответствует порядку чтения в <code class="code" id="-nyyrua_360">readExternal</code>. Если вы запишете сначала String, потом Int, потом String, вы обязаны читать в том же порядке. Любое несоответствие приведет к неправильной десериализации или исключению. JVM больше не следит за этим за вас.</p><div class="code-block" data-lang="kotlin">
+class Person(
+    var name: String = &quot;&quot;,
+    var dateOfBirth: Int = 0,
+    var address: String = &quot;&quot;
+) : Externalizable {
+    
+    override fun writeExternal(out: ObjectOutput) {
+        out.writeUTF(name)
+        out.writeInt(dateOfBirth)
+        out.writeUTF(address)
+    }
+    
+    override fun readExternal(input: ObjectInput) {
+        name = input.readUTF()          // Порядок совпадает!
+        dateOfBirth = input.readInt()   // Порядок совпадает!
+        address = input.readUTF()       // Порядок совпадает!
+    }
+}
+</div><p id="-nyyrua_325">Еще один важный момент касается версионирования. С <code class="code" id="-nyyrua_361">Serializable</code> мы использовали <code class="code" id="-nyyrua_362">serialVersionUID</code> для контроля совместимости версий. С <code class="code" id="-nyyrua_363">Externalizable</code> вы можете реализовать собственную логику версионирования:</p><div class="code-block" data-lang="kotlin">
+class Person(
+    var name: String = &quot;&quot;,
+    var dateOfBirth: Int = 0,
+    var address: String = &quot;&quot;,
+    var phoneNumber: String = &quot;&quot;
+) : Externalizable {
+    
+    companion object {
+        private const val VERSION = 2
+    }
+    
+    override fun writeExternal(out: ObjectOutput) {
+        out.writeInt(VERSION)
+        // ... запись остальных полей
+        out.writeUTF(phoneNumber)  // Новое поле в версии 2
+    }
+    
+    override fun readExternal(input: ObjectInput) {
+        val version = input.readInt()
+        // ... чтение остальных полей
+        
+        if (version &gt;= 2) {
+            phoneNumber = input.readUTF()
+        }
+    }
+}
+</div><p id="-nyyrua_327">Такой подход дает гибкость в управлении обратной совместимостью. Вы можете добавлять новые поля, изменять формат данных, и всё это будет работать, пока ваша логика в <code class="code" id="-nyyrua_364">readExternal</code> корректно обрабатывает разные версии.</p><p id="-nyyrua_328">Производительность <code class="code" id="-nyyrua_365">Externalizable</code> теоретически выше, чем у <code class="code" id="-nyyrua_366">Serializable</code>, потому что отсутствует overhead рефлексии. Но это не означает автоматический выигрыш. Если вы пишете неэффективный код в <code class="code" id="-nyyrua_367">writeExternal</code> или <code class="code" id="-nyyrua_368">readExternal</code>, производительность может быть хуже. Реальные цифры мы увидим в разделе бенчмарков.</p><p id="-nyyrua_329">Когда стоит использовать <code class="code" id="-nyyrua_369">Externalizable</code>? Когда вам нужен полный контроль над форматом данных, когда критичен размер сериализованных объектов, или когда стандартная сериализация работает неэффективно для вашей структуры данных. Но помните, что с этим контролем приходит и ответственность за корректность реализации. Один промах в порядке чтения/записи, и ваша десериализация сломается способами, которые сложно диагностировать.</p><section class="chapter"><h3 id="jvm-android-externalizable" data-toc="jvm-android-externalizable">От JVM к Android: почему Externalizable не подошел</h3><p id="-nyyrua_370">Мы разобрали оба подхода к сериализации в JVM экосистеме. <code class="code" id="-nyyrua_383">Serializable</code> дает простоту использования, но платит за это производительностью и избыточностью данных. <code class="code" id="-nyyrua_384">Externalizable</code> предоставляет контроль, но требует больше кода и внимательности. Казалось бы, идеальное решение найдено, особенно для мобильных устройств, где важны и производительность, и размер данных.</p><p id="-nyyrua_371">Но когда Google разрабатывал Android, инженеры столкнулись с фундаментальной проблемой. Android это не просто Java на мобильном устройстве. Это экосистема с жесткими ограничениями: ограниченная память, батарея, процессоры с меньшей вычислительной мощностью (на момент создания Android). Но главное, это специфическая архитектура межпроцессного взаимодействия (IPC) через механизм Binder.</p><p id="-nyyrua_372">Давайте разберемся, в чем проблема. Оба механизма сериализации, которые мы рассмотрели, разрабатывались для JVM с определенными предположениями. Первое: сериализация обычно используется для долговременного хранения или передачи по сети. Второе: overhead создания потоков (<code class="code" id="-nyyrua_385">ObjectOutputStream</code>, <code class="code" id="-nyyrua_386">ObjectInputStream</code>) приемлем, потому что данные затем передаются куда-то далеко (на диск, по сети). Третье: формат должен быть совместим между разными версиями Java и даже разными JVM.</p><p id="-nyyrua_373">В Android всё иначе. Когда вы запускаете новый Activity, передаете данные в Service или отправляете broadcast, это не сетевая операция и не запись на диск. Это IPC между процессами на одном устройстве через Binder. Объекты нужно сериализовать и десериализовать не для отправки в другую страну, а для передачи в соседний процесс. Это происходит постоянно, сотни раз в секунду. Каждый лишний байт, каждая лишняя операция напрямую влияют на отзывчивость интерфейса.</p><p id="-nyyrua_374">Попробуйте использовать <code class="code" id="-nyyrua_387">Serializable</code> для передачи Intent с данными между Activity. Это работает, Android поддерживает это. Но за кулисами происходит следующее: создается <code class="code" id="-nyyrua_388">ObjectOutputStream</code>, запускается механизм рефлексии (даже несмотря на Dalvik/ART, это всё равно медленно), записываются метаданные класса, создается множество временных объектов, создается <code class="code" id="-nyyrua_389">ObjectInputStream</code> на другой стороне, запускается обратная рефлексия, снова создаются временные объекты. И вот здесь начинается настоящая проблема для Android. Каждый временный объект это работа для Garbage Collector. На старых Android устройствах с ограниченной памятью и примитивным GC паузы сборки мусора напрямую влияют на плавность интерфейса. Пользователь видит подтормаживания, лаги, фризы. Всё это для того, чтобы передать объект в процесс, который находится рядом. Это как заказывать грузовик с целой логистической цепочкой, чтобы перенести коробку к соседу.</p><p id="-nyyrua_375">А что насчет <code class="code" id="-nyyrua_390">Externalizable</code>? Он быстрее <code class="code" id="-nyyrua_391">Serializable</code>, да, и дает больше контроля. Технически, его можно использовать даже в памяти через <code class="code" id="-nyyrua_392">ByteArrayOutputStream</code>, без реальных файлов или сокетов. При хорошей реализации в обычной JVM с оптимизирующим JIT компилятором <code class="code" id="-nyyrua_393">Externalizable</code> может показывать отличную производительность, иногда даже сравнимую или превосходящую <code class="code" id="-nyyrua_394">Parcelable</code> по чистой скорости сериализации/десериализации объекта.</p><p id="-nyyrua_376">Но в контексте Android IPC проблемы не в скорости самого <code class="code" id="-nyyrua_395">Externalizable</code>, а в том, что он не был спроектирован для этой задачи. Первая проблема: формат данных привязан к Java сериализационному протоколу с его служебными маркерами (TC_OBJECT, TC_ENDBLOCKDATA и прочее), которые добавляют лишние байты в каждую передачу. Вторая: вызовы <code class="code" id="-nyyrua_396">writeExternal</code> и <code class="code" id="-nyyrua_397">readExternal</code> проходят через слой абстракции <code class="code" id="-nyyrua_398">ObjectOutputStream</code>/<code class="code" id="-nyyrua_399">ObjectInputStream</code>, даже если работают с <code class="code" id="-nyyrua_400">ByteArrayOutputStream</code> в памяти. Эти потоки не интегрированы с Binder и требуют дополнительного копирования данных. Третья: это всё еще создает больше временных объектов и нагружает GC по сравнению с прямой записью в <code class="code" id="-nyyrua_401">Parcel</code>. Четвертая: нет нативной интеграции с Android runtime (ART), в то время как <code class="code" id="-nyyrua_402">Parcel</code> работает напрямую с механизмами IPC на уровне ядра.</p><p id="-nyyrua_377">Другими словами, <code class="code" id="-nyyrua_403">Externalizable</code> это быстрый механизм для JVM, но не оптимальный для специфики Android, где каждая IPC операция должна быть максимально эффективной, а интеграция с Binder критически важна.</p><p id="-nyyrua_378">Binder работает иначе. Он минимизирует копирование данных между процессами, используя однократное копирование через ядро Linux. Данные пишутся напрямую в буфер <code class="code" id="-nyyrua_404">Parcel</code>, который затем передается через Binder driver с минимальными издержками. Для этого нужен механизм сериализации, который &quot;понимает&quot; эту специфику и работает напрямую с бинарным буфером без промежуточных слоев абстракции.</p><p id="-nyyrua_379">Именно поэтому был создан <code class="code" id="-nyyrua_405">Parcelable</code>. Концептуально он очень похож на <code class="code" id="-nyyrua_406">Externalizable</code>: вы реализуете два метода (<code class="code" id="-nyyrua_407">writeToParcel</code> и конструктор из <code class="code" id="-nyyrua_408">Parcel</code>), вы сами контролируете, что и как пишете, вы отвечаете за порядок записи и чтения. Идея ручного управления процессом сериализации явно пришла из <code class="code" id="-nyyrua_409">Externalizable</code>. Но реализация полностью переработана для Android. Вместо потоков используется <code class="code" id="-nyyrua_410">Parcel</code>, который работает с flat, untyped binary buffer. Вместо Java сериализационного протокола используется минималистичный формат без метаданных о типах. Вместо создания временных объектов данные пишутся напрямую в буфер, что минимизирует нагрузку на GC.</p><p id="-nyyrua_380">Важная особенность: <code class="code" id="-nyyrua_411">Parcel</code> это untyped buffer. В нем нет информации о типах данных, нет имен полей, нет версионирования. Это означает, что совместимости между версиями класса (как у <code class="code" id="-nyyrua_412">Serializable</code> с его <code class="code" id="-nyyrua_413">serialVersionUID</code>) здесь нет. Вы полностью отвечаете за обратную совместимость. Если вы измените порядок полей в <code class="code" id="-nyyrua_414">writeToParcel</code> и забудете обновить порядок чтения в конструкторе, данные будут прочитаны неверно, и вы получите трудноотлавливаемые баги. В этом плане <code class="code" id="-nyyrua_415">Serializable</code> был более &quot;прощающим&quot;, автоматически обнаруживая несовместимость версий.</p><p id="-nyyrua_381">Изначально <code class="code" id="-nyyrua_416">Parcelable</code> приходилось писать вручную, что было утомительно и чревато ошибками. С появлением Kotlin ситуация изменилась. Плагин <code class="code" id="-nyyrua_417">kotlin-parcelize</code> (аннотация <code class="code" id="-nyyrua_418">@Parcelize</code>) автоматически генерирует весь boilerplate код во время компиляции, гарантируя корректность порядка записи и чтения полей. Это объединило контроль <code class="code" id="-nyyrua_419">Externalizable</code> с удобством <code class="code" id="-nyyrua_420">Serializable</code>.</p><p id="-nyyrua_382">Для тех кто сразу же начал распознавать Parcelable в Externalizable, да, <code class="code" id="-nyyrua_421">Externalizable</code> стал философской основой для <code class="code" id="-nyyrua_422">Parcelable</code>. Оба говорят: &quot;не доверяй автоматике, возьми контроль в свои руки&quot;. Но <code class="code" id="-nyyrua_423">Parcelable</code> идет дальше, отбрасывая весь багаж JVM сериализации и создавая решение с нуля, оптимизированное под специфику Android: минимальное копирование через ядро, отсутствие временных объектов, прямая работа с бинарным буфером без типизации.</p></section></section><section class="chapter"><h2 id="parcelable" data-toc="parcelable">Интерфейс Parcelable</h2><p id="-nyyrua_424">Мы только что выяснили, почему Google не мог использовать существующие JVM решения для Android. <code class="code" id="-nyyrua_439">Serializable</code> слишком медленный из-за рефлексии и создает избыточную нагрузку на Garbage Collector через множество временных объектов. <code class="code" id="-nyyrua_440">Externalizable</code>, хоть и быстрее, но не интегрирован с Binder и привязан к Java сериализационному протоколу со всеми его маркерами и метаданными. Требовалось решение, специально спроектированное для мобильной платформы: быстрое, компактное и работающее напрямую с Binder механизмом Android.</p><p id="-nyyrua_425">Именно таким решением стал <code class="code" id="-nyyrua_441">Parcelable</code>. Давайте начнем с интерфейса и посмотрим, что он от нас требует:</p><div class="code-block" data-lang="java">
+public interface Parcelable {
+    int describeContents();
+    void writeToParcel(Parcel dest, int flags);
+    
+    interface Creator&lt;T&gt; {
+        T createFromParcel(Parcel source);
+        T[] newArray(int size);
+    }
+}
+</div><p id="-nyyrua_427">В отличие от <code class="code" id="-nyyrua_442">Serializable</code>, который был просто пустым маркером, здесь мы видим реальные методы, которые нужно реализовать. Метод <code class="code" id="-nyyrua_443">writeToParcel()</code> отвечает за запись данных объекта в специальный контейнер <code class="code" id="-nyyrua_444">Parcel</code>, а <code class="code" id="-nyyrua_445">describeContents()</code> сообщает системе о наличии специальных ресурсов (об этом позже). Кроме того, каждый класс должен предоставить <code class="code" id="-nyyrua_446">CREATOR</code> - специальный объект, который умеет создавать экземпляры из <code class="code" id="-nyyrua_447">Parcel</code>.</p><p id="-nyyrua_428">Давайте попробуем реализовать наш знакомый класс <code class="code" id="-nyyrua_448">Person</code> с использованием <code class="code" id="-nyyrua_449">Parcelable</code>. Вот как это выглядело до появления автоматической генерации:</p><div class="code-block" data-lang="kotlin">
+data class Person(
+    val name: String,
+    val dateOfBirth: Int,
+    val address: String
+) : Parcelable {
+    
+    constructor(parcel: Parcel) : this(
+        parcel.readString()!!,
+        parcel.readInt(),
+        parcel.readString()!!
+    )
+    
+    override fun writeToParcel(parcel: Parcel, flags: Int) {
+        parcel.writeString(name)
+        parcel.writeInt(dateOfBirth)
+        parcel.writeString(address)
+    }
+    
+    override fun describeContents(): Int = 0
+    
+    companion object CREATOR : Parcelable.Creator&lt;Person&gt; {
+        override fun createFromParcel(parcel: Parcel): Person {
+            return Person(parcel)
+        }
+        
+        override fun newArray(size: Int): Array&lt;Person?&gt; {
+            return arrayOfNulls(size)
+        }
+    }
+}
+</div><p id="-nyyrua_430">Посмотрите на этот код внимательно. Для трех простых полей нам потребовалось написать почти 40 строк boilerplate кода. Мы вручную прописываем, как записывать каждое поле в методе <code class="code" id="-nyyrua_450">writeToParcel()</code>, затем в точно таком же порядке читаем их в конструкторе из <code class="code" id="-nyyrua_451">Parcel</code>, и наконец создаем <code class="code" id="-nyyrua_452">CREATOR</code> с двумя методами. Причем порядок записи и чтения должен совпадать абсолютно точно. Если вы случайно запишете <code class="code" id="-nyyrua_453">writeInt(dateOfBirth)</code> перед <code class="code" id="-nyyrua_454">writeString(name)</code>, а при чтении сделаете наоборот, вы получите баг, который будет очень сложно отловить.</p><p id="-nyyrua_431">Android Studio попыталась облегчить жизнь разработчикам, добавив готовый шаблон: достаточно было нажать Alt+Insert (или Cmd+N на Mac) и выбрать &quot;Parcelable implementation&quot;, чтобы IDE сгенерировала весь необходимый код. Но это решало проблему лишь частично. Стоило вам добавить новое поле в класс или изменить порядок существующих, и приходилось вручную обновлять все методы сериализации. Забыли добавить новое поле в <code class="code" id="-nyyrua_455">writeToParcel</code>? Получите тихий баг на продакшене.</p><p id="-nyyrua_432">Ситуация кардинально изменилась с появлением Kotlin. Сначала в плагине <code class="code" id="-nyyrua_456">kotlinx-android-extensions</code> появилась аннотация <code class="code" id="-nyyrua_457">@Parcelize</code>, которая автоматически генерировала всю реализацию во время компиляции. Теперь наш класс <code class="code" id="-nyyrua_458">Person</code> можно было записать так:</p><div class="code-block" data-lang="kotlin">
+@Parcelize
+data class Person(
+    val name: String,
+    val dateOfBirth: Int,
+    val address: String
+) : Parcelable
+</div><p id="-nyyrua_434">Три строки вместо сорока! Одна аннотация, и компилятор сам генерирует весь необходимый код, гарантируя корректность порядка записи и чтения.</p><p id="-nyyrua_435">Правда, <code class="code" id="-nyyrua_459">kotlinx-android-extensions</code> оказался слишком широким плагином. Помимо <code class="code" id="-nyyrua_460">@Parcelize</code>, он включал синтетические импорты для view (знаменитые <code class="code" id="-nyyrua_461">import kotlinx.android.synthetic.main.*</code>), которые через несколько лет признали антипаттерном и deprec ated в пользу ViewBinding. В итоге плагин разделили, и <code class="code" id="-nyyrua_462">@Parcelize</code> переехала в свой собственный компактный модуль <code class="code" id="-nyyrua_463">kotlin-parcelize</code>. Сейчас для его использования достаточно добавить в <code class="code" id="-nyyrua_464">build.gradle</code>:</p><div class="code-block" data-lang="kotlin">
+plugins {
+    id(&quot;kotlin-parcelize&quot;)
+}
+</div><p id="-nyyrua_437">И всё. Никаких runtime зависимостей, никаких дополнительных библиотек. Вся генерация происходит на уровне компилятора, создавая оптимальный байткод.</p><section class="chapter"><h3 id="-nyyrua_438" data-toc="-nyyrua_438">Как это работает на практике</h3><p id="-nyyrua_465">Прежде чем погружаться в технические детали, давайте посмотрим на реальное использование <code class="code" id="-nyyrua_523">Parcelable</code> в Android. Если вы заметили, в отличие от примеров с <code class="code" id="-nyyrua_524">Serializable</code> и <code class="code" id="-nyyrua_525">Externalizable</code>, где мы создавали файлы и смотрели их содержимое, здесь мы этого не делали. Почему?</p><p id="-nyyrua_466">Причина проста: <code class="code" id="-nyyrua_526">Parcelable</code> создавался не для сохранения в файлы, а для передачи данных между компонентами Android. Давайте посмотрим типичный сценарий: передача объекта из одного Activity в другой.</p><div class="code-block" data-lang="kotlin">
+// FirstActivity.kt
+val person = Person(&quot;John Wick&quot;, 1964, &quot;New York&quot;)
+val intent = Intent(this, SecondActivity::class.java)
+intent.putExtra(&quot;person_data&quot;, person) // person реализует Parcelable
+startActivity(intent)
+</div><div class="code-block" data-lang="kotlin">
+// SecondActivity.kt
+override fun onCreate(savedInstanceState: Bundle?) {
+    super.onCreate(savedInstanceState)
+    
+    val person = if (Build.VERSION.SDK_INT &gt;= Build.VERSION_CODES.TIRAMISU) {
+        intent.getParcelableExtra(&quot;person_data&quot;, Person::class.java)
+    } else {
+        @Suppress(&quot;DEPRECATION&quot;)
+        intent.getParcelableExtra&lt;Person&gt;(&quot;person_data&quot;)
+    }
+    
+    println(person) // Person(name=John Wick, dateOfBirth=1964, address=New York)
+}
+</div><p id="-nyyrua_469">Что происходит за кулисами? Когда вы вызываете <code class="code" id="-nyyrua_527">intent.putExtra()</code>, Android сериализует объект <code class="code" id="-nyyrua_528">Person</code> в <code class="code" id="-nyyrua_529">Parcel</code>, передает этот буфер через Binder в новый процесс (если Activity запускается в другом процессе) или просто в новый компонент, а там десериализует обратно. Весь процесс занимает микросекунды. Никаких файлов, никаких потоков ввода-вывода, никакого длительного хранения.</p><p id="-nyyrua_470">А что если мы все-таки захотим посмотреть, как выглядят сериализованные данные и что действительно происходит под капотом? Давайте посмотрим на полный цикл работы с <code class="code" id="-nyyrua_530">Parcel</code> - от сериализации до десериализации:</p><div class="code-block" data-lang="kotlin">
+val person = Person(&quot;John Wick&quot;, 1964, &quot;New York&quot;)
+
+val source = Parcel.obtain()
+source.writeParcelable(person, 0)
+val bytes = source.marshall()
+source.recycle()
+
+println(&quot;Размер: ${bytes.size} байт&quot;)
+println(&quot;Данные (hex): ${bytes.joinToString(&quot; &quot;) { &quot;%02x&quot;.format(it) }}&quot;)
+
+val readable = bytes.filter { it in 32..126 }.map { it.toInt().toChar() }.joinToString(&quot;&quot;)
+println(&quot;Читаемые символы: $readable&quot;)
+
+val destination = Parcel.obtain()
+destination.unmarshall(bytes, 0, bytes.size)
+destination.setDataPosition(0)
+
+val classLoader = Person::class.java.classLoader
+val result = destination.readParcelable&lt;Person&gt;(classLoader)
+destination.recycle()
+
+println(&quot;Восстановленный объект: $result&quot;)
+</div><p id="-nyyrua_472">Вывод на Pixel 6 24 Api покажет:</p><div class="code-block" data-lang="none">
+Данные (hex): 1c 00 00 00 6b 00 7a 00 2e 00 61 00 70 00 70 00 6c 00 69 00 63 00 61 00 74 00 69 00 6f 00 6e 00 2e 00 74 00 61 00 72 00 6c 00 61 00 6e 00 2e 00 50 00 65 00 72 00 73 00 6f 00 6e 00 00 00 00 00 09 00 00 00 4a 00 6f 00 68 00 6e 00 20 00 57 00 69 00 63 00 6b 00 00 00 ac 07 00 00 08 00 00 00 4e 00 65 00 77 00 20 00 59 00 6f 00 72 00 6b 00 00 00 00 00
+Читаемые символы: kz.application.tarlan.PersonJohn WickNew York
+Восстановленный объект: Person(name=John Wick, dateOfBirth=1964, address=New York)
+</div><p id="-nyyrua_474">Что здесь происходит? Сначала мы получаем экземпляр <code class="code" id="-nyyrua_531">Parcel</code> через <code class="code" id="-nyyrua_532">obtain()</code> - это не создание нового объекта, а получение из пула. <code class="code" id="-nyyrua_533">Parcel</code> использует object pooling для минимизации аллокаций. Затем вызываем <code class="code" id="-nyyrua_534">writeParcelable()</code>, который в свою очередь вызывает наш метод <code class="code" id="-nyyrua_535">writeToParcel()</code> из сгенерированного кода. Метод <code class="code" id="-nyyrua_536">marshall()</code> возвращает сырой <code class="code" id="-nyyrua_537">ByteArray</code> - содержимое внутреннего буфера. После завершения работы обязательно вызываем <code class="code" id="-nyyrua_538">recycle()</code>, возвращая <code class="code" id="-nyyrua_539">Parcel</code> в пул.</p><p id="-nyyrua_475">Для десериализации процесс обратный: получаем новый <code class="code" id="-nyyrua_540">Parcel</code>, вызываем <code class="code" id="-nyyrua_541">unmarshall()</code> чтобы загрузить байты в буфер, сбрасываем позицию чтения на начало через <code class="code" id="-nyyrua_542">setDataPosition(0)</code>, и читаем объект обратно через <code class="code" id="-nyyrua_543">readParcelable()</code>, передавая <code class="code" id="-nyyrua_544">ClassLoader</code> для загрузки нужного класса. И снова не забываем <code class="code" id="-nyyrua_545">recycle()</code>.</p><p id="-nyyrua_476"><span class="control" id="-nyyrua_546">Важное предупреждение:</span> этот пример показан исключительно для демонстрации того, что находится внутри <code class="code" id="-nyyrua_547">Parcel</code>. Документация Android явно предупреждает: данные, полученные через <code class="code" id="-nyyrua_548">marshall()</code>, <span class="control" id="-nyyrua_549">не должны использоваться для долговременного хранения</span>. Нельзя сохранять их на диск, отправлять по сети, хранить в базе данных или SharedPreferences. Формат <code class="code" id="-nyyrua_550">Parcel</code> высоко оптимизирован именно для локального IPC и не гарантирует совместимость между разными версиями Android платформы. Если вам нужно сохранить данные надолго, используйте стандартную сериализацию (<code class="code" id="-nyyrua_551">Serializable</code>, <code class="code" id="-nyyrua_552">kotlinx.serialization</code>) или другие механизмы общего назначения.</p><p id="-nyyrua_477">Что мы видим в hex дампе? Первые байты <code class="code" id="-nyyrua_553">1c 00 00 00</code> - это длина имени класса (28 символов). Затем идет полное имя класса <code class="code" id="-nyyrua_554">kz.application.tarlan.Person</code> в формате UTF-16 (каждый символ занимает 2 байта, отсюда все эти <code class="code" id="-nyyrua_555">00</code> между буквами). После этого идут данные полей: длина строки, сама строка &quot;John Wick&quot; в UTF-16, число 1964 (<code class="code" id="-nyyrua_556">ac 07</code> в little-endian), и строка &quot;New York&quot; также в UTF-16.</p><p id="-nyyrua_478"><code class="code" id="-nyyrua_557">Parcel</code> записывает полное квалифицированное имя класса включая package. Строки хранятся в UTF-16. Если бы мы использовали <code class="code" id="-nyyrua_558">writeToParcel()</code> напрямую без записи имени класса через <code class="code" id="-nyyrua_559">writeParcelable()</code>, данных было бы меньше. Но для IPC полное имя класса необходимо для корректной десериализации на принимающей стороне. В контексте Intent между Activity данные живут микросекунды в памяти, поэтому overhead незаметен. Но это еще один аргумент против использования <code class="code" id="-nyyrua_560">marshall()</code> для хранения - формат содержит platform-specific детали вроде полных имен классов.</p><p id="-nyyrua_479">Кстати, <code class="code" id="-nyyrua_561">Serializable</code> тоже работает в Android через Intent:</p><div class="code-block" data-lang="kotlin">
+// Это тоже валидный код, если Person реализует Serializable
+val person = Person(&quot;John Wick&quot;, 1964, &quot;New York&quot;)
+intent.putExtra(&quot;person_data&quot;, person) // Android поддерживает и Serializable
+</div><p id="-nyyrua_481">Но за кулисами творится совсем другое. Android вынужден создать <code class="code" id="-nyyrua_562">ObjectOutputStream</code>, запустить рефлексию, записать все метаданные, создать множество временных объектов. На другой стороне то же самое: <code class="code" id="-nyyrua_563">ObjectInputStream</code>, рефлексия, парсинг метаданных, создание объектов. Результат тот же, но работает медленнее и создает значительную нагрузку на Garbage Collector. Именно поэтому в документации Android вы везде увидите рекомендацию: используйте <code class="code" id="-nyyrua_564">Parcelable</code> для передачи данных между компонентами.</p><p id="-nyyrua_482">Но давайте вернемся к вопросу: что же такое этот <code class="code" id="-nyyrua_565">Parcel</code>, в который мы пишем данные? Помните, мы говорили о том, что Android нужен механизм, работающий напрямую с памятью, без промежуточных слоев абстракции? Вот здесь и начинается самое интересное. <code class="code" id="-nyyrua_566">Parcel</code> - это не просто еще один Java класс для работы с данными. Это тонкая обертка над нативной C++ структурой, и работает он через JNI (Java Native Interface):</p><div class="code-block" data-lang="java">
+public final class Parcel {
+    private long mNativePtr; // Указатель на нативную структуру
+    
+    public final void writeString(String val) {
+        nativeWriteString(mNativePtr, val);
+    }
+    
+    private static native void nativeWriteString(long nativePtr, String val);
+}
+</div><p id="-nyyrua_484">Обратите внимание на поле <code class="code" id="-nyyrua_567">mNativePtr</code> - это просто число типа <code class="code" id="-nyyrua_568">long</code>, которое хранит указатель на C++ структуру. Когда вы вызываете <code class="code" id="-nyyrua_569">parcel.writeString(&quot;John Wick&quot;)</code>, на Java стороне происходит только перенаправление вызова в нативный метод <code class="code" id="-nyyrua_570">nativeWriteString()</code>. А дальше начинается работа C++ кода.</p><p id="-nyyrua_485">Нативная реализация находится в файле <code class="code" id="-nyyrua_571">frameworks/native/libs/binder/Parcel.cpp</code> в исходниках Android. Этот код работает напрямую с памятью: строка конвертируется в UTF-16, к ней добавляется информация о длине, и все это записывается в линейный буфер памяти. Никаких временных Java объектов, никаких слоев абстракции в виде <code class="code" id="-nyyrua_572">ObjectOutputStream</code>, просто запись байтов в память.</p><p id="-nyyrua_486">Теперь представьте, что происходит, когда вы передаете объект через <code class="code" id="-nyyrua_573">Intent.putExtra()</code> между Activity. Этот буфер памяти отправляется через Binder driver, который работает на уровне ядра Linux. Binder использует механизм copy-on-write, минимизируя копирование данных. На принимающей стороне создается новый <code class="code" id="-nyyrua_574">Parcel</code>, который получает указатель на этот буфер памяти, и вы просто читаете из него данные в том же порядке, в котором записывали. Вспомните <code class="code" id="-nyyrua_575">ObjectOutputStream</code> с его слоями абстракции, протоколами и метаданными - здесь ничего подобного нет. Только память, указатели и минимум накладных расходов.</p><p id="-nyyrua_487">Давайте теперь посмотрим, какой именно код генерирует компилятор для нашего простого класса <code class="code" id="-nyyrua_576">Person</code> с аннотацией <code class="code" id="-nyyrua_577">@Parcelize</code>. Если открыть скомпилированный <code class="code" id="-nyyrua_578">.class</code> файл через декомпилятор, мы увидим что-то вроде этого:</p><div class="code-block" data-lang="kotlin">
+@Parcelize
+data class Person(
+    val name: String,
+    val dateOfBirth: Int,
+    val address: String
+) : Parcelable {
+    
+    // Сгенерировано компилятором
+    override fun writeToParcel(parcel: Parcel, flags: Int) {
+        parcel.writeString(name)
+        parcel.writeInt(dateOfBirth)
+        parcel.writeString(address)
+    }
+    
+    override fun describeContents(): Int = 0
+    
+    companion object {
+        @JvmField
+        val CREATOR = object : Parcelable.Creator&lt;Person&gt; {
+            override fun createFromParcel(parcel: Parcel): Person {
+                return Person(
+                    parcel.readString()!!,
+                    parcel.readInt(),
+                    parcel.readString()!!
+                )
+            }
+            
+            override fun newArray(size: Int): Array&lt;Person?&gt; {
+                return arrayOfNulls(size)
+            }
+        }
+    }
+}
+</div><p id="-nyyrua_489">Посмотрите на порядок операций: при записи мы вызываем <code class="code" id="-nyyrua_579">writeString</code>, затем <code class="code" id="-nyyrua_580">writeInt</code>, затем снова <code class="code" id="-nyyrua_581">writeString</code>. При чтении порядок абсолютно идентичен: <code class="code" id="-nyyrua_582">readString</code>, <code class="code" id="-nyyrua_583">readInt</code>, <code class="code" id="-nyyrua_584">readString</code>. Это не случайность и не прихоть. Это критически важное требование, потому что <code class="code" id="-nyyrua_585">Parcel</code> - это untyped buffer, плоский массив байтов без какой-либо информации о типах данных.</p><p id="-nyyrua_490">Когда вы вызываете <code class="code" id="-nyyrua_586">parcel.readInt()</code>, он просто берет следующие 4 байта из буфера и интерпретирует их как integer. Нет никакой проверки &quot;а точно ли здесь int?&quot;. Если вы случайно нарушите порядок - например, сначала запишете int, а при чтении попытаетесь прочитать string, вы получите совершенно некорректные данные или краш приложения. Именно поэтому ручная реализация <code class="code" id="-nyyrua_587">Parcelable</code> была такой опасной: одна ошибка, и баг готов.</p><p id="-nyyrua_491">С <code class="code" id="-nyyrua_588">@Parcelize</code> эта проблема решена на уровне компилятора. Он анализирует primary конструктор, генерирует методы записи и чтения в правильном порядке, и гарантирует их синхронизацию. Вы не можете ошибиться, потому что не пишете код вручную.</p><p id="-nyyrua_492">Теперь давайте рассмотрим более сложный случай: nullable поля. Как <code class="code" id="-nyyrua_589">Parcel</code> работает с null значениями, если это просто байты в памяти без метаданных о типах?</p><div class="code-block" data-lang="kotlin">
+@Parcelize
+data class Person(
+    val name: String,
+    val dateOfBirth: Int,
+    val address: String?
+) : Parcelable
+</div><p id="-nyyrua_494">Для nullable <code class="code" id="-nyyrua_590">address</code> генерируется код с проверкой:</p><div class="code-block" data-lang="kotlin">
+override fun writeToParcel(parcel: Parcel, flags: Int) {
+    parcel.writeString(name)
+    parcel.writeInt(dateOfBirth)
+    parcel.writeString(address) // Даже если address == null, это работает!
+}
+</div><p id="-nyyrua_496">Ответ прост и элегантен: <code class="code" id="-nyyrua_591">writeString()</code> имеет встроенную поддержку null. Когда вы передаете null, метод записывает специальный маркер - значение -1 в качестве длины строки. При чтении <code class="code" id="-nyyrua_592">readString()</code> видит этот маркер и возвращает null. Получается, что Android поддерживал null-safety на уровне своего API еще до того, как Kotlin сделал эту концепцию центральной в языке. Интересно, что разработчики Android изначально заложили поддержку nullable типов, хотя Java этого вообще не знала.</p><p id="-nyyrua_497">Теперь давайте поговорим о методе <code class="code" id="-nyyrua_593">describeContents()</code>, который в нашем примере просто возвращает 0. Вы могли заметить, что мы никогда его не переопределяем, компилятор генерирует его автоматически. Зачем он вообще нужен? В 99% случаев действительно нужно просто вернуть 0. Но есть один специальный сценарий: file descriptors.</p><p id="-nyyrua_498">Представьте, что ваш класс содержит <code class="code" id="-nyyrua_594">ParcelFileDescriptor</code> - это может быть открытый файл, сокет или другой системный ресурс. Такие ресурсы требуют особой обработки при передаче между процессами, потому что это не просто данные в памяти, это реальные объекты операционной системы. В таком случае нужно вернуть <code class="code" id="-nyyrua_595">Parcelable.CONTENTS_FILE_DESCRIPTOR</code>, чтобы Binder понимал, что объект содержит системные ресурсы и обработал их корректно:</p><div class="code-block" data-lang="kotlin">
+@Parcelize
+data class FileWrapper(val fd: ParcelFileDescriptor) : Parcelable {
+    override fun describeContents(): Int = Parcelable.CONTENTS_FILE_DESCRIPTOR
+}
+</div><p id="-nyyrua_500">Второй параметр метода <code class="code" id="-nyyrua_596">writeToParcel(Parcel dest, int flags)</code> - это <code class="code" id="-nyyrua_597">flags</code>. В большинстве случаев он игнорируется, но может содержать флаг <code class="code" id="-nyyrua_598">Parcelable.PARCELABLE_WRITE_RETURN_VALUE</code>. Этот флаг говорит, что объект передается как возвращаемое значение из Binder вызова, и после записи некоторые ресурсы можно освободить, потому что на отправляющей стороне они больше не нужны.</p><p id="-nyyrua_501">А теперь посмотрим на более сложный сценарий: вложенные объекты. В реальных приложениях мы редко работаем с простыми классами из трех примитивных полей. Обычно у нас есть целые графы объектов, где один класс содержит другие классы. Например, <code class="code" id="-nyyrua_599">Person</code> может содержать объект <code class="code" id="-nyyrua_600">Address</code>:</p><div class="code-block" data-lang="kotlin">
+@Parcelize
+data class Address(val city: String, val street: String) : Parcelable
+
+@Parcelize
+data class Person(
+    val name: String,
+    val dateOfBirth: Int,
+    val address: Address
+) : Parcelable
+</div><p id="-nyyrua_503">Что происходит при сериализации? Когда компилятор доходит до поля <code class="code" id="-nyyrua_601">address</code> в классе <code class="code" id="-nyyrua_602">Person</code>, он генерирует вызов <code class="code" id="-nyyrua_603">parcel.writeParcelable(address, flags)</code>. Этот метод в свою очередь вызывает <code class="code" id="-nyyrua_604">address.writeToParcel()</code>, и весь вложенный объект сериализуется рекурсивно. При десериализации происходит обратный процесс: <code class="code" id="-nyyrua_605">parcel.readParcelable&lt;Address&gt;(Address::class.java.classLoader)</code> читает данные и воссоздает объект <code class="code" id="-nyyrua_606">Address</code>. Вся рекурсия обрабатывается автоматически, без runtime накладных расходов, потому что все генерируется на этапе компиляции.</p><p id="-nyyrua_504">Теперь рассмотрим еще один распространенный случай: коллекции. Списки, множества, карты - стандартные структуры данных в любом приложении. Как <code class="code" id="-nyyrua_607">Parcel</code> работает с ними?</p><div class="code-block" data-lang="kotlin">
+@Parcelize
+data class Team(
+    val name: String,
+    val members: List&lt;String&gt;
+) : Parcelable
+</div><p id="-nyyrua_506">Генерируется код:</p><div class="code-block" data-lang="kotlin">
+override fun writeToParcel(parcel: Parcel, flags: Int) {
+    parcel.writeString(name)
+    parcel.writeStringList(members)
+}
+</div><p id="-nyyrua_508">Для коллекций <code class="code" id="-nyyrua_608">Parcel</code> предоставляет специализированные оптимизированные методы. <code class="code" id="-nyyrua_609">writeStringList()</code> сначала записывает размер списка как integer, затем последовательно записывает каждую строку. При чтении <code class="code" id="-nyyrua_610">readStringList()</code> сначала читает размер, создает ArrayList нужной емкости, а затем читает строки одну за другой. Аналогично работают <code class="code" id="-nyyrua_611">writeIntArray()</code>, <code class="code" id="-nyyrua_612">writeParcelableList()</code>, <code class="code" id="-nyyrua_613">writeMap()</code> и множество других методов для различных типов коллекций. Каждый из них оптимизирован для конкретного типа данных, что делает сериализацию максимально эффективной.</p><p id="-nyyrua_509">Но у <code class="code" id="-nyyrua_614">@Parcelize</code> есть важное ограничение, о котором нужно помнить. Компилятор генерирует код только на основе primary конструктора класса. Если у вас есть свойства, объявленные вне конструктора, они просто проигнорируются:</p><div class="code-block" data-lang="kotlin">
+@Parcelize
+data class Person(
+    val name: String,
+    val dateOfBirth: Int
+) : Parcelable {
+    var address: String = &quot;&quot; // Это поле НЕ будет сериализовано!
+}
+</div><p id="-nyyrua_511">Почему так? Потому что компилятор анализирует только сигнатуру primary конструктора. Он не знает и не может знать о свойствах, которые вы инициализируете в теле класса или через init блоки. Если вам нужно сериализовать такое свойство, просто добавьте его в primary конструктор.</p><p id="-nyyrua_512">Иногда встречаются ситуации, когда автоматической генерации недостаточно. Например, вам нужно сериализовать класс из сторонней библиотеки, который не реализует <code class="code" id="-nyyrua_615">Parcelable</code>. Или требуется специальная логика сериализации - скажем, шифрование данных перед записью. Для таких случаев существует интерфейс <code class="code" id="-nyyrua_616">Parceler</code>, который позволяет определить кастомную логику:</p><div class="code-block" data-lang="kotlin">
+data class Person(
+    val name: String,
+    val dateOfBirth: Int,
+    val address: String
+)
+
+object PersonParceler : Parceler&lt;Person&gt; {
+    override fun create(parcel: Parcel): Person {
+        return Person(
+            parcel.readString()!!,
+            parcel.readInt(),
+            parcel.readString()!!
+        )
+    }
+    
+    override fun Person.write(parcel: Parcel, flags: Int) {
+        parcel.writeString(name)
+        parcel.writeInt(dateOfBirth)
+        parcel.writeString(address)
+    }
+}
+
+@Parcelize
+@TypeParceler&lt;Person, PersonParceler&gt;
+data class Team(
+    val name: String,
+    val leader: Person
+) : Parcelable
+</div><p id="-nyyrua_514">Вы получаете полный контроль над процессом сериализации конкретного типа, при этом остальные поля класса обрабатываются автоматически.</p><p id="-nyyrua_515">Мы много времени потратили на объяснение внутреннего устройства <code class="code" id="-nyyrua_617">Parcelable</code>, и вы могли заметить, насколько он отличается от <code class="code" id="-nyyrua_618">Serializable</code>. Нативная реализация в C++, прямая работа с памятью без промежуточных объектов, отсутствие рефлексии, интеграция с Binder на уровне ядра Linux. Все эти архитектурные решения были сделаны неслучайно - они обеспечивают производительность, необходимую для IPC в реальном времени. Конкретные цифры мы увидим в разделе с бенчмарками.</p><p id="-nyyrua_516">Но было бы нечестно рассказать только о достоинствах. У <code class="code" id="-nyyrua_619">Parcelable</code> есть серьезные ограничения, которые нужно понимать.</p><p id="-nyyrua_517"><span class="control" id="-nyyrua_620">Привязка к платформе.</span> <code class="code" id="-nyyrua_621">Parcelable</code> работает только на Android. Это не кроссплатформенное решение. Представьте, что вы разрабатываете мобильное приложение с общим бизнес-слоем для Android и iOS. Ваши модели данных должны работать на обеих платформах. Но <code class="code" id="-nyyrua_622">Parcelable</code> существует только в Android SDK. На iOS его просто нет. Более того, с ростом популярности Kotlin Multiplatform появилась потребность в едином коде, который работает везде: на Android, iOS, в браузере через Kotlin/JS, на бэкенде через Kotlin/JVM, даже в нативных приложениях через Kotlin/Native. <code class="code" id="-nyyrua_623">Parcelable</code> в этой картине мира не вписывается никак.</p><p id="-nyyrua_518"><span class="control" id="-nyyrua_624">Отсутствие версионирования.</span> Помните <code class="code" id="-nyyrua_625">serialVersionUID</code> у <code class="code" id="-nyyrua_626">Serializable</code>? Здесь такого механизма нет. Если вы измените структуру класса между версиями приложения - добавите поле, удалите поле, поменяете порядок - вам придется вручную обрабатывать совместимость, как мы видели в примере с <code class="code" id="-nyyrua_627">Externalizable</code>. Это ваша ответственность, и никакой автоматической проверки не будет.</p><p id="-nyyrua_519"><span class="control" id="-nyyrua_628">Ограниченность применения.</span> <code class="code" id="-nyyrua_629">Parcel</code> оптимизирован для IPC, но не для долговременного хранения. Вы можете сохранить сериализованный <code class="code" id="-nyyrua_630">Parcel</code> в файл или SharedPreferences, технически это возможно. Но делать этого не стоит. Формат <code class="code" id="-nyyrua_631">Parcel</code> может измениться между версиями Android, и ваши сохраненные данные станут нечитаемыми после обновления системы. <code class="code" id="-nyyrua_632">Parcel</code> создавался для передачи данных между компонентами здесь и сейчас, а не для хранения на диск.</p><p id="-nyyrua_520"><span class="control" id="-nyyrua_633">Отсутствие выбора формата.</span> <code class="code" id="-nyyrua_634">Parcelable</code> сериализует данные в один единственный бинарный формат, оптимизированный для Binder. Но что если вам нужно отправить данные по сети? Современные API обмениваются JSON или Protocol Buffers. Что если нужно сохранить конфигурацию в человекочитаемом виде? Нужен YAML или TOML. <code class="code" id="-nyyrua_635">Parcelable</code> для этого не подходит. Он решает одну задачу - IPC в Android, и решает её блестяще. Но только эту одну задачу.</p><p id="-nyyrua_521">Именно эти ограничения создали запрос на универсальное решение. Представьте себе идеал: библиотеку, которая работает на всех платформах Kotlin, поддерживает множество форматов данных (JSON, Protobuf, CBOR, XML), использует кодогенерацию для максимальной производительности, обеспечивает type-safety на уровне компилятора, и при этом остается такой же простой в использовании, как <code class="code" id="-nyyrua_636">@Parcelize</code>.</p><p id="-nyyrua_522">Звучит слишком хорошо, чтобы быть правдой? Но именно такое решение создала команда JetBrains. Встречайте финального героя нашей истории.</p></section></section><section class="chapter"><h2 id="kotlinx-serialization" data-toc="kotlinx-serialization">kotlinx.serialization</h2><section class="chapter"><h3 id="-nyyrua_637" data-toc="-nyyrua_637">История появления и философия</h3><figure id="-nyyrua_644"><img alt="kotlin.png" src="images/kotlin.png" title="kotlin.png" width="1600" height="800"></figure><p id="-nyyrua_645">В 2017 году Kotlin переживал настоящий бум. Google объявила его официальным языком для Android разработки, сообщество активно росло, а JetBrains начала амбициозный проект - Kotlin Multiplatform (KMP). Идея была революционной: писать код один раз и запускать его везде. На Android через Kotlin/JVM и Android Runtime, на iOS через Kotlin/Native с компиляцией в нативный код, в браузере через Kotlin/JS, на сервере через обычный JVM. Но для реализации этой идеи не хватало одного критически важного элемента.</p><p id="-nyyrua_646">Представьте разработчика, который пишет мобильное приложение с общим бизнес-слоем. Модели данных, сетевые запросы, работа с API - всё это должно работать одинаково на Android и iOS. На Android у него есть <code class="code" id="-nyyrua_656">Parcelable</code> для IPC, есть Gson или Moshi для JSON, есть множество готовых решений. Но стоит скомпилировать этот код для iOS через Kotlin/Native, и всё ломается. <code class="code" id="-nyyrua_657">Parcelable</code> не существует. Gson использует рефлексию, которая работает совсем по-другому (или вообще не работает) в native окружении. Moshi требует кодогенерации через KAPT, который не поддерживается в Kotlin/Native.</p><p id="-nyyrua_647">Получался замкнутый круг: KMP обещал &quot;пиши один раз, запускай везде&quot;, но для базовой задачи - сериализации данных - приходилось писать разный код для каждой платформы. JSON парсинг на Android решался одной библиотекой, на iOS другой, в JS третьей. А ведь сериализация - это фундаментальная операция, без которой не обходится ни один проект.</p><p id="-nyyrua_648">Команда JetBrains понимала: для успеха Kotlin Multiplatform нужна кроссплатформенная библиотека сериализации, которая работает одинаково хорошо на всех поддерживаемых платформах. Но просто &quot;ещё одна библиотека сериализации&quot; была бы половинчатым решением. Нужно было создать что-то принципиально новое, учитывающее уникальные особенности Kotlin как языка и опыт всех предыдущих решений.</p><p id="-nyyrua_649">В 2018 году в статусе experimental появилась первая версия <code class="code" id="-nyyrua_658">kotlinx.serialization</code>. Библиотека сразу выделялась своим подходом. В отличие от Gson, который использует рефлексию в runtime, <code class="code" id="-nyyrua_659">kotlinx.serialization</code> полностью работает через плагин компилятора. Аннотация <code class="code" id="-nyyrua_660">@Serializable</code> запускает генерацию специализированного кода еще на этапе компиляции. Это означает несколько важных вещей.</p><p id="-nyyrua_650"><span class="control" id="-nyyrua_661">Производительность.</span> Никакой рефлексии в runtime, никакого анализа структуры классов во время выполнения. Всё уже готово и оптимизировано на этапе компиляции. В JVM это дает скорость, сравнимую с Moshi или даже превосходящую его. В Kotlin/Native, где рефлексия ограничена и медленна, это критически важно.</p><p id="-nyyrua_651"><span class="control" id="-nyyrua_662">Безопасность типов.</span> Компилятор анализирует вашу структуру данных и генерирует типобезопасный код. Если вы попытаетесь сериализовать тип, для которого нет сериализатора, вы получите ошибку компиляции, а не runtime exception в продакшене. Это огромное преимущество по сравнению с reflection-based решениями, где ошибки проявляются только при выполнении.</p><p id="-nyyrua_652"><span class="control" id="-nyyrua_663">Кроссплатформенность.</span> Плагин компилятора работает на всех целевых платформах Kotlin. Один и тот же код с <code class="code" id="-nyyrua_664">@Serializable</code> компилируется в оптимальный байткод для JVM, в JavaScript для браузера, в нативный код для iOS. Нет никаких platform-specific зависимостей, нет различий в API между платформами.</p><p id="-nyyrua_653"><span class="control" id="-nyyrua_665">Множественность форматов.</span> В отличие от <code class="code" id="-nyyrua_666">Parcelable</code>, который работает только с одним форматом, <code class="code" id="-nyyrua_667">kotlinx.serialization</code> устроена модульно. Есть ядро библиотеки, которое определяет, как структура классов превращается в последовательность операций записи и чтения. А формат - это отдельный модуль. Хотите JSON? Подключите <code class="code" id="-nyyrua_668">kotlinx-serialization-json</code>. Нужен Protobuf? <code class="code" id="-nyyrua_669">kotlinx-serialization-protobuf</code>. CBOR для компактного бинарного представления? <code class="code" id="-nyyrua_670">kotlinx-serialization-cbor</code>. Тот же класс с одной аннотацией <code class="code" id="-nyyrua_671">@Serializable</code> может быть сериализован в любой из этих форматов без изменения кода.</p><p id="-nyyrua_654">К 2020 году библиотека вышла из experimental статуса и достигла версии 1.0, став стабильной и готовой к production использованию. Сегодня это де-факто стандарт для сериализации в Kotlin Multiplatform проектах и серьезная альтернатива Gson/Moshi в чистых JVM/Android приложениях.</p><p id="-nyyrua_655">Давайте посмотрим, как это работает на практике.</p></section><section class="chapter"><h3 id="-nyyrua_638" data-toc="-nyyrua_638">Как это выглядит на практике</h3><p id="-nyyrua_672">Возьмем наш знакомый класс <code class="code" id="-nyyrua_684">Person</code> и посмотрим, как выглядит сериализация:</p><div class="code-block" data-lang="kotlin">
+@Serializable
+data class Person(
+    val name: String,
+    val dateOfBirth: Int,
+    val address: String
+)
+
+fun main() {
+    val person = Person(&quot;John Wick&quot;, 1964, &quot;New York&quot;)
+    val json = Json.encodeToString(person)
+    println(json)
+}
+</div><p id="-nyyrua_674">Вывод:</p><div class="code-block" data-lang="none">
+{&quot;name&quot;:&quot;John Wick&quot;,&quot;dateOfBirth&quot;:1964,&quot;address&quot;:&quot;New York&quot;}
+</div><p id="-nyyrua_676">Одна аннотация <code class="code" id="-nyyrua_685">@Serializable</code>, и класс готов к сериализации. Синтаксис напоминает <code class="code" id="-nyyrua_686">@Parcelize</code>, но работает иначе и на всех платформах. Обратите внимание на результат: это не бинарный формат с метаданными из <code class="code" id="-nyyrua_687">Serializable</code>, не flat buffer из <code class="code" id="-nyyrua_688">Parcel</code>, а чистый JSON.</p><p id="-nyyrua_677">Но JSON - это только один из форматов. Помните, мы говорили про модульность? Тот же класс можно сериализовать в Protocol Buffers, CBOR, или даже XML:</p><div class="code-block" data-lang="kotlin">
+val person = Person(&quot;John Wick&quot;, 1964, &quot;New York&quot;)
+
+val json = Json.encodeToString(person)
+val protobuf = ProtoBuf.encodeToByteArray(Person.serializer(), person)
+val cbor = Cbor.encodeToByteArray(Person.serializer(), person)
+</div><p id="-nyyrua_679">JSON читаемый и широко поддерживается. Protocol Buffers - компактный бинарный формат для эффективной передачи данных. CBOR - формат похожий на MessagePack, занимающий промежуточную позицию. Выбор формата зависит от задачи: для API используйте JSON, для мобильного кеша или сетевых протоколов - Protobuf или CBOR, для конфигураций - JSON или YAML.</p><p id="-nyyrua_680">И самое интересное: библиотека открыта для расширения. Если вам нужен специфический формат - скажем, YAML, TOML, или вообще свой проприетарный протокол - вы можете реализовать свой <code class="code" id="-nyyrua_689">Encoder</code> и <code class="code" id="-nyyrua_690">Decoder</code>. API спроектирован так, что сериализаторы, сгенерированные для ваших классов, будут работать с любым encoder'ом. Сообщество уже создало множество форматов: <code class="code" id="-nyyrua_691">kotlinx-serialization-hocon</code> для конфигов, <code class="code" id="-nyyrua_692">kotlinx-serialization-properties</code> для Java Properties файлов, есть даже экспериментальный YAML. Это уникальная возможность: один класс с одной аннотацией работает с десятками форматов без изменения кода.</p><p id="-nyyrua_681">Десериализация работает зеркально для любого формата:</p><div class="code-block" data-lang="kotlin">
+val json = &quot;&quot;&quot;{&quot;name&quot;:&quot;John Wick&quot;,&quot;dateOfBirth&quot;:1964,&quot;address&quot;:&quot;New York&quot;}&quot;&quot;&quot;
+val person = Json.decodeFromString&lt;Person&gt;(json)
+println(person)
+</div><p id="-nyyrua_683">Вывод: <code class="code" id="-nyyrua_693">Person(name=John Wick, dateOfBirth=1964, address=New York)</code></p></section><section class="chapter"><h3 id="-nyyrua_639" data-toc="-nyyrua_639">Внутреннее устройство: плагин компилятора</h3><p id="-nyyrua_694">Помните, как <code class="code" id="-nyyrua_701">Serializable</code> использует рефлексию через <code class="code" id="-nyyrua_702">ObjectOutputStream</code>, как <code class="code" id="-nyyrua_703">Externalizable</code> требует ручной реализации методов, как <code class="code" id="-nyyrua_704">Parcelable</code> генерирует код через <code class="code" id="-nyyrua_705">@Parcelize</code>? С <code class="code" id="-nyyrua_706">kotlinx.serialization</code> подход принципиально иной.</p><p id="-nyyrua_695">Когда вы добавляете аннотацию <code class="code" id="-nyyrua_707">@Serializable</code>, плагин компилятора генерирует специальный сериализатор. Если декомпилировать байткод, увидим примерно следующую структуру:</p><div class="code-block" data-lang="kotlin">
+object PersonSerializer : KSerializer&lt;Person&gt; {
+    override val descriptor: SerialDescriptor = buildClassSerialDescriptor(&quot;Person&quot;) {
+        element&lt;String&gt;(&quot;name&quot;)
+        element&lt;Int&gt;(&quot;dateOfBirth&quot;)
+        element&lt;String&gt;(&quot;address&quot;)
+    }
+    
+    override fun serialize(encoder: Encoder, value: Person) {
+        val composite = encoder.beginStructure(descriptor)
+        composite.encodeStringElement(descriptor, 0, value.name)
+        composite.encodeIntElement(descriptor, 1, value.dateOfBirth)
+        composite.encodeStringElement(descriptor, 2, value.address)
+        composite.endStructure(descriptor)
+    }
+    
+    override fun deserialize(decoder: Decoder): Person {
+        // Логика чтения полей и создания объекта
+    }
+}
+</div><p id="-nyyrua_697">Ключевое отличие от всех предыдущих подходов: метод <code class="code" id="-nyyrua_708">serialize</code> обращается к полям напрямую - <code class="code" id="-nyyrua_709">value.name</code>, <code class="code" id="-nyyrua_710">value.dateOfBirth</code>, <code class="code" id="-nyyrua_711">value.address</code>. Никакой рефлексии, никаких <code class="code" id="-nyyrua_712">getDeclaredFields()</code> или <code class="code" id="-nyyrua_713">field.setAccessible(true)</code>. Компилятор знает структуру класса и генерирует прямые вызовы. Это дает производительность, сравнимую с ручной реализацией в <code class="code" id="-nyyrua_714">Externalizable</code>, но без необходимости писать код вручную.</p><p id="-nyyrua_698">Второе важное отличие: архитектура разделяет &quot;что сериализовать&quot; и &quot;как сериализовать&quot;. <code class="code" id="-nyyrua_715">PersonSerializer</code> не знает ничего о JSON, он просто вызывает методы абстракции <code class="code" id="-nyyrua_716">Encoder</code>. А конкретный формат (JSON, Protobuf, CBOR) определяется экземпляром encoder'а:</p><div class="code-block" data-lang="kotlin">
+val person = Person(&quot;John Wick&quot;, 1964, &quot;New York&quot;)
+
+// Тот же сериализатор, разные форматы
+val json = Json.encodeToString(person)
+val protobuf = ProtoBuf.encodeToByteArray(Person.serializer(), person)
+val cbor = Cbor.encodeToByteArray(Person.serializer(), person)
+</div><p id="-nyyrua_700">Попробуйте сделать такое с <code class="code" id="-nyyrua_717">Parcelable</code> или <code class="code" id="-nyyrua_718">Serializable</code> - они жестко привязаны к своему формату.</p></section><section class="chapter"><h3 id="-nyyrua_640" data-toc="-nyyrua_640">Контроль над процессом сериализации</h3><p id="-nyyrua_719">Как и в случае с <code class="code" id="-nyyrua_732">Serializable</code>, иногда требуется вмешаться в процесс сериализации. Представьте, что у вас есть поле с кешированными данными или временными вычислениями, которые не нужно сохранять. В <code class="code" id="-nyyrua_733">Serializable</code> мы использовали ключевое слово <code class="code" id="-nyyrua_734">transient</code>, здесь работает аннотация <code class="code" id="-nyyrua_735">@Transient</code>:</p><div class="code-block" data-lang="kotlin">
+@Serializable
+data class User(
+    val id: String,
+    val username: String,
+    @Transient val cachedAvatar: Bitmap? = null,
+    @Transient var lastAccessTime: Long = 0L
+)
+</div><p id="-nyyrua_721">При сериализации поля <code class="code" id="-nyyrua_736">cachedAvatar</code> и <code class="code" id="-nyyrua_737">lastAccessTime</code> будут проигнорированы. JSON будет содержать только <code class="code" id="-nyyrua_738">id</code> и <code class="code" id="-nyyrua_739">username</code>. Обратите внимание: transient поля должны иметь default значения, иначе при десериализации компилятор не сможет создать объект.</p><p id="-nyyrua_722">Другая частая проблема: ваши Kotlin классы используют camelCase, но API сервера требует snake_case. Это классическая боль при интеграции с backend'ами. В <code class="code" id="-nyyrua_740">Serializable</code>, <code class="code" id="-nyyrua_741">Externalizable</code> и <code class="code" id="-nyyrua_742">Parcelable</code> такой возможности вообще нет - эти механизмы работают напрямую с именами полей класса. Пришлось бы либо писать поля в коде как <code class="code" id="-nyyrua_743">user_id</code> (нарушая Kotlin conventions), либо создавать отдельный DTO слой с маппингом, либо в случае <code class="code" id="-nyyrua_744">Externalizable</code> писать километры кода в <code class="code" id="-nyyrua_745">writeExternal</code>/<code class="code" id="-nyyrua_746">readExternal</code>.</p><p id="-nyyrua_723">Это одна из областей, где <code class="code" id="-nyyrua_747">kotlinx.serialization</code> больше напоминает библиотеки вроде Gson или Moshi, но с важным отличием: проверка на этапе компиляции. В Gson аннотация <code class="code" id="-nyyrua_748">@SerializedName</code> обрабатывается в runtime через рефлексию, здесь же плагин компилятора генерирует код сразу. Достаточно аннотации <code class="code" id="-nyyrua_749">@SerialName</code>:</p><div class="code-block" data-lang="kotlin">
+@Serializable
+data class ApiResponse(
+    @SerialName(&quot;user_id&quot;) val userId: String,
+    @SerialName(&quot;created_at&quot;) val createdAt: Long,
+    @SerialName(&quot;is_active&quot;) val isActive: Boolean
+)
+</div><p id="-nyyrua_725">При сериализации будет <code class="code" id="-nyyrua_750">{&quot;user_id&quot;:&quot;123&quot;,&quot;created_at&quot;:1698765432,&quot;is_active&quot;:true}</code>, но в Kotlin коде вы продолжаете работать с идиоматичными именами <code class="code" id="-nyyrua_751">userId</code>, <code class="code" id="-nyyrua_752">createdAt</code>, <code class="code" id="-nyyrua_753">isActive</code>. Не нужны отдельные DTO классы, не нужен маппинг слой, не нужны расширения вроде MapStruct или ModelMapper. Среди всех четырех подходов к сериализации, которые мы рассмотрели, только <code class="code" id="-nyyrua_754">kotlinx.serialization</code> предоставляет такую гибкость из коробки.</p><p id="-nyyrua_726">Третья проблема: API эволюционирует, добавляются новые поля, старые становятся опциональными. В <code class="code" id="-nyyrua_755">Serializable</code> версионирование решается через <code class="code" id="-nyyrua_756">serialVersionUID</code>, но это хрупкий механизм. Здесь работают nullable типы и default значения:</p><div class="code-block" data-lang="kotlin">
+@Serializable
+data class User(
+    val id: String,
+    val username: String,
+    val email: String? = null,
+    val premium: Boolean = false
+)
+</div><p id="-nyyrua_728">Поле <code class="code" id="-nyyrua_757">email</code> помечено как nullable с default значением <code class="code" id="-nyyrua_758">null</code> - оно может отсутствовать в JSON. Поле <code class="code" id="-nyyrua_759">premium</code> имеет default значение <code class="code" id="-nyyrua_760">false</code> - если его нет в JSON, используется значение по умолчанию. Если JSON содержит <code class="code" id="-nyyrua_761">{&quot;id&quot;:&quot;123&quot;,&quot;username&quot;:&quot;john&quot;}</code>, библиотека создаст объект с <code class="code" id="-nyyrua_762">email = null</code> и <code class="code" id="-nyyrua_763">premium = false</code>. Если JSON содержит все поля, используются значения из него.</p><p id="-nyyrua_729">Но если попытаться десериализовать JSON без обязательного поля:</p><div class="code-block" data-lang="kotlin">
+val json = &quot;&quot;&quot;{&quot;username&quot;:&quot;john&quot;}&quot;&quot;&quot;
+val user = Json.decodeFromString&lt;User&gt;(json)
+</div><p id="-nyyrua_731">Получите исключение: <code class="code" id="-nyyrua_764">SerializationException: Field 'id' is required for type 'User', but it was missing</code>. Type-safety работает и в runtime. В отличие от Gson, который молча подставит null даже для non-null типа (и приложение упадет позже с NullPointerException в production), здесь вы получите понятное исключение сразу при десериализации.</p></section><section class="chapter"><h3 id="-nyyrua_641" data-toc="-nyyrua_641">Работа с типами вне вашего контроля</h3><p id="-nyyrua_765">Серьезная проблема возникает, когда нужно сериализовать класс, на который вы не можете навесить <code class="code" id="-nyyrua_772">@Serializable</code>. Это может быть класс из сторонней библиотеки, legacy Java код, или стандартные типы вроде <code class="code" id="-nyyrua_773">java.util.Date</code>. В <code class="code" id="-nyyrua_774">Serializable</code> такие классы просто не сериализуются корректно или создают огромные бинарные данные.</p><p id="-nyyrua_766">Хорошая новость: для многих распространённых типов сериализаторы уже существуют. UUID, BigDecimal, BigInteger, kotlinx.datetime типы - всё это поддерживается из коробки через отдельные модули. Например, для работы с UUID достаточно добавить зависимость <code class="code" id="-nyyrua_775">kotlinx-serialization-core</code> и использовать встроенный <code class="code" id="-nyyrua_776">UUIDSerializer</code>. Для <code class="code" id="-nyyrua_777">java.time</code> типов есть специальный модуль <code class="code" id="-nyyrua_778">kotlinx-serialization-json-jvm</code> с готовыми сериализаторами для <code class="code" id="-nyyrua_779">LocalDateTime</code>, <code class="code" id="-nyyrua_780">Instant</code>, <code class="code" id="-nyyrua_781">Duration</code> и других.</p><p id="-nyyrua_767">Но если вам нужен тип, для которого сериализатора нет, или нужна специфическая логика (например, шифрование перед записью), можно создать кастомный сериализатор. В <code class="code" id="-nyyrua_782">kotlinx.serialization</code> для этого существует интерфейс <code class="code" id="-nyyrua_783">KSerializer&lt;T&gt;</code>. Создаете объект, реализующий его, и указываете, как именно сериализовать и десериализовать этот тип:</p><div class="code-block" data-lang="kotlin">
+object DateAsLongSerializer : KSerializer&lt;Date&gt; {
+    override val descriptor = PrimitiveSerialDescriptor(&quot;Date&quot;, PrimitiveKind.LONG)
+    
+    override fun serialize(encoder: Encoder, value: Date) {
+        encoder.encodeLong(value.time)
+    }
+    
+    override fun deserialize(decoder: Decoder): Date {
+        return Date(decoder.decodeLong())
+    }
+}
+</div><p id="-nyyrua_769">Теперь можно использовать этот сериализатор для полей типа <code class="code" id="-nyyrua_784">Date</code>:</p><div class="code-block" data-lang="kotlin">
+@Serializable
+data class Event(
+    val title: String,
+    @Serializable(with = DateAsLongSerializer::class)
+    val timestamp: Date
+)
+</div><p id="-nyyrua_771"><code class="code" id="-nyyrua_785">Date</code> будет сериализоваться как простое число (unix timestamp), а не как объект со всеми внутренними полями. При десериализации число автоматически превратится обратно в <code class="code" id="-nyyrua_786">Date</code>. Это работает для любых типов: библиотек работы с UUID, кастомных классов из closed-source зависимостей, Java коллекций со специфичной логикой.</p></section><section class="chapter"><h3 id="sealed" data-toc="sealed">Полиморфизм и sealed классы</h3><p id="-nyyrua_787">Одна из самых мощных возможностей, которой нет ни в <code class="code" id="-nyyrua_796">Serializable</code>, ни в <code class="code" id="-nyyrua_797">Parcelable</code>, ни в <code class="code" id="-nyyrua_798">Externalizable</code> без огромного количества boilerplate кода. Представьте API, который возвращает разные типы событий:</p><div class="code-block" data-lang="kotlin">
+@Serializable
+sealed class Event {
+    abstract val timestamp: Long
+}
+
+@Serializable
+@SerialName(&quot;user_login&quot;)
+data class UserLoginEvent(
+    override val timestamp: Long,
+    val userId: String
+) : Event()
+
+@Serializable
+@SerialName(&quot;purchase&quot;)
+data class PurchaseEvent(
+    override val timestamp: Long,
+    val amount: Double,
+    val currency: String
+) : Event()
+
+@Serializable
+data class EventLog(val events: List&lt;Event&gt;)
+</div><p id="-nyyrua_789">Sealed классы - это закрытая иерархия типов, компилятор знает все возможные подтипы. При сериализации библиотека автоматически добавляет discriminator поле <code class="code" id="-nyyrua_799">&quot;type&quot;</code> с именем конкретного класса:</p><div class="code-block" data-lang="kotlin">
+val log = EventLog(
+    events = listOf(
+        UserLoginEvent(1698765432000, &quot;user123&quot;),
+        PurchaseEvent(1698765433000, 99.99, &quot;USD&quot;)
+    )
+)
+
+val json = Json.encodeToString(log)
+</div><p id="-nyyrua_791">Результат:</p><div class="code-block" data-lang="json">
+{
+  &quot;events&quot;: [
+    {&quot;type&quot;:&quot;user_login&quot;,&quot;timestamp&quot;:1698765432000,&quot;userId&quot;:&quot;user123&quot;},
+    {&quot;type&quot;:&quot;purchase&quot;,&quot;timestamp&quot;:1698765433000,&quot;amount&quot;:99.99,&quot;currency&quot;:&quot;USD&quot;}
+  ]
+}
+</div><p id="-nyyrua_793">При десериализации библиотека смотрит на поле <code class="code" id="-nyyrua_800">&quot;type&quot;</code>, понимает, какой именно подкласс создавать, и восстанавливает корректную иерархию:</p><div class="code-block" data-lang="kotlin">
+val log = Json.decodeFromString&lt;EventLog&gt;(json)
+when (val event = log.events[0]) {
+    is UserLoginEvent -&gt; println(&quot;User ${event.userId} logged in&quot;)
+    is PurchaseEvent -&gt; println(&quot;Purchase: ${event.amount} ${event.currency}&quot;)
+}
+</div><p id="-nyyrua_795">Type-safety сохраняется полностью. Компилятор понимает, что в списке <code class="code" id="-nyyrua_801">events</code> могут быть только подтипы <code class="code" id="-nyyrua_802">Event</code>, а sealed класс гарантирует, что все возможные варианты известны. Если в JSON придет неизвестный тип, получите исключение. Если структура не соответствует, тоже исключение. Попробуйте реализовать такое с <code class="code" id="-nyyrua_803">Serializable</code> - придется писать километры кода с проверками типов, instanceof, кастами, и ручной маршрутизацией десериализации.</p></section><section class="chapter"><h3 id="-nyyrua_643" data-toc="-nyyrua_643">Ограничения</h3><p id="-nyyrua_804">При всех своих преимуществах, <code class="code" id="-nyyrua_813">kotlinx.serialization</code> имеет ограничения, о которых важно знать.</p><p id="-nyyrua_805"><span class="control" id="-nyyrua_814">Требование плагина компилятора.</span> В отличие от Gson или Jackson, которые просто добавляются в зависимости, здесь нужен плагин компилятора. Для большинства проектов это не проблема, но в специфических сценариях с ограниченным контролем над компиляцией может стать препятствием.</p><p id="-nyyrua_806"><span class="control" id="-nyyrua_815">Ограничения на структуру классов.</span> Как и в <code class="code" id="-nyyrua_816">@Parcelize</code>, сериализуются только свойства из primary конструктора. Свойства в теле класса игнорируются. Плагин компилятора анализирует сигнатуру конструктора, не всю структуру класса.</p><p id="-nyyrua_807"><span class="control" id="-nyyrua_817">Размер кода.</span> Генерация сериализаторов для каждого класса увеличивает размер итогового APK/JAR. В крупных приложениях с сотнями data классов это может быть заметно. Цена за производительность и type-safety.</p><p id="-nyyrua_808"><span class="control" id="-nyyrua_818">Версионирование.</span> Нет встроенного механизма версионирования как <code class="code" id="-nyyrua_819">serialVersionUID</code> у <code class="code" id="-nyyrua_820">Serializable</code>. Обратная совместимость обеспечивается через default значения и nullable типы, но требует внимательности при эволюции схемы данных.</p><p id="-nyyrua_809">При этом <code class="code" id="-nyyrua_821">kotlinx.serialization</code> остается единственным полноценным кроссплатформенным решением для Kotlin. Один код работает на JVM, JS, Native с одинаковой производительностью и гарантиями type-safety.</p><p id="-nyyrua_811">Мы разобрали все четыре подхода к сериализации: <code class="code" id="-nyyrua_822">Serializable</code> с его рефлексией и Java legacy, <code class="code" id="-nyyrua_823">Externalizable</code> с полным ручным контролем, <code class="code" id="-nyyrua_824">Parcelable</code> с нативной оптимизацией для Android IPC, и <code class="code" id="-nyyrua_825">kotlinx.serialization</code> с кроссплатформенностью и множеством форматов. Каждый имеет свои сильные и слабые стороны, каждый решает определенный класс задач.</p><p id="-nyyrua_812">Но пришло время перейти от теории к практике. Мы много говорили о производительности, о размере данных, о накладных расходах. Настало время проверить эти утверждения конкретными цифрами.</p></section></section><section class="chapter"><h2 id="-nyyrua_16" data-toc="-nyyrua_16">Бенчмарки: сравнение производительности</h2><p id="-nyyrua_826">На протяжении всей статьи мы обсуждали различия в подходах: <code class="code" id="-nyyrua_846">Serializable</code> медленный из-за рефлексии, <code class="code" id="-nyyrua_847">Externalizable</code> быстрее благодаря ручному контролю, <code class="code" id="-nyyrua_848">Parcelable</code> оптимизирован для Android IPC, <code class="code" id="-nyyrua_849">kotlinx.serialization</code> использует кодогенерацию. Мы говорили о размере данных, о влиянии метаинформации на итоговый объем, о различиях между текстовыми и бинарными форматами. Но все это были теоретические рассуждения или общие утверждения.</p><p id="-nyyrua_827">Пришло время провести систематическое тестирование и получить конкретные метрики. Мы измерим четыре ключевых параметра:</p><ol class="list _decimal" id="-nyyrua_828" type="1"><li class="list__item" id="-nyyrua_850"><p id="-nyyrua_854"><span class="control" id="-nyyrua_855">Скорость сериализации</span> - сколько времени требуется на преобразование объекта в байты</p></li><li class="list__item" id="-nyyrua_851"><p id="-nyyrua_856"><span class="control" id="-nyyrua_857">Скорость десериализации</span> - сколько времени требуется на восстановление объекта из байтов</p></li><li class="list__item" id="-nyyrua_852"><p id="-nyyrua_858"><span class="control" id="-nyyrua_859">Размер данных</span> - сколько байт занимает сериализованное представление</p></li><li class="list__item" id="-nyyrua_853"><p id="-nyyrua_860"><span class="control" id="-nyyrua_861">Количество аллокаций</span> - сколько объектов создается в процессе работы</p></li></ol><p id="-nyyrua_829">Четвертый параметр заслуживает особого внимания. Количество аллокаций памяти во многих сценариях важнее, чем скорость или размер данных. Почему? Потому что каждая аллокация это не просто выделение памяти, это будущая работа для Garbage Collector. Можно написать код, который выполняется за микросекунды и создает компактное представление данных, но если для этого пришлось создать сотни промежуточных объектов, цена операции многократно возрастает. Эти объекты нагружают heap, провоцируют GC паузы, фрагментируют память. На мобильных устройствах, где память ограничена, а энергоэффективность критична, частые GC циклы напрямую влияют на battery life и плавность интерфейса. Низкое количество аллокаций косвенно свидетельствует о хорошей архитектуре решения: эффективном использовании буферов, переиспользовании объектов, отсутствии избыточных копирований. Поэтому когда мы говорим об оптимальности сериализации, мы смотрим не только на время выполнения, но и на то, сколько мусора она после себя оставляет.</p><p id="-nyyrua_830">Тестирование проводится на Android устройстве, чтобы получить реалистичные данные для мобильной разработки.</p><p id="-nyyrua_831">Для измерения производительности используем Jetpack Benchmark library - официальный инструмент от Google для точного измерения производительности Android кода. Библиотека автоматически выполняет warmup итерации для прогрева JIT компилятора, затем запускает множество измерений, отбрасывает выбросы и вычисляет статистически значимые результаты.</p><p id="-nyyrua_832">Тестовые классы выбраны реалистичными - модель пользователя с различными типами данных:</p><div class="code-block" data-lang="kotlin">
+@[kotlinx.serialization.Serializable Parcelize]
+data class User1(
+    var id: String ,
+    var name: String,
+    var email: String,
+    var age: Int ,
+    var isActive: Boolean ,
+    var registrationDate: Long ,
+    var tags: List&lt;String&gt; = emptyList()
+) : Serializable, Parcelable {
+
+    companion object {
+        private const val serialVersionUID = 1L
+    }
+}
+
+data class User2(
+    var id: String = &quot;&quot;,
+    var name: String = &quot;&quot;,
+    var email: String = &quot;&quot;,
+    var age: Int = 0,
+    var isActive: Boolean = false,
+    var registrationDate: Long = 0L,
+    var tags: List&lt;String&gt; = emptyList()
+) : Externalizable {
+
+    override fun writeExternal(out: ObjectOutput) {
+        out.writeUTF(id)
+        out.writeUTF(name)
+        out.writeUTF(email)
+        out.writeInt(age)
+        out.writeBoolean(isActive)
+        out.writeLong(registrationDate)
+        out.writeInt(tags.size)
+        tags.forEach { out.writeUTF(it) }
+    }
+
+    override fun readExternal(input: ObjectInput) {
+        id = input.readUTF()
+        name = input.readUTF()
+        email = input.readUTF()
+        age = input.readInt()
+        isActive = input.readBoolean()
+        registrationDate = input.readLong()
+        val size = input.readInt()
+        tags = List(size) { input.readUTF() }
+    }
+}
+</div><p id="-nyyrua_834">Каждый тест запускается тысячи раз, результаты усредняются. Измеряем время в наносекундах для точности. Размер данных измеряется в байтах после полной сериализации.</p><p id="-nyyrua_835">Для честного сравнения критически важно использовать одинаковые данные во всех тестах. Мы создали два класса: <code class="code" id="-nyyrua_862">User1</code> и <code class="code" id="-nyyrua_863">User2</code>. Оба имеют абсолютно идентичную структуру (семь полей: <code class="code" id="-nyyrua_864">id</code>, <code class="code" id="-nyyrua_865">name</code>, <code class="code" id="-nyyrua_866">email</code>, <code class="code" id="-nyyrua_867">age</code>, <code class="code" id="-nyyrua_868">isActive</code>, <code class="code" id="-nyyrua_869">registrationDate</code>, <code class="code" id="-nyyrua_870">tags</code>) и заполняются одинаковыми значениями (пользователь John Wick с возрастом 55 лет, email &quot;john.wick@continental.com&quot; и списком из четырех тегов).</p><p id="-nyyrua_836">Почему два класса, а не один? Причина техническая: <code class="code" id="-nyyrua_871">Externalizable</code> и <code class="code" id="-nyyrua_872">Serializable</code> сериализуются одним и тем же API через <code class="code" id="-nyyrua_873">ObjectOutputStream</code>. Под капотом проверка в первую очередь проверяет, реализует ли класс <code class="code" id="-nyyrua_874">Externalizable</code>, и если да, использует его логику, игнорируя <code class="code" id="-nyyrua_875">Serializable</code>. Если бы мы создали один класс, реализующий оба интерфейса, то в тесте для <code class="code" id="-nyyrua_876">Serializable</code> фактически выполнялся бы код <code class="code" id="-nyyrua_877">Externalizable</code>, что сделало бы сравнение некорректным. Поэтому <code class="code" id="-nyyrua_878">User1</code> используется для <code class="code" id="-nyyrua_879">Serializable</code>, <code class="code" id="-nyyrua_880">Parcelable</code> и <code class="code" id="-nyyrua_881">kotlinx.serialization</code>, а <code class="code" id="-nyyrua_882">User2</code> только для <code class="code" id="-nyyrua_883">Externalizable</code>.</p><p id="-nyyrua_837">Разница в именах (<code class="code" id="-nyyrua_884">User1</code> vs <code class="code" id="-nyyrua_885">User2</code>) составляет один символ. Поскольку имя класса записывается в сериализованные данные (особенно в <code class="code" id="-nyyrua_886">Serializable</code> и <code class="code" id="-nyyrua_887">Parcelable</code>), это влияет на размер, но влияние минимально: одна цифра занимает одинаковое количество байт в любой кодировке. Таким образом, мы сохраняем объективность сравнения размеров данных.</p><p id="-nyyrua_838">Для общей оценки мы будем сразу сериализовать и десериализовать по каждому способу, и оценить общее время этих двух процессов. Используем <code class="code" id="-nyyrua_888">MicrobenchmarkConfig</code> из Jetpack Benchmark library. Эта конфигурация специально разработана для измерения микро-операций, которые выполняются за микросекунды или наносекунды. Библиотека запускает каждый тест тысячи раз (количество итераций зависит от скорости выполнения), автоматически определяет оптимальное количество прогревочных итераций для стабилизации JIT компилятора, собирает статистику (минимум, максимум, медиана, коэффициент вариации), отбрасывает выбросы и выдает статистически значимые результаты. Медианное значение используется вместо среднего, так как медиана более устойчива к выбросам, вызванным фоновыми процессами системы или сборкой мусора. Класс для бенчмарков следующий:</p><div class="code-block" data-lang="kotlin">
+@RunWith(AndroidJUnit4::class)
+class SerializationBenchmark {
+
+    @OptIn(ExperimentalBenchmarkConfigApi::class)
+    @get:Rule
+    val benchmarkRule = BenchmarkRule(MicrobenchmarkConfig(traceAppTagEnabled = true))
+
+    var user1 = User1(
+        id = &quot;user_123456789&quot;,
+        name = &quot;John Wick&quot;,
+        email = &quot;john.wick@continental.com&quot;,
+        age = 55,
+        isActive = true,
+        registrationDate = 1672531200000L,
+        tags = listOf(&quot;assassin&quot;, &quot;legendary&quot;, &quot;baba_yaga&quot;, &quot;continental&quot;)
+    )
+
+    var user2 = User2(
+        id = &quot;user_123456789&quot;,
+        name = &quot;John Wick&quot;,
+        email = &quot;john.wick@continental.com&quot;,
+        age = 55,
+        isActive = true,
+        registrationDate = 1672531200000L,
+        tags = listOf(&quot;assassin&quot;, &quot;legendary&quot;, &quot;baba_yaga&quot;, &quot;continental&quot;)
+    )
+
+    @Test
+    fun javaSerializable() = benchmarkRule.measureRepeated {
+        // Сериализация
+        val baos = ByteArrayOutputStream()
+        ObjectOutputStream(baos).use { it.writeObject(user1) }
+        val serialized = baos.toByteArray()
+
+        // Десериализация
+        ByteArrayInputStream(serialized).use { bais -&gt;
+            ObjectInputStream(bais).use { it.readObject() as User1 }
+        }
+    }
+
+    @Test
+    fun javaExternalizable() = benchmarkRule.measureRepeated {
+        // Сериализация
+        val baos = ByteArrayOutputStream()
+        ObjectOutputStream(baos).use { it.writeObject(user2) }
+        val serialized = baos.toByteArray()
+
+        // Десериализация
+        ByteArrayInputStream(serialized).use { bais -&gt;
+            ObjectInputStream(bais).use { it.readObject() as User2 }
+        }
+    }
+
+    @[Test OptIn(ExperimentalSerializationApi::class)]
+    fun kotlinxSerializable() = benchmarkRule.measureRepeated {
+        // Сериализация
+        val protobufArray = ProtoBuf.encodeToByteArray(User1.serializer(), user1)
+
+        // Десериализация
+        val result: User1 = ProtoBuf.decodeFromByteArray(User1.serializer(), protobufArray)
+    }
+
+    @Test
+    fun androidParcelable() = benchmarkRule.measureRepeated {
+        // Сериализация
+        val source = Parcel.obtain()
+        source.writeParcelable(user1, 0)
+        val bytes = source.marshall()
+        source.recycle()
+
+        // Десериализация
+        val destination = Parcel.obtain()
+        destination.unmarshall(bytes, 0, bytes.size)
+        destination.setDataPosition(0)
+
+        val classLoader = User1::class.java.classLoader
+        val result: User1? = destination.readParcelable&lt;User1&gt;(classLoader, User1::class.java)
+        destination.recycle()
+    }
+}
+</div><p id="-nyyrua_840">Обратите внимание на несколько важных деталей реализации этого бенчмарка, которые обеспечивают честность сравнения. Для Java <code class="code" id="-nyyrua_889">Serializable</code> и <code class="code" id="-nyyrua_890">Externalizable</code> мы убрали промежуточное создание файла, которое обычно демонстрируется в учебных примерах. Вместо этого используем <code class="code" id="-nyyrua_891">ByteArrayOutputStream</code> и <code class="code" id="-nyyrua_892">ByteArrayInputStream</code> для работы напрямую с байтовыми массивами в памяти. Почему это важно? Потому что при передаче между процессами и компонентами в Android нет промежуточного слоя для записи в файл. Данные передаются через память. <code class="code" id="-nyyrua_893">Parcelable</code> работает именно с байтами в памяти через буфер <code class="code" id="-nyyrua_894">Parcel</code>, и чтобы сравнение было корректным, Java <code class="code" id="-nyyrua_895">Serializable</code> и <code class="code" id="-nyyrua_896">Externalizable</code> также должны работать с массивами байт без дисковых операций.</p><p id="-nyyrua_841">Второй важный момент касается выбора формата для <code class="code" id="-nyyrua_897">kotlinx.serialization</code>. Мы используем ProtoBuf, а не JSON, хотя JSON гораздо популярнее и чаще ассоциируется с этой библиотекой. Причина проста: JSON это текстовый формат, который требует дополнительных затрат на парсинг строк, обработку escape-последовательностей, преобразование чисел из текстового представления в бинарное. ProtoBuf это бинарный формат, концептуально аналогичный тому, что используют <code class="code" id="-nyyrua_898">Serializable</code>, <code class="code" id="-nyyrua_899">Externalizable</code> и <code class="code" id="-nyyrua_900">Parcelable</code>. Все они работают с бинарным представлением данных. Если бы мы сравнивали JSON с бинарными форматами, <code class="code" id="-nyyrua_901">kotlinx.serialization</code> выглядела бы хуже не из-за качества самой библиотеки, а исключительно из-за особенностей текстового представления. Поэтому для честного сравнения выбран ProtoBuf. Это демонстрирует реальные возможности кодогенерации <code class="code" id="-nyyrua_902">kotlinx.serialization</code> без искусственного handicap'а в виде текстового формата.</p><p id="-nyyrua_842">Все тесты измеряют полный цикл: сериализация объекта в байты и немедленная десериализация обратно в объект. Это реалистичный сценарий для Android IPC, где данные сериализуются на стороне отправителя и сразу же десериализуются на стороне получателя. Далее результаты теста:</p><section class="chapter"><h3 id="-nyyrua_843" data-toc="-nyyrua_843">Результаты сериализации: байтовые представления</h3><p id="-nyyrua_903">Для полного понимания различий между подходами рассмотрим, как выглядят сериализованные данные нашего объекта <code class="code" id="-nyyrua_919">User</code> в каждом из форматов.</p><p id="-nyyrua_904"><span class="control" id="-nyyrua_920">Java Serializable:</span></p><div class="code-block" data-lang="none">
+Размер: 388 байт
+
+Строковое представление (все байты): ¬í??sr??kz.android.benchmark.User1????????????????I??ageZ??isActiveJ??registrationDateL??emailt??Ljava/lang/String;L??idq??~??L??nameq??~??L??tagst??Ljava/util/List;xp??????7????j È??t??john.wick@continental.comt??user_123456789t??	John Wicksr??java.util.Arrays$ArrayListÙ¤&lt;¾ÍÒ??[??at??[Ljava/lang/Object;xpur??[Ljava.lang.String;­ÒVçé{G????xp??????t??assassint??	legendaryt??	baba_yagat??continental
+
+Hex представление (все байты): aced00057372001a6b7a2e616e64726f69642e62656e63686d61726b2e557365723100000000000000010200074900036167655a000869734163746976654a0010726567697374726174696f6e446174654c0005656d61696c7400124c6a6176612f6c616e672f537472696e673b4c0002696471007e00014c00046e616d6571007e00014c0004746167737400104c6a6176612f7574696c2f4c6973743b78700000003701000001856aa0c8007400196a6f686e2e7769636b40636f6e74696e656e74616c2e636f6d74000e757365725f3132333435363738397400094a6f686e205769636b7372001a6a6176612e7574696c2e4172726179732441727261794c697374d9a43cbecd8806d20200015b0001617400135b4c6a6176612f6c616e672f4f626a6563743b7870757200135b4c6a6176612e6c616e672e537472696e673badd256e7e91d7b47020000787000000004740008617373617373696e7400096c6567656e64617279740009626162615f7961676174000b636f6e74696e656e74616c
+
+Статистика: Нулевых байт: 46, ASCII символов: 292
+</div><p id="-nyyrua_906"><span class="control" id="-nyyrua_921">Java Externalizable:</span></p><div class="code-block" data-lang="none">
+Размер: 166 байт
+
+Строковое представление (все байты): ¬í??sr??kz.android.benchmark.User2¼xÁL±????xpwt??user_123456789??	John Wick??john.wick@continental.com??????7????j È??????????assassin??	legendary??	baba_yaga??continentalx
+
+Hex представление (все байты): aced00057372001a6b7a2e616e64726f69642e62656e63686d61726b2e5573657232bc95789dc1924cb10c000078707774000e757365725f31323334353637383900094a6f686e205769636b00196a6f686e2e7769636b40636f6e74696e656e74616c2e636f6d0000003701000001856aa0c800000000040008617373617373696e00096c6567656e646172790009626162615f79616761000b636f6e74696e656e74616c78
+
+Статистика: Нулевых байт: 20, ASCII символов: 122
+</div><p id="-nyyrua_908"><span class="control" id="-nyyrua_922">Kotlinx.serialization (ProtoBuf):</span></p><div class="code-block" data-lang="none">
+Размер: 110 байт
+
+Строковое представление (все байты): user_123456789	John Wickjohn.wick@continental.com 7(0ÕÖ0:assassin:	legendary:	baba_yaga:continental
+
+Hex представление (все байты): 0a0e757365725f31323334353637383912094a6f686e205769636b1a196a6f686e2e7769636b40636f6e74696e656e74616c2e636f6d2037280130809083d5d6303a08617373617373696e3a096c6567656e646172793a09626162615f796167613a0b636f6e74696e656e74616c
+
+Статистика: Нулевых байт: 0, ASCII символов: 94
+</div><p id="-nyyrua_910"><span class="control" id="-nyyrua_923">Android Parcelable:</span></p><div class="code-block" data-lang="none">
+Размер: 296 байт
+
+Строковое представление (все байты): ??????k??z??.??a??n??d??r??o??i??d??.??b??e??n??c??h??m??a??r??k??.??U??s??e??r??1????????????????u??s??e??r??_??1??2??3??4??5??6??7??8??9??????????	??????J??o??h??n?? ??W??i??c??k????????????j??o??h??n??.??w??i??c??k??@??c??o??n??t??i??n??e??n??t??a??l??.??c??o??m??????7??????????????È j????????????????a??s??s??a??s??s??i??n??????????	??????l??e??g??e??n??d??a??r??y??????	??????b??a??b??a??_??y??a??g??a????????????c??o??n??t??i??n??e??n??t??a??l??????
+
+Hex представление (все байты): 1a0000006b007a002e0061006e00640072006f00690064002e00620065006e00630068006d00610072006b002e0055007300650072003100000000000e00000075007300650072005f0031003200330034003500360037003800390000000000090000004a006f0068006e0020005700690063006b000000190000006a006f0068006e002e007700690063006b00400063006f006e00740069006e0065006e00740061006c002e0063006f006d000000370000000100000000c8a06a85010000040000000800000061007300730061007300730069006e0000000000090000006c006500670065006e00640061007200790000000900000062006100620061005f00790061006700610000000b00000063006f006e00740069006e0065006e00740061006c000000
+
+Статистика: Нулевых байт: 169, ASCII символов: 113
+</div><p id="-nyyrua_912"><span class="control" id="-nyyrua_924">Сравнительная таблица размеров</span></p><div class="table-wrapper"><table class="wide" id="-nyyrua_913"><thead><tr class="ijRowHead" id="-nyyrua_925"><th id="-nyyrua_930"><p>Подход</p></th><th id="-nyyrua_931"><p>Размер (байт)</p></th><th id="-nyyrua_932"><p>Относительно минимума</p></th></tr></thead><tbody><tr id="-nyyrua_926"><td id="-nyyrua_933"><p>kotlinx.serialization (ProtoBuf)</p></td><td id="-nyyrua_934"><p>110</p></td><td id="-nyyrua_935"><p>Базовая линия (100%)</p></td></tr><tr id="-nyyrua_927"><td id="-nyyrua_936"><p>Java Externalizable</p></td><td id="-nyyrua_937"><p>166</p></td><td id="-nyyrua_938"><p>+51%</p></td></tr><tr id="-nyyrua_928"><td id="-nyyrua_939"><p>Android Parcelable</p></td><td id="-nyyrua_940"><p>296</p></td><td id="-nyyrua_941"><p>+169%</p></td></tr><tr id="-nyyrua_929"><td id="-nyyrua_942"><p>Java Serializable</p></td><td id="-nyyrua_943"><p>388</p></td><td id="-nyyrua_944"><p>+253%</p></td></tr></tbody></table></div><p id="-nyyrua_914">Результаты могут показаться неожиданными. <code class="code" id="-nyyrua_945">Parcelable</code>, который мы позиционировали как оптимизированное решение для Android, занимает почти в три раза больше места, чем <code class="code" id="-nyyrua_946">kotlinx.serialization</code> и почти в два раза больше, чем Java механизмы. Почему?</p><p id="-nyyrua_915">Ответ кроется в кодировке строк. <code class="code" id="-nyyrua_947">Parcel</code> использует UTF-16 для хранения всех строковых данных. Посмотрите внимательно на hex представление <code class="code" id="-nyyrua_948">Parcelable</code>: между каждым символом видны нулевые байты (<code class="code" id="-nyyrua_949">00</code>). Это характерная особенность UTF-16, где каждый ASCII символ занимает не один, а два байта. Наш объект <code class="code" id="-nyyrua_950">User</code> содержит пять строковых полей: <code class="code" id="-nyyrua_951">id</code>, <code class="code" id="-nyyrua_952">name</code>, <code class="code" id="-nyyrua_953">email</code>, и четыре элемента в списке <code class="code" id="-nyyrua_954">tags</code>. В UTF-16 строка &quot;John Wick&quot; (9 символов) занимает 18 байт, &quot;john.wick@continental.com&quot; (25 символов) занимает 50 байт, и так далее.</p><p id="-nyyrua_916">В то же время <code class="code" id="-nyyrua_955">Externalizable</code> и <code class="code" id="-nyyrua_956">kotlinx.serialization</code> используют более компактные форматы. <code class="code" id="-nyyrua_957">ObjectOutputStream.writeUTF()</code> использует модифицированную версию UTF-8, где ASCII символы занимают один байт. Protocol Buffers использует собственную эффективную кодировку с variable-length encoding для чисел и оптимизированное представление строк.</p><p id="-nyyrua_917">Но вспомним контекст: <code class="code" id="-nyyrua_958">Parcelable</code> создавался не для минимизации размера данных при долговременном хранении, а для максимально быстрой передачи между процессами Android через Binder. UTF-16 выбрана неслучайно. Это нативная кодировка для Java/Kotlin строк в памяти. Когда <code class="code" id="-nyyrua_959">Parcel</code> записывает строку в UTF-16, он по сути копирует внутреннее представление <code class="code" id="-nyyrua_960">String</code> напрямую в буфер без перекодирования. Это быстро. При чтении десериализации также не требуется конвертация. Байты просто превращаются обратно в <code class="code" id="-nyyrua_961">String</code>. Никаких накладных расходов на перекодировку из UTF-8 в UTF-16 и обратно, как это происходит с другими механизмами.</p><p id="-nyyrua_918">Более того, в контексте IPC через Binder разница в 100-200 байт несущественна. Данные живут в памяти микросекунды, передача происходит внутри устройства через kernel с минимальным копированием. Здесь важнее скорость сериализации/десериализации, а не размер буфера. Если бы вам нужно было отправить данные по сети или сохранить в файл, выбор был бы другим. Но для IPC между Activity, Service и другими Android компонентами компромисс оправдан: больше памяти, но быстрее обработка.</p></section><section class="chapter"><h3 id="-nyyrua_844" data-toc="-nyyrua_844">Результаты производительности</h3><p id="-nyyrua_962">Тестирование проведено на устройстве <span class="control" id="-nyyrua_969">Nothing Phone (2a)</span> (модель A065) с процессором Dimensity 7200 Pro (8 ядер, до 2.99 GHz), 12 GB RAM, Android 15 (API 35). Все тесты выполнены с использованием Jetpack Benchmark library в режиме компиляции <code class="code" id="-nyyrua_970">speed</code> с автоматическим прогревом JIT компилятора и статистической обработкой результатов.</p><p id="-nyyrua_963">Измеряем полный цикл: сериализация объекта в байты + немедленная десериализация обратно в объект. Это реалистичный сценарий для IPC, где данные сразу же читаются на другой стороне.</p><p id="-nyyrua_964"><span class="control" id="-nyyrua_971">Таблица результатов (медианные значения):</span></p><div class="table-wrapper"><table class="wide" id="-nyyrua_965"><thead><tr class="ijRowHead" id="-nyyrua_972"><th id="-nyyrua_977"><p>Подход</p></th><th id="-nyyrua_978"><p>Время (нс)</p></th><th id="-nyyrua_979"><p>Время (мкс)</p></th><th id="-nyyrua_980"><p>Относительно fastest</p></th><th id="-nyyrua_981"><p>Аллокаций</p></th></tr></thead><tbody><tr id="-nyyrua_973"><td id="-nyyrua_982"><p><span class="control" id="-nyyrua_987">Android Parcelable</span></p></td><td id="-nyyrua_983"><p>2,824</p></td><td id="-nyyrua_984"><p>2.82</p></td><td id="-nyyrua_985"><p><span class="control" id="-nyyrua_988">Базовая линия (1.0&times;)</span></p></td><td id="-nyyrua_986"><p>12</p></td></tr><tr id="-nyyrua_974"><td id="-nyyrua_989"><p><span class="control" id="-nyyrua_994">kotlinx.serialization (ProtoBuf)</span></p></td><td id="-nyyrua_990"><p>4,707</p></td><td id="-nyyrua_991"><p>4.71</p></td><td id="-nyyrua_992"><p>1.67&times; медленнее</p></td><td id="-nyyrua_993"><p>41</p></td></tr><tr id="-nyyrua_975"><td id="-nyyrua_995"><p><span class="control" id="-nyyrua_1000">Java Externalizable</span></p></td><td id="-nyyrua_996"><p>9,531</p></td><td id="-nyyrua_997"><p>9.53</p></td><td id="-nyyrua_998"><p>3.38&times; медленнее</p></td><td id="-nyyrua_999"><p>83</p></td></tr><tr id="-nyyrua_976"><td id="-nyyrua_1001"><p><span class="control" id="-nyyrua_1006">Java Serializable</span></p></td><td id="-nyyrua_1002"><p>30,985</p></td><td id="-nyyrua_1003"><p>30.99</p></td><td id="-nyyrua_1004"><p><span class="control" id="-nyyrua_1007">10.97&times; медленнее</span></p></td><td id="-nyyrua_1005"><p>201</p></td></tr></tbody></table></div><p id="-nyyrua_966"><span class="control" id="-nyyrua_1008">Детальная статистика:</span></p><div class="table-wrapper"><table class="wide" id="-nyyrua_967"><thead><tr class="ijRowHead" id="-nyyrua_1009"><th id="-nyyrua_1014"><p>Подход</p></th><th id="-nyyrua_1015"><p>Min (нс)</p></th><th id="-nyyrua_1016"><p>Max (нс)</p></th><th id="-nyyrua_1017"><p>Median (нс)</p></th><th id="-nyyrua_1018"><p>CV*</p></th><th id="-nyyrua_1019"><p>Итераций</p></th></tr></thead><tbody><tr id="-nyyrua_1010"><td id="-nyyrua_1020"><p>Android Parcelable</p></td><td id="-nyyrua_1021"><p>2,799</p></td><td id="-nyyrua_1022"><p>2,867</p></td><td id="-nyyrua_1023"><p>2,824</p></td><td id="-nyyrua_1024"><p>0.56%</p></td><td id="-nyyrua_1025"><p>42,680</p></td></tr><tr id="-nyyrua_1011"><td id="-nyyrua_1026"><p>kotlinx.serialization</p></td><td id="-nyyrua_1027"><p>4,398</p></td><td id="-nyyrua_1028"><p>4,882</p></td><td id="-nyyrua_1029"><p>4,707</p></td><td id="-nyyrua_1030"><p>2.47%</p></td><td id="-nyyrua_1031"><p>16,697</p></td></tr><tr id="-nyyrua_1012"><td id="-nyyrua_1032"><p>Java Externalizable</p></td><td id="-nyyrua_1033"><p>9,252</p></td><td id="-nyyrua_1034"><p>10,130</p></td><td id="-nyyrua_1035"><p>9,531</p></td><td id="-nyyrua_1036"><p>1.88%</p></td><td id="-nyyrua_1037"><p>11,228</p></td></tr><tr id="-nyyrua_1013"><td id="-nyyrua_1038"><p>Java Serializable</p></td><td id="-nyyrua_1039"><p>30,356</p></td><td id="-nyyrua_1040"><p>32,243</p></td><td id="-nyyrua_1041"><p>30,985</p></td><td id="-nyyrua_1042"><p>1.67%</p></td><td id="-nyyrua_1043"><p>2,887</p></td></tr></tbody></table></div><p id="-nyyrua_968">*CV (Coefficient of Variation) - коэффициент вариации, показывает стабильность результатов. Чем ниже, тем стабильнее.</p></section><section class="chapter"><h3 id="-nyyrua_845" data-toc="-nyyrua_845">Анализ результатов</h3><p id="-nyyrua_1044">Результаты бенчмарков дают четкую картину компромиссов каждого подхода.</p><p id="-nyyrua_1045"><span class="control" id="-nyyrua_1050">Android Parcelable - безоговорочный лидер по скорости.</span> Медианное время полного цикла составляет всего 2.82 микросекунды. Это в 1.67 раза быстрее <code class="code" id="-nyyrua_1051">kotlinx.serialization</code>, в 3.4 раза быстрее <code class="code" id="-nyyrua_1052">Externalizable</code> и почти в 11 раз быстрее <code class="code" id="-nyyrua_1053">Serializable</code>. Коэффициент вариации всего 0.56% говорит об исключительной стабильности результатов. Причины такой производительности мы разбирали: прямая работа с памятью через JNI, отсутствие слоев абстракции, использование нативного UTF-16 без перекодирования, интеграция с Binder на уровне ядра, object pooling для минимизации аллокаций. Всего 12 аллокаций на операцию. Это <code class="code" id="-nyyrua_1054">Parcel.obtain()</code> из пула и минимальные служебные объекты. Да, объект занимает 296 байт из-за UTF-16, но в контексте IPC это цена, которую стоит заплатить за такую скорость.</p><p id="-nyyrua_1046"><span class="control" id="-nyyrua_1055">kotlinx.serialization (ProtoBuf) - баланс скорости и размера.</span> Медиана 4.71 микросекунды, всего в 1.67 раза медленнее <code class="code" id="-nyyrua_1056">Parcelable</code>, но при этом размер данных почти в три раза меньше (110 байт против 296). Это впечатляющий результат для решения, которое работает кроссплатформенно. Кодогенерация через плагин компилятора дает прямой доступ к полям без рефлексии, Protocol Buffers использует эффективную бинарную кодировку с variable-length encoding. 41 аллокация. Это создание <code class="code" id="-nyyrua_1057">ByteArray</code>, внутренние буферы кодировщика и декодера. Коэффициент вариации 2.47% чуть выше, чем у <code class="code" id="-nyyrua_1058">Parcelable</code>, но всё еще приемлем. Если бы это был JSON вместо ProtoBuf, результаты были бы хуже из-за парсинга текста и большего размера данных.</p><p id="-nyyrua_1047"><span class="control" id="-nyyrua_1059">Java Externalizable - ручной труд без явных преимуществ.</span> Медиана 9.53 микросекунды, в 3.4 раза медленнее <code class="code" id="-nyyrua_1060">Parcelable</code> и в 2 раза медленнее <code class="code" id="-nyyrua_1061">kotlinx.serialization</code>. При этом размер данных (166 байт) больше, чем у ProtoBuf (110 байт), хоть и меньше, чем у <code class="code" id="-nyyrua_1062">Parcelable</code> (296 байт). Почему так? Мы вручную пишем данные через <code class="code" id="-nyyrua_1063">ObjectOutput</code>, но это всё равно проходит через <code class="code" id="-nyyrua_1064">ObjectOutputStream</code> с его буферизацией и протоколом. Создается <code class="code" id="-nyyrua_1065">ByteArrayOutputStream</code>, затем <code class="code" id="-nyyrua_1066">ObjectOutputStream</code> оборачивает его, записываются служебные маркеры протокола (TC_OBJECT, TC_BLOCKDATA), затем наши данные, затем <code class="code" id="-nyyrua_1067">ByteArrayInputStream</code> и <code class="code" id="-nyyrua_1068">ObjectInputStream</code> для чтения. 83 аллокации. Это всё те промежуточные объекты потоков и буферов. Мы получили контроль над порядком полей и возможность кастомной логики, но не получили реальной производительности. В современном мире с <code class="code" id="-nyyrua_1069">kotlinx.serialization</code> и <code class="code" id="-nyyrua_1070">Parcelable</code> у <code class="code" id="-nyyrua_1071">Externalizable</code> остается мало сценариев применения.</p><p id="-nyyrua_1048"><span class="control" id="-nyyrua_1072">Java Serializable - худший по всем параметрам.</span> Медиана 30.99 микросекунд, почти в 11 раз медленнее <code class="code" id="-nyyrua_1073">Parcelable</code>. Это не просто медленно, это катастрофически медленно для мобильного устройства. Размер данных 388 байт, самый большой из всех. 201 аллокация, в 16 раз больше, чем у <code class="code" id="-nyyrua_1074">Parcelable</code>. Причины мы знаем: рефлексия через <code class="code" id="-nyyrua_1075">ObjectStreamClass.lookup()</code>, обход полей через <code class="code" id="-nyyrua_1076">Field.get()</code>, создание дескрипторов для каждого класса в иерархии, запись полных имен классов и типов полей, создание множества временных объектов. Коэффициент вариации 1.67% говорит о том, что результаты стабильны, но это плохое утешение, когда вы стабильно медленны. Единственное преимущество <code class="code" id="-nyyrua_1077">Serializable</code> - простота добавления к классу (просто <code class="code" id="-nyyrua_1078">: Serializable</code>), но цена этой простоты слишком высока для production кода.</p><p id="-nyyrua_1049"><span class="control" id="-nyyrua_1079">Важное наблюдение о количестве итераций.</span> Обратите внимание на колонку &quot;Итераций&quot; в таблице. <code class="code" id="-nyyrua_1080">Parcelable</code> выполнил 42,680 итераций за отведенное время, <code class="code" id="-nyyrua_1081">kotlinx.serialization</code> выполнил 16,697, <code class="code" id="-nyyrua_1082">Externalizable</code> выполнил 11,228, а <code class="code" id="-nyyrua_1083">Serializable</code> всего 2,887. Это не случайные числа. Benchmark library выполняет столько итераций, сколько успевает за фиксированное время с учетом статистической значимости. Чем медленнее операция, тем меньше итераций успевает выполниться. Разница в 14.8 раза между <code class="code" id="-nyyrua_1084">Parcelable</code> (42,680) и <code class="code" id="-nyyrua_1085">Serializable</code> (2,887) наглядно иллюстрирует пропасть в производительности.</p></section></section><section class="chapter"><h2 id="-nyyrua_17" data-toc="-nyyrua_17">Заключение: Так говорили бенчмарки</h2><p id="-nyyrua_1086">Мы прошли путь от самых истоков сериализации в Java до современных кроссплатформенных решений. Начали с <code class="code" id="-nyyrua_1090">Serializable</code>, который появился в JDK 1.1 и до сих пор используется, несмотря на очевидные проблемы с производительностью и безопасностью. Разобрали <code class="code" id="-nyyrua_1091">Externalizable</code>, который дает контроль, но не решает фундаментальных проблем Java сериализации. Изучили <code class="code" id="-nyyrua_1092">Parcelable</code>, созданный Google специально для Android IPC, где каждая микросекунда и каждая аллокация имеют значение. И завершили современным <code class="code" id="-nyyrua_1093">kotlinx.serialization</code>, который работает везде, где работает Kotlin, от Android до iOS, от JVM до Native.</p><p id="-nyyrua_1087">Цифры из бенчмарков говорят сами за себя. <code class="code" id="-nyyrua_1094">Parcelable</code> в 11 раз быстрее <code class="code" id="-nyyrua_1095">Serializable</code> и создает в 16 раз меньше объектов. <code class="code" id="-nyyrua_1096">kotlinx.serialization</code> генерирует данные в 3.5 раза компактнее <code class="code" id="-nyyrua_1097">Serializable</code> при сопоставимой скорости с <code class="code" id="-nyyrua_1098">Parcelable</code>. Но главное не в абсолютных цифрах. Главное в понимании того, почему эти цифры именно такие. Рефлексия против кодогенерации. Универсальность против специализации. Простота использования против контроля.</p><p id="-nyyrua_1088">Не существует одного правильного ответа на вопрос &quot;какую сериализацию использовать&quot;. Есть контекст, требования, ограничения. Для Android IPC выбор очевиден. Для сетевых API другой. Для кроссплатформенных проектов третий. Но теперь, когда вы знаете, как работает каждый подход под капотом, вы можете делать осознанный выбор, а не повторять чужие утверждения из заголовков статей.</p><p id="-nyyrua_1089">Спасибо, что дочитали до конца. Надеюсь, эта статья дала вам не просто сравнительную таблицу, а глубокое понимание эволюции сериализации в экосистеме JVM и Kotlin. Теперь на собеседовании, когда вас спросят &quot;Почему <code class="code" id="-nyyrua_1099">Parcelable</code> быстрее <code class="code" id="-nyyrua_1100">Serializable</code> ?&quot;, вы сможете объяснить про JNI, UTF-16, object pooling и Binder, а не просто сказать &quot;потому что так в документации написано&quot;.</p></section><div class="last-modified">28 October 2025</div><div data-feedback-placeholder="true"></div><div class="navigation-links _bottom"><a href="testing-philosophy-kotlin-expect-actual-test-doubles.html" class="navigation-links__prev">Философия тестирования в Kotlin: Expect/Actual, Unit-тесты и природа Test Doubles</a></div></article><div id="disqus_thread"></div></div></section></main></div><script src="https://resources.jetbrains.com/writerside/apidoc/6.22.0-b776/app.js"></script></body></html>
