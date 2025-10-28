@@ -1373,7 +1373,7 @@ class SerializationBenchmark {
     @get:Rule
     val benchmarkRule = BenchmarkRule(MicrobenchmarkConfig(traceAppTagEnabled = true))
 
-    var user = User(
+    var user1 = User1(
         id = "user_123456789",
         name = "John Wick",
         email = "john.wick@continental.com",
@@ -1383,17 +1383,26 @@ class SerializationBenchmark {
         tags = listOf("assassin", "legendary", "baba_yaga", "continental")
     )
 
+    var user2 = User2(
+        id = "user_123456789",
+        name = "John Wick",
+        email = "john.wick@continental.com",
+        age = 55,
+        isActive = true,
+        registrationDate = 1672531200000L,
+        tags = listOf("assassin", "legendary", "baba_yaga", "continental")
+    )
 
     @Test
     fun javaSerializable() = benchmarkRule.measureRepeated {
         // Сериализация
         val baos = ByteArrayOutputStream()
-        ObjectOutputStream(baos).use { it.writeObject(user) }
+        ObjectOutputStream(baos).use { it.writeObject(user1) }
         val serialized = baos.toByteArray()
 
         // Десериализация
         ByteArrayInputStream(serialized).use { bais ->
-            ObjectInputStream(bais).use { it.readObject() as User }
+            ObjectInputStream(bais).use { it.readObject() as User1 }
         }
     }
 
@@ -1401,30 +1410,29 @@ class SerializationBenchmark {
     fun javaExternalizable() = benchmarkRule.measureRepeated {
         // Сериализация
         val baos = ByteArrayOutputStream()
-        ObjectOutputStream(baos).use { it.writeObject(user) }
+        ObjectOutputStream(baos).use { it.writeObject(user2) }
         val serialized = baos.toByteArray()
 
         // Десериализация
         ByteArrayInputStream(serialized).use { bais ->
-            ObjectInputStream(bais).use { it.readObject() as User }
+            ObjectInputStream(bais).use { it.readObject() as User2 }
         }
     }
 
     @[Test OptIn(ExperimentalSerializationApi::class)]
     fun kotlinxSerializable() = benchmarkRule.measureRepeated {
         // Сериализация
-        val protobufArray = ProtoBuf.encodeToByteArray(User.serializer(), user)
+        val protobufArray = ProtoBuf.encodeToByteArray(User1.serializer(), user1)
 
         // Десериализация
-        val result: User = ProtoBuf.decodeFromByteArray(User.serializer(), protobufArray)
+        val result: User1 = ProtoBuf.decodeFromByteArray(User1.serializer(), protobufArray)
     }
-
 
     @Test
     fun androidParcelable() = benchmarkRule.measureRepeated {
         // Сериализация
         val source = Parcel.obtain()
-        source.writeParcelable(user, 0)
+        source.writeParcelable(user1, 0)
         val bytes = source.marshall()
         source.recycle()
 
@@ -1433,8 +1441,8 @@ class SerializationBenchmark {
         destination.unmarshall(bytes, 0, bytes.size)
         destination.setDataPosition(0)
 
-        val classLoader = User::class.java.classLoader
-        val result: User? = destination.readParcelable<User>(classLoader, User::class.java)
+        val classLoader = User1::class.java.classLoader
+        val result: User1? = destination.readParcelable<User1>(classLoader, User1::class.java)
         destination.recycle()
     }
 }
@@ -1450,69 +1458,4 @@ class SerializationBenchmark {
 
 Для полного понимания различий между подходами рассмотрим, как выглядят сериализованные данные нашего объекта `User` в каждом из форматов.
 
-**Java Serializable:**
-
-```text
-Размер: 165 байт
-
-Строковое представление (все байты):
-¬í??sr??kz.android.benchmark.User??????????????????xpwt??user_123456789??	John Wick??john.wick@continental.com??????7????j È??????????assassin??	legendary??	baba_yaga??continentalx
-
-Hex представление (все байты):
-aced0005737200196b7a2e616e64726f69642e62656e63686d61726b2e5573657200000000000000010c000078707774000e757365725f31323334353637383900094a6f686e205769636b00196a6f686e2e7769636b40636f6e74696e656e74616c2e636f6d0000003701000001856aa0c800000000040008617373617373696e00096c6567656e646172790009626162615f79616761000b636f6e74696e656e74616c78
-
-Статистика: Нулевых байт: 27, ASCII символов: 119
-```
-
-**Java Externalizable:**
-
-```text
-Размер: 165 байт
-
-Строковое представление (все байты):
-¬í??sr??kz.android.benchmark.User??????????????????xpwt??user_123456789??	John Wick??john.wick@continental.com??????7????j È??????????assassin??	legendary??	baba_yaga??continentalx
-
-Hex представление (все байты):
-aced0005737200196b7a2e616e64726f69642e62656e63686d61726b2e5573657200000000000000010c000078707774000e757365725f31323334353637383900094a6f686e205769636b00196a6f686e2e7769636b40636f6e74696e656e74616c2e636f6d0000003701000001856aa0c8000000000400086173736173 73696e00096c6567656e646172790009626162615f79616761000b636f6e74696e656e74616c78
-
-Статистика: Нулевых байт: 27, ASCII символов: 119
-```
-
-**Kotlinx.serialization (ProtoBuf):**
-
-```text
-Размер: 110 байт
-
-Строковое представление (все байты):
-
-user_123456789	John Wickjohn.wick@continental.com 7(0ÕÖ0:assassin:	legendary:	baba_yaga:continental
-
-Hex представление (все байты):
-0a0e757365725f31323334353637383912094a6f686e205769636b1a196a6f686e2e7769636b40636f6e74696e656e74616c2e636f6d2037280130809083d5d6303a08617373617373696e3a096c6567656e646172793a09626162615f796167613a0b636f6e74696e656e74616c
-
-Статистика: Нулевых байт: 0, ASCII символов: 94
-```
-
-**Android Parcelable:**
-
-```text
-Размер: 292 байта
-
-Строковое представление (все байты):
-      k  z  .  a  n  d  r  o  i  d  .  b  e  n  c  h  m  a  r  k  .  U  s  e  r          u  s  e  r  _  1  2  3  4  5  6  7  8  9        	    J  o  h  n     W  i  c  k          j  o  h  n  .  w  i  c  k  @  c  o  n  t  i  n  e  n  t  a  l  .  c  o  m    7            È j              a  s  s  a  s  s  i  n        	    l  e  g  e  n  d  a  r  y    	    b  a  b  a  _  y  a  g  a          c  o  n  t  i  n  e  n  t  a  l    
-
-Hex представление (все байты):
-190000006b007a002e0061006e00640072006f00690064002e00620065006e00630068006d00610072006b002e00550073006500720000000e00000075007300650072005f0031003200330034003500360037003800390000000000090000004a006f0068006e0020005700690063006b000000190000006a006f0068006e002e007700690063006b00400063006f006e00740069006e0065006e00740061006c002e0063006f006d000000370000000100000000c8a06a85010000040000000800000061007300730061007300730069006e0000000000090000006c006500670065006e00640061007200790000000900000062006100620061005f00790061006700610000000b00000063006f006e00740069006e0065006e00740061006c000000
-
-Статистика: Нулевых байт: 166, ASCII символов: 112
-```
-
-### Сравнительная таблица размеров
-
-| Подход | Размер (байт) | Относительно минимума |
-|--------|---------------|----------------------|
-| kotlinx.serialization (ProtoBuf) | 110 | Базовая линия (100%) |
-| Java Serializable | 165 | +50% |
-| Java Externalizable | 165 | +50% |
-| Android Parcelable | 292 | +165% |
 
