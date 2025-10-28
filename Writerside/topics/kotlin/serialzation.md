@@ -1285,7 +1285,7 @@ Type-safety сохраняется полностью. Компилятор по
 
 ## Бенчмарки: сравнение производительности
 
-На протяжении всей статьи мы упоминали различия в скорости работы: `Serializable` медленный из-за рефлексии, `Externalizable` быстрее благодаря ручному контролю, `Parcelable` оптимизирован для Android IPC, `kotlinx.serialization` использует кодогенерацию. Мы говорили о размере данных: 130-150 байт у `Serializable`, 56 байт у `Parcel`, 67 байт у JSON из `kotlinx.serialization`, 31 байт у Protocol Buffers. Но все это были либо теоретические рассуждения, либо примеры на простых объектах.
+На протяжении всей статьи мы обсуждали различия в подходах: `Serializable` медленный из-за рефлексии, `Externalizable` быстрее благодаря ручному контролю, `Parcelable` оптимизирован для Android IPC, `kotlinx.serialization` использует кодогенерацию. Мы говорили о размере данных, о влиянии метаинформации на итоговый объем, о различиях между текстовыми и бинарными форматами. Но все это были теоретические рассуждения или общие утверждения.
 
 Пришло время провести систематическое тестирование и получить конкретные метрики. Мы измерим три ключевых параметра:
 
@@ -1302,17 +1302,128 @@ Type-safety сохраняется полностью. Компилятор по
 Тестовый объект выбран реалистичным - модель пользователя с различными типами данных:
 
 ```kotlin
+@[kotlinx.serialization.Serializable Parcelize]
 data class User(
-    val id: String,
-    val name: String,
-    val email: String,
-    val age: Int,
-    val isActive: Boolean,
-    val registrationDate: Long,
-    val tags: List<String>
-)
+    var id: String = "",
+    var name: String = "",
+    var email: String = "",
+    var age: Int = 0,
+    var isActive: Boolean = false,
+    var registrationDate: Long = 0L,
+    var tags: List<String> = emptyList()
+) : Serializable, Parcelable, Externalizable {
+
+    override fun writeExternal(out: ObjectOutput) {
+        out.writeUTF(id)
+        out.writeUTF(name)
+        out.writeUTF(email)
+        out.writeInt(age)
+        out.writeBoolean(isActive)
+        out.writeLong(registrationDate)
+        out.writeInt(tags.size)
+        tags.forEach { out.writeUTF(it) }
+    }
+
+    override fun readExternal(input: ObjectInput) {
+        id = input.readUTF()
+        name = input.readUTF()
+        email = input.readUTF()
+        age = input.readInt()
+        isActive = input.readBoolean()
+        registrationDate = input.readLong()
+        val size = input.readInt()
+        tags = List(size) { input.readUTF() }
+    }
+
+    companion object {
+        private const val serialVersionUID = 1L
+    }
+}
 ```
 
-Каждый тест запускается тысячи раз, результаты усредняются. Измеряем время в наносекундах для точности. Размер данных измеряется в байтах после полной сериализации.
+Каждый тест запускается тысячи раз, результаты усредняются. Измеряем время в наносекундах для точности. 
+Размер данных измеряется в байтах после полной сериализации.
 
-Давайте посмотрим на результаты.
+### Реализация бенчмарков
+
+Для честного сравнения критически важно использовать **одну и ту же модель** с одинаковыми данными. 
+Имя класса влияет на размер сериализованных данных (особенно в `Serializable` и `Parcelable`), 
+поэтому все подходы тестируют одним классом, класс выше обеспечивает возможность быть сериализуемым для всех четерех способов.
+
+Для общей оценки мы будем сразу сериализовать и десериализовать по каждому способу, и оценить общее время этих двух процессов, класс
+для бенчмарков будет следующим:
+
+```kotlin
+@RunWith(AndroidJUnit4::class)
+class SerializationBenchmark {
+
+    @OptIn(ExperimentalBenchmarkConfigApi::class)
+    @get:Rule
+    val benchmarkRule = BenchmarkRule(MicrobenchmarkConfig(traceAppTagEnabled = true))
+
+    var user = User(
+        id = "user_123456789",
+        name = "John Wick",
+        email = "john.wick@continental.com",
+        age = 55,
+        isActive = true,
+        registrationDate = 1672531200000L,
+        tags = listOf("assassin", "legendary", "baba_yaga", "continental")
+    )
+
+
+    @Test
+    fun javaSerializable() = benchmarkRule.measureRepeated {
+        // Сериализация
+        val baos = ByteArrayOutputStream()
+        ObjectOutputStream(baos).use { it.writeObject(user) }
+        val serialized = baos.toByteArray()
+        print(serialized)
+        // Десериализация
+        ByteArrayInputStream(serialized).use { bais ->
+            ObjectInputStream(bais).use { it.readObject() as User }
+        }
+    }
+
+    @Test
+    fun javaExternalizable() = benchmarkRule.measureRepeated {
+        // Сериализация
+        val baos = ByteArrayOutputStream()
+        ObjectOutputStream(baos).use { it.writeObject(user) }
+        val serialized = baos.toByteArray()
+
+        // Десериализация
+        ByteArrayInputStream(serialized).use { bais ->
+            ObjectInputStream(bais).use { it.readObject() as User }
+        }
+    }
+    
+    @[Test OptIn(ExperimentalSerializationApi::class)]
+    fun kotlinxSerializable() = benchmarkRule.measureRepeated {
+        // Сериализация
+        val protobuf = ProtoBuf.encodeToByteArray(User.serializer(), user)
+
+        // Десериализация
+        val result: User = ProtoBuf.decodeFromByteArray(User.serializer(), protobuf)
+    }
+
+
+    @Test
+    fun androidParcelable() = benchmarkRule.measureRepeated {
+        // Сериализация
+        val source = Parcel.obtain()
+        source.writeParcelable(user, 0)
+        val bytes = source.marshall()
+        source.recycle()
+
+        // Десериализация
+        val destination = Parcel.obtain()
+        destination.unmarshall(bytes, 0, bytes.size)
+        destination.setDataPosition(0)
+
+        val classLoader = User::class.java.classLoader
+        val result: User?  = destination.readParcelable<User>(classLoader, User::class.java)
+        destination.recycle()
+    }
+}
+```
